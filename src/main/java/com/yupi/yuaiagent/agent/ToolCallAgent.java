@@ -41,6 +41,9 @@ public class ToolCallAgent extends ReActAgent {
     // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文
     private final ChatOptions chatOptions;
 
+    // 终止工具方法名常量，与 TerminateTool.doTerminate() 保持一致
+    private static final String TERMINATE_TOOL_NAME = "doTerminate";
+
     public ToolCallAgent(ToolCallback[] availableTools) {
         super();
         this.availableTools = availableTools;
@@ -121,7 +124,7 @@ public class ToolCallAgent extends ReActAgent {
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
         // 判断是否调用了终止工具
         boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
-                .anyMatch(response -> response.name().equals("doTerminate"));
+                .anyMatch(response -> response.name().equals(TERMINATE_TOOL_NAME));
         if (terminateToolCalled) {
             // 任务结束，更改状态
             setState(AgentState.FINISHED);

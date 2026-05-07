@@ -34,17 +34,18 @@ public class WebSearchTool {
         paramMap.put("api_key", apiKey);
         paramMap.put("engine", "baidu");
         try {
-            String response = HttpUtil.get(SEARCH_API_URL, paramMap);
-            // 取出返回结果的前 5 条
+            String response = HttpUtil.get(SEARCH_API_URL, paramMap, 10_000);
             JSONObject jsonObject = JSONUtil.parseObj(response);
-            // 提取 organic_results 部分
             JSONArray organicResults = jsonObject.getJSONArray("organic_results");
-            List<Object> objects = organicResults.subList(0, 5);
-            // 拼接搜索结果为字符串
-            String result = objects.stream().map(obj -> {
-                JSONObject tmpJSONObject = (JSONObject) obj;
-                return tmpJSONObject.toString();
-            }).collect(Collectors.joining(","));
+            // 只取前 5 条，且只提取 title / snippet / link 三个有效字段，减少 token 噪音
+            int limit = Math.min(5, organicResults.size());
+            String result = organicResults.subList(0, limit).stream().map(obj -> {
+                JSONObject item = (JSONObject) obj;
+                return String.format("标题：%s\n摘要：%s\n链接：%s",
+                        item.getStr("title", ""),
+                        item.getStr("snippet", ""),
+                        item.getStr("link", ""));
+            }).collect(Collectors.joining("\n---\n"));
             return result;
         } catch (Exception e) {
             return "Error searching Baidu: " + e.getMessage();

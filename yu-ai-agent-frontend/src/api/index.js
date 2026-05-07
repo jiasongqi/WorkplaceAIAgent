@@ -1,60 +1,72 @@
 import axios from 'axios'
 
-// 根据环境变量设置 API 基础 URL
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
- ? '/api' // 生产环境使用相对路径，适用于前后端部署在同一域名下
- : 'http://localhost:8123/api' // 开发环境指向本地后端服务
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? '/api'
+  : 'http://localhost:8123/api'
 
-// 创建axios实例
 const request = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000
 })
 
-// 封装SSE连接
-export const connectSSE = (url, params, onMessage, onError) => {
-  // 构建带参数的URL
+// 请求拦截：自动带上 Token
+request.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers['Authorization'] = `Bearer ${token}`
+  return config
+})
+
+// 封装 SSE 连接
+export const connectSSE = (url, params, headers = {}) => {
   const queryString = Object.keys(params)
-    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
     .join('&')
-  
   const fullUrl = `${API_BASE_URL}${url}?${queryString}`
-  
-  // 创建EventSource
-  const eventSource = new EventSource(fullUrl)
-  
-  eventSource.onmessage = event => {
-    let data = event.data
-    
-    // 检查是否是特殊标记
-    if (data === '[DONE]') {
-      if (onMessage) onMessage('[DONE]')
-    } else {
-      // 处理普通消息
-      if (onMessage) onMessage(data)
-    }
-  }
-  
-  eventSource.onerror = error => {
-    if (onError) onError(error)
-    eventSource.close()
-  }
-  
-  // 返回eventSource实例，以便后续可以关闭连接
-  return eventSource
+  return new EventSource(fullUrl)
 }
 
-// AI恋爱大师聊天
-export const chatWithAiChat = (message, chatId) => {
-  return connectSSE('/ai/ai_chat/chat/sse', { message, chatId })
+// 游客登录
+export const login = (username = '游客') =>
+  request.post('/session/login', null, { params: { username } })
+
+// 创建会话
+export const createSession = (title = '新对话') =>
+  request.post('/session/create', null, { params: { title } })
+
+// 获取会话列表
+export const listSessions = () => request.get('/session/list')
+
+// 删除会话
+export const deleteSession = (chatId) => request.delete(`/session/${chatId}`)
+
+// 职场顾问 SSE 流式对话
+export const chatWithAiChat = (message, chatId) =>
+  connectSSE('/ai/ai_chat/chat/sse', { message, chatId })
+
+// Orchestrator 智能路由对话（带 Token）
+export const chatWithOrchestrator = (message, chatId) => {
+  const token = localStorage.getItem('token')
+  const params = { message, chatId }
+  const queryString = Object.keys(params)
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+    .join('&')
+  const fullUrl = `${API_BASE_URL}/ai/orchestrator/chat?${queryString}`
+  // EventSource 不支持自定义 header，Token 通过 URL 参数传递（简化方案）
+  return new EventSource(fullUrl)
 }
 
-// AI超级智能体聊天
-export const chatWithManus = (message) => {
-  return connectSSE('/ai/manus/chat', { message })
+// Manus 超级智能体
+export const chatWithManus = (message) =>
+  connectSSE('/ai/manus/chat', { message })
+
+// 上传知识库文档
+export const uploadDocument = (file, status = '通用') => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('status', status)
+  return request.post('/document/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
-export default {
-  chatWithAiChat,
-  chatWithManus
-} 
+export default { chatWithAiChat, chatWithManus, chatWithOrchestrator, login, createSession, listSessions, deleteSession }

@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * 提供状态转换、内存管理和基于步骤的执行循环的基础功能。
  * 子类必须实现step方法。
+ * @author jsq
  */
 @Data
 @Slf4j
@@ -116,6 +117,7 @@ public abstract class BaseAgent {
                 }
             } catch (Exception e) {
                 sseEmitter.completeWithError(e);
+                return;  // catch 后必须 return，否则继续执行下方 RUNNING 逻辑
             }
             // 2、执行，更改状态
             this.state = AgentState.RUNNING;
@@ -184,9 +186,11 @@ public abstract class BaseAgent {
     public abstract String step();
 
     /**
-     * 清理资源
+     * 清理资源：重置状态、步骤计数和消息历史，确保实例可安全复用
      */
     protected void cleanup() {
-        // 子类可以重写此方法来清理资源
+        this.messageList.clear();
+        this.state = AgentState.IDLE;
+        this.currentStep = 0;
     }
 }

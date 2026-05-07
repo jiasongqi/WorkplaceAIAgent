@@ -4,12 +4,11 @@ import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.stereotype.Component;
 
 /**
  * 鱼皮的 AI 超级智能体（拥有自主规划能力，可以直接使用）
+ * 注意：不由 Spring 管理（无 @Component），每次请求必须 new 新实例，避免多请求共享 messageList 的并发问题
  */
-@Component
 public class YuManus extends ToolCallAgent {
 
     public YuManus(ToolCallback[] allTools, ChatModel dashscopeChatModel) {
