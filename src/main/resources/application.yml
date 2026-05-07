@@ -11,7 +11,7 @@ spring:
   ai:
     dashscope:
       # 需要替换为你自己的 key
-      api-key: sk-ce8cf941591e476f8f8e496e38cdb404
+      api-key: 替换为你自己的 key
       chat:
         options:
           # qwen3.5-plus 是多模态模型，需要启用多模态模式
