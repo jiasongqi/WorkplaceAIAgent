@@ -3,7 +3,7 @@
     <div class="footer-content">
       <div class="footer-section">
         <div class="footer-logo">
-          <h3>鱼皮AI超级智能体应用平台</h3>
+          <h3>AI超级智能体应用平台</h3>
         </div>
         <div class="footer-links">
           <a href="#">《用户协议》</a>
@@ -24,13 +24,13 @@
         <h4>联系我们</h4>
         <div class="footer-links">
           <a href="#">商务合作</a>
-          <a href="#">站长：鱼皮</a>
+          <a href="#">站长：kria</a>
         </div>
       </div>
     </div>
     
     <div class="footer-bottom">
-      <p>© {{ currentYear }} 鱼皮AI超级智能体应用平台 - 让AI为你服务</p>
+      <p>© {{ currentYear }} kria-AI超级智能体应用平台 - 让AI为你服务</p>
     </div>
   </footer>
 </template>

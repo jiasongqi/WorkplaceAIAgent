@@ -1,7 +1,7 @@
 package com.yupi.yuaiagent.controller;
 
 import com.yupi.yuaiagent.agent.YuManus;
-import com.yupi.yuaiagent.app.LoveApp;
+import com.yupi.yuaiagent.app.AiChatAgent;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
@@ -20,7 +20,7 @@ import java.io.IOException;
 public class AiController {
 
     @Resource
-    private LoveApp loveApp;
+    private AiChatAgent aiChatAgent;
 
     @Resource
     private ToolCallback[] allTools;
@@ -29,57 +29,57 @@ public class AiController {
     private ChatModel dashscopeChatModel;
 
     /**
-     * 同步调用 AI 恋爱大师应用
+     * 同步调用 AI 职场顾问应用
      *
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping("/love_app/chat/sync")
-    public String doChatWithLoveAppSync(String message, String chatId) {
-        return loveApp.doChat(message, chatId);
+    @GetMapping("/ai_chat/chat/sync")
+    public String doChatWithAiChatSync(String message, String chatId) {
+        return aiChatAgent.doChat(message, chatId);
     }
 
     /**
-     * SSE 流式调用 AI 恋爱大师应用
+     * SSE 流式调用 AI 职场顾问应用
      *
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping(value = "/love_app/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> doChatWithLoveAppSSE(String message, String chatId) {
-        return loveApp.doChatByStream(message, chatId);
+    @GetMapping(value = "/ai_chat/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> doChatWithAiChatSSE(String message, String chatId) {
+        return aiChatAgent.doChatByStream(message, chatId);
     }
 
     /**
-     * SSE 流式调用 AI 恋爱大师应用
+     * SSE 流式调用 AI 职场顾问应用
      *
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping(value = "/love_app/chat/server_sent_event")
-    public Flux<ServerSentEvent<String>> doChatWithLoveAppServerSentEvent(String message, String chatId) {
-        return loveApp.doChatByStream(message, chatId)
+    @GetMapping(value = "/ai_chat/chat/server_sent_event")
+    public Flux<ServerSentEvent<String>> doChatWithAiChatServerSentEvent(String message, String chatId) {
+        return aiChatAgent.doChatByStream(message, chatId)
                 .map(chunk -> ServerSentEvent.<String>builder()
                         .data(chunk)
                         .build());
     }
 
     /**
-     * SSE 流式调用 AI 恋爱大师应用
+     * SSE 流式调用 AI 职场顾问应用
      *
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping(value = "/love_app/chat/sse_emitter")
-    public SseEmitter doChatWithLoveAppServerSseEmitter(String message, String chatId) {
+    @GetMapping(value = "/ai_chat/chat/sse_emitter")
+    public SseEmitter doChatWithAiChatServerSseEmitter(String message, String chatId) {
         // 创建一个超时时间较长的 SseEmitter
         SseEmitter sseEmitter = new SseEmitter(180000L); // 3 分钟超时
         // 获取 Flux 响应式数据流并且直接通过订阅推送给 SseEmitter
-        loveApp.doChatByStream(message, chatId)
+        aiChatAgent.doChatByStream(message, chatId)
                 .subscribe(chunk -> {
                     try {
                         sseEmitter.send(chunk);

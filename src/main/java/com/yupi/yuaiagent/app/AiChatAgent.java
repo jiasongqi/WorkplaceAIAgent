@@ -1,9 +1,6 @@
 package com.yupi.yuaiagent.app;
 
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
-import com.yupi.yuaiagent.advisor.ReReadingAdvisor;
-import com.yupi.yuaiagent.chatmemory.FileBasedChatMemory;
-import com.yupi.yuaiagent.rag.LoveAppRagCustomAdvisorFactory;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -24,23 +21,26 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 
+/**
+ * @author jsq
+ */
 @Component
 @Slf4j
-public class LoveApp {
+public class AiChatAgent {
 
     private final ChatClient chatClient;
 
-    private static final String SYSTEM_PROMPT = "扮演深耕恋爱心理领域的专家。开场向用户表明身份，告知用户可倾诉恋爱难题。" +
-            "围绕单身、恋爱、已婚三种状态提问：单身状态询问社交圈拓展及追求心仪对象的困扰；" +
-            "恋爱状态询问沟通、习惯差异引发的矛盾；已婚状态询问家庭责任与亲属关系处理的问题。" +
-            "引导用户详述事情经过、对方反应及自身想法，以便给出专属解决方案。";
+    private static final String SYSTEM_PROMPT = "扮演深耕职场领域的专家顾问。开场向用户表明身份，告知用户可倾诉职场困惑与挑战。" +
+            "围绕求职、在职、晋升三种状态提问：求职状态询问简历优化、面试技巧及 offer 选择的困扰；" +
+            "在职状态询问同事关系、工作效率及与上级沟通的矛盾；晋升状态询问晋升规划、薪资谈判及角色转型的问题。" +
+            "引导用户详述事情经过、相关方反应及自身想法，以便给出专属职场解决方案。";
 
     /**
      * 初始化 ChatClient
      *
      * @param dashscopeChatModel
      */
-    public LoveApp(ChatModel dashscopeChatModel) {
+    public AiChatAgent(ChatModel dashscopeChatModel) {
 //        // 初始化基于文件的对话记忆
 //        String fileDir = System.getProperty("user.dir") + "/tmp/chat-memory";
 //        ChatMemory chatMemory = new FileBasedChatMemory(fileDir);
@@ -96,7 +96,7 @@ public class LoveApp {
                 .content();
     }
 
-    record LoveReport(String title, List<String> suggestions) {
+    record AiChatReport(String title, List<String> suggestions) {
 
     }
 
@@ -107,25 +107,25 @@ public class LoveApp {
      * @param chatId
      * @return
      */
-    public LoveReport doChatWithReport(String message, String chatId) {
-        LoveReport loveReport = chatClient
+    public AiChatReport doChatWithReport(String message, String chatId) {
+        AiChatReport aiChatReport = chatClient
                 .prompt()
-                .system(SYSTEM_PROMPT + "每次对话后都要生成恋爱结果，标题为{用户名}的恋爱报告，内容为建议列表")
+                .system(SYSTEM_PROMPT + "每次对话后都要生成职场分析结果，标题为{用户名}的职场报告，内容为建议列表")
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .call()
-                .entity(LoveReport.class);
-        log.info("loveReport: {}", loveReport);
-        return loveReport;
+                .entity(AiChatReport.class);
+        log.info("aiChatReport: {}", aiChatReport);
+        return aiChatReport;
     }
 
     // AI 恋爱知识库问答功能
 
     @Resource
-    private VectorStore loveAppVectorStore;
+    private VectorStore aiChatVectorStore;
 
     @Resource
-    private Advisor loveAppRagCloudAdvisor;
+    private Advisor aiChatRagCloudAdvisor;
 
     @Resource
     private VectorStore pgVectorVectorStore;
@@ -151,15 +151,15 @@ public class LoveApp {
                 // 开启日志，便于观察效果
                 .advisors(new MyLoggerAdvisor())
                 // 应用 RAG 知识库问答
-                .advisors(new QuestionAnswerAdvisor(loveAppVectorStore))
+                .advisors(new QuestionAnswerAdvisor(aiChatVectorStore))
                 // 应用 RAG 检索增强服务（基于云知识库服务）
-//                .advisors(loveAppRagCloudAdvisor)
+//                .advisors(aiChatRagCloudAdvisor)
                 // 应用 RAG 检索增强服务（基于 PgVector 向量存储）
 //                .advisors(new QuestionAnswerAdvisor(pgVectorVectorStore))
                 // 应用自定义的 RAG 检索增强服务（文档查询器 + 上下文增强器）
 //                .advisors(
-//                        LoveAppRagCustomAdvisorFactory.createLoveAppRagCustomAdvisor(
-//                                loveAppVectorStore, "单身"
+//                        aiChatRagCustomAdvisorFactory.createaiChatRagCustomAdvisor(
+//                                aiChatVectorStore, "单身"
 //                        )
 //                )
                 .call()

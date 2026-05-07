@@ -11,10 +11,13 @@ spring:
   ai:
     dashscope:
       # 需要替换为你自己的 key
-      api-key: your-api-key
+      api-key: sk-ce8cf941591e476f8f8e496e38cdb404
       chat:
         options:
-          model: qwen-plus
+          # qwen3.5-plus 是多模态模型，需要启用多模态模式
+          model: qwen3.5-plus-2026-04-20
+          # 启用多模态模式（重要！）
+          multi-model: true
     ollama:
       base-url: http://localhost:11434
       chat:

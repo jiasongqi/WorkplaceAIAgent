@@ -7,13 +7,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class LoveAppDocumentLoaderTest {
+class AiChatAgentDocumentLoaderTest {
 
     @Resource
-    private LoveAppDocumentLoader loveAppDocumentLoader;
+    private AiChatDocumentLoader aiChatDocumentLoader;
 
     @Test
     void loadMarkdowns() {
-        loveAppDocumentLoader.loadMarkdowns();
+        aiChatDocumentLoader.loadMarkdowns();
     }
 }

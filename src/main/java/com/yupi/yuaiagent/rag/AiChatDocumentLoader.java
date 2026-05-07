@@ -13,15 +13,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 恋爱大师应用文档加载器
+ * 职场顾问应用文档加载器
+ * @author jsq
  */
 @Component
 @Slf4j
-public class LoveAppDocumentLoader {
+public class AiChatDocumentLoader {
 
     private final ResourcePatternResolver resourcePatternResolver;
 
-    public LoveAppDocumentLoader(ResourcePatternResolver resourcePatternResolver) {
+    public AiChatDocumentLoader(ResourcePatternResolver resourcePatternResolver) {
         this.resourcePatternResolver = resourcePatternResolver;
     }
 
