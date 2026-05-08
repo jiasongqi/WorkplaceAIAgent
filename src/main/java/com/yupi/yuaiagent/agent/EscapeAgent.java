@@ -8,6 +8,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.tool.ToolCallback;
+import reactor.core.publisher.Flux;
 
 /**
  * 离职规划专家 Agent
@@ -53,5 +54,14 @@ public class EscapeAgent {
                 .call()
                 .chatResponse();
         return response.getResult().getOutput().getText();
+    }
+
+    public Flux<String> chatStream(String message, String chatId) {
+        return chatClient.prompt()
+                .user(message)
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                .toolCallbacks(tools)
+                .stream()
+                .content();
     }
 }

@@ -16,17 +16,20 @@ import java.util.List;
 
 /**
  * 基于文件持久化的对话记忆
+ * 线程安全加固：Kryo 不是线程安全的，改用 ThreadLocal 让每个线程持有独立实例，
+ * 避免多用户并发时序列化状态互相污染。
  */
 public class FileBasedChatMemory implements ChatMemory {
 
     private final String BASE_DIR;
-    private static final Kryo kryo = new Kryo();
 
-    static {
+    // ThreadLocal 保证每个线程拥有独立的 Kryo 实例，彻底规避并发序列化错乱
+    private static final ThreadLocal<Kryo> kryoThreadLocal = ThreadLocal.withInitial(() -> {
+        Kryo kryo = new Kryo();
         kryo.setRegistrationRequired(false);
-        // 设置实例化策略
         kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
-    }
+        return kryo;
+    });
 
     // 构造对象时，指定文件保存目录
     public FileBasedChatMemory(String dir) {
@@ -62,7 +65,7 @@ public class FileBasedChatMemory implements ChatMemory {
         List<Message> messages = new ArrayList<>();
         if (file.exists()) {
             try (Input input = new Input(new FileInputStream(file))) {
-                messages = kryo.readObject(input, ArrayList.class);
+                messages = kryoThreadLocal.get().readObject(input, ArrayList.class);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -73,7 +76,7 @@ public class FileBasedChatMemory implements ChatMemory {
     private void saveConversation(String conversationId, List<Message> messages) {
         File file = getConversationFile(conversationId);
         try (Output output = new Output(new FileOutputStream(file))) {
-            kryo.writeObject(output, messages);
+            kryoThreadLocal.get().writeObject(output, messages);
         } catch (IOException e) {
             e.printStackTrace();
         }

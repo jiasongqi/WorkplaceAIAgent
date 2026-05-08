@@ -46,6 +46,25 @@
           <span class="btn-icon">→</span>
         </div>
       </div>
+
+      <div class="app-card" @click="navigateTo('/love-master')">
+        <div class="card-glow"></div>
+        <div class="app-icon love-icon">💘</div>
+        <div class="app-info">
+          <div class="app-title">恋爱大师</div>
+          <div class="app-desc">情感分析 · 恋爱话术 · 关系修复 · 脱单攻略</div>
+          <div class="app-tags">
+            <span class="tag tag-pink">表白</span>
+            <span class="tag tag-pink">挽回</span>
+            <span class="tag tag-pink">约会</span>
+            <span class="tag tag-pink">情感</span>
+          </div>
+        </div>
+        <div class="app-button app-button-pink">
+          <span class="btn-text">立即咨询</span>
+          <span class="btn-icon">→</span>
+        </div>
+      </div>
     </div>
 
     <div class="cyber-circles">
@@ -196,6 +215,11 @@ const navigateTo = (path) => router.push(path)
   box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
 }
 
+.love-icon {
+  background: linear-gradient(135deg, #ff6b8b, #ff4d6d);
+  box-shadow: 0 0 20px rgba(255, 107, 139, 0.5);
+}
+
 .app-info { text-align: center; margin-bottom: 24px; width: 100%; }
 
 .app-title {
@@ -219,6 +243,19 @@ const navigateTo = (path) => router.push(path)
   border-radius: 12px;
   font-size: 0.78rem;
 }
+
+.tag-pink {
+  background: rgba(255, 107, 139, 0.1);
+  border: 1px solid rgba(255, 107, 139, 0.35);
+  color: #ff8fab;
+}
+
+.app-button-pink {
+  background: linear-gradient(90deg, #ff6b8b, #ff4d6d);
+  border-color: rgba(255, 107, 139, 0.4);
+}
+
+.app-button-pink:hover { box-shadow: 0 0 20px rgba(255, 77, 109, 0.6); }
 
 .app-button {
   background: linear-gradient(90deg, #0088ff, #00b2ff);

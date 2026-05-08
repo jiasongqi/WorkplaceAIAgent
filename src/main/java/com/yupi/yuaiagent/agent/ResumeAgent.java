@@ -10,6 +10,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.vectorstore.VectorStore;
+import reactor.core.publisher.Flux;
 
 /**
  * 简历优化专家 Agent
@@ -55,5 +56,14 @@ public class ResumeAgent {
                 .call()
                 .chatResponse();
         return response.getResult().getOutput().getText();
+    }
+
+    public Flux<String> chatStream(String message, String chatId) {
+        String rewritten = queryRewriter.doQueryRewrite(message);
+        return chatClient.prompt()
+                .user(rewritten)
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                .stream()
+                .content();
     }
 }

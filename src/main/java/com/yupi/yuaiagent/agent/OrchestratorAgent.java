@@ -8,13 +8,14 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * 主控 Agent（Orchestrator）
- * 根据用户意图智能分发给对应的专业子 Agent
+ * 根据用户意图智能分发给对应的专业子 Agent，支持真正的 token 级流式输出。
  */
 @Slf4j
 public class OrchestratorAgent {
@@ -35,7 +36,9 @@ public class OrchestratorAgent {
     private final ResumeAgent resumeAgent;
     private final NegotiationAgent negotiationAgent;
     private final EscapeAgent escapeAgent;
-    private final YuManus generalAgent;
+    // YuManus 内部维护 messageList 状态，不能跨请求复用，保存构造参数按需创建
+    private final ToolCallback[] tools;
+    private final ChatModel chatModel;
 
     public OrchestratorAgent(ChatModel chatModel, VectorStore vectorStore,
                              ToolCallback[] tools, QueryRewriter queryRewriter) {
@@ -45,7 +48,13 @@ public class OrchestratorAgent {
         this.resumeAgent = new ResumeAgent(chatModel, vectorStore, queryRewriter);
         this.negotiationAgent = new NegotiationAgent(chatModel, tools);
         this.escapeAgent = new EscapeAgent(chatModel, tools);
-        this.generalAgent = new YuManus(tools, chatModel);
+        this.tools = tools;
+        this.chatModel = chatModel;
+    }
+
+    /** 每次请求创建新的 YuManus 实例，避免 messageList 跨请求污染 */
+    private YuManus newGeneralAgent() {
+        return new YuManus(tools, chatModel);
     }
 
     /**
@@ -85,35 +94,80 @@ public class OrchestratorAgent {
             }
             default -> {
                 log.info("路由到 GeneralAgent (YuManus)");
-                // YuManus 是流式 Agent，这里用同步方式运行
-                yield generalAgent.run(message);
+                yield newGeneralAgent().run(message);
             }
         };
     }
 
     /**
-     * 根据意图路由到对应子 Agent（SSE 流式）
+     * 根据意图路由到对应子 Agent（SSE 真正流式）。
+     *
+     * <p>流程：
+     * <ol>
+     *   <li>意图识别（同步，通常很快）</li>
+     *   <li>立即推送 routing 事件，让前端知道交给了哪个专家</li>
+     *   <li>RESUME / NEGOTIATION / ESCAPE：直接订阅子 Agent 的 {@code Flux<String>}，
+     *       每个 token 到来立即推送，真正 token 级流式</li>
+     *   <li>GENERAL（YuManus）：多步 ReAct Agent，每完成一步立即推送该步结果，
+     *       不再等全部步骤跑完才一次性发送</li>
+     * </ol>
      */
     public SseEmitter chatStream(String message, String chatId) {
         SseEmitter emitter = new SseEmitter(300000L);
 
         CompletableFuture.runAsync(() -> {
             try {
+                // 1. 意图识别（同步，通常很快）
                 String intent = detectIntent(message);
-                // 先推送路由信息
+                String agentName = getAgentName(intent);
+                log.info("意图识别结果：{}，路由到：{}", intent, agentName);
+
+                // 2. 推送路由事件，让前端立即知道交给了哪个专家
                 emitter.send(SseEmitter.event()
                         .name("routing")
-                        .data("[路由到" + getAgentName(intent) + "]"));
+                        .data("[路由到" + agentName + "]"));
 
-                String result = switch (intent) {
-                    case "RESUME" -> resumeAgent.chat(message, chatId);
-                    case "NEGOTIATION" -> negotiationAgent.chat(message, chatId);
-                    case "ESCAPE" -> escapeAgent.chat(message, chatId);
-                    default -> generalAgent.run(message);
+                // 3. 根据意图选择子 Agent 并流式输出
+                if ("GENERAL".equals(intent)) {
+                    // YuManus 是多步 ReAct Agent。
+                    // 使用 BaseAgent.runStream(prompt, externalEmitter) 重载：
+                    // 每完成一步立即把该步结果推送到当前 emitter，不再等全部步骤结束。
+                    // runStream 内部异步执行，完成后自动调用 emitter.complete()。
+                    YuManus generalAgent = newGeneralAgent();
+                    generalAgent.runStream(message, emitter);
+                    // 注意：emitter 的 complete 由 runStream 内部负责，这里直接返回
+                    return;
+                }
+
+                // RESUME / NEGOTIATION / ESCAPE：token 级流式
+                // 每个 token 到来立即推送，doOnComplete 关闭 emitter
+                Flux<String> tokenFlux = switch (intent) {
+                    case "RESUME" -> resumeAgent.chatStream(message, chatId);
+                    case "NEGOTIATION" -> negotiationAgent.chatStream(message, chatId);
+                    case "ESCAPE" -> escapeAgent.chatStream(message, chatId);
+                    default -> Flux.empty();
                 };
 
-                emitter.send(SseEmitter.event().name("message").data(result));
-                emitter.complete();
+                tokenFlux
+                        .doOnNext(token -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("message").data(token));
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        })
+                        .doOnError(e -> {
+                            log.error("子 Agent 流式输出出错", e);
+                            try {
+                                emitter.send(SseEmitter.event().name("error").data("执行出错：" + e.getMessage()));
+                                emitter.complete();
+                            } catch (IOException ex) {
+                                emitter.completeWithError(ex);
+                            }
+                        })
+                        .doOnComplete(emitter::complete)
+                        .subscribe();
+
             } catch (IOException e) {
                 emitter.completeWithError(e);
             } catch (Exception e) {

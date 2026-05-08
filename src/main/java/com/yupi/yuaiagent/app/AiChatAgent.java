@@ -75,7 +75,7 @@ public class AiChatAgent {
                 .content();
     }
 
-    record AiChatReport(String title, List<String> suggestions) {
+    public record AiChatReport(String title, List<String> suggestions) {
     }
 
     /**

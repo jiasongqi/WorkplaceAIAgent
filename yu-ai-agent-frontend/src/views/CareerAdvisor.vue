@@ -98,6 +98,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
+import { marked } from 'marked'
 import { login, createSession, listSessions, deleteSession, chatWithOrchestrator } from '../api'
 
 useHead({ title: '职场顾问 - 职场生存智囊' })
@@ -254,13 +255,10 @@ const goBack = () => router.push('/')
 
 const formatTime = (ts) => new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
-// 简单 Markdown 渲染（加粗、换行、列表）
+// 完整 Markdown 渲染（marked.js）
 const renderMarkdown = (text) => {
   if (!text) return ''
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n- /g, '\n• ')
-    .replace(/\n/g, '<br>')
+  return marked.parse(text)
 }
 </script>
 
@@ -437,7 +435,38 @@ const renderMarkdown = (text) => {
 .ai-bubble { background: white; color: #1f2937; border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 .user-bubble { background: #1e40af; color: white; border-bottom-right-radius: 4px; }
 
-.message-content { font-size: 15px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.message-content { font-size: 15px; line-height: 1.6; word-break: break-word; }
+
+/* marked.js 渲染的 Markdown 元素样式 */
+.ai-bubble :deep(h1),
+.ai-bubble :deep(h2),
+.ai-bubble :deep(h3) { font-weight: 600; margin: 10px 0 6px; color: #111827; }
+.ai-bubble :deep(h1) { font-size: 1.2em; }
+.ai-bubble :deep(h2) { font-size: 1.1em; }
+.ai-bubble :deep(h3) { font-size: 1em; }
+.ai-bubble :deep(p) { margin: 6px 0; }
+.ai-bubble :deep(ul),
+.ai-bubble :deep(ol) { padding-left: 20px; margin: 6px 0; }
+.ai-bubble :deep(li) { margin: 3px 0; }
+.ai-bubble :deep(strong) { font-weight: 600; color: #111827; }
+.ai-bubble :deep(em) { font-style: italic; }
+.ai-bubble :deep(code) {
+  background: #f3f4f6; border-radius: 4px;
+  padding: 1px 5px; font-size: 0.88em; font-family: monospace; color: #374151;
+}
+.ai-bubble :deep(pre) {
+  background: #1f2937; border-radius: 8px;
+  padding: 12px 14px; overflow-x: auto; margin: 8px 0;
+}
+.ai-bubble :deep(pre code) {
+  background: none; color: #e5e7eb; padding: 0; font-size: 0.85em;
+}
+.ai-bubble :deep(blockquote) {
+  border-left: 3px solid #d1d5db; padding-left: 12px;
+  color: #6b7280; margin: 6px 0;
+}
+.ai-bubble :deep(hr) { border: none; border-top: 1px solid #e5e7eb; margin: 10px 0; }
+.ai-bubble :deep(a) { color: #1e40af; text-decoration: underline; }
 .message-time { font-size: 11px; opacity: 0.5; margin-top: 6px; text-align: right; }
 
 .typing-cursor { display: inline-block; animation: blink 0.7s infinite; margin-left: 2px; }

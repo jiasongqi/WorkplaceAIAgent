@@ -132,4 +132,44 @@ public class AiController {
         YuManus yuManus = new YuManus(allTools, dashscopeChatModel);
         return yuManus.runStream(message);
     }
+
+    // ==================== RAG 知识库对话 ====================
+
+    /**
+     * RAG 知识库对话（含 Multi-Query 多路召回，同步）
+     */
+    @GetMapping("/ai_chat/rag/sync")
+    public Result<String> doChatWithRagSync(String message, String chatId) {
+        return Result.success(aiChatAgent.doChatWithRag(message, chatId));
+    }
+
+    // ==================== 工具调用对话 ====================
+
+    /**
+     * 工具调用对话（同步）
+     */
+    @GetMapping("/ai_chat/tools/sync")
+    public Result<String> doChatWithToolsSync(String message, String chatId) {
+        return Result.success(aiChatAgent.doChatWithTools(message, chatId));
+    }
+
+    // ==================== MCP 服务对话 ====================
+
+    /**
+     * MCP 服务对话（同步）
+     */
+    @GetMapping("/ai_chat/mcp/sync")
+    public Result<String> doChatWithMcpSync(String message, String chatId) {
+        return Result.success(aiChatAgent.doChatWithMcp(message, chatId));
+    }
+
+    // ==================== 职场报告（结构化输出）====================
+
+    /**
+     * 职场报告生成（结构化输出，同步）
+     */
+    @GetMapping("/ai_chat/report/sync")
+    public Result<AiChatAgent.AiChatReport> doChatWithReportSync(String message, String chatId) {
+        return Result.success(aiChatAgent.doChatWithReport(message, chatId));
+    }
 }

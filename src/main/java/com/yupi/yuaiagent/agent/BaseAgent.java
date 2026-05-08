@@ -93,6 +93,59 @@ public abstract class BaseAgent {
     }
 
     /**
+     * 运行代理（流式输出），将每步结果推送到外部已有的 SseEmitter。
+     * 适用于需要把多个 Agent 的输出合并到同一个 SSE 连接的场景（如 OrchestratorAgent）。
+     *
+     * @param userPrompt      用户提示词
+     * @param externalEmitter 外部 SseEmitter，由调用方负责最终 complete/completeWithError
+     */
+    public void runStream(String userPrompt, SseEmitter externalEmitter) {
+        CompletableFuture.runAsync(() -> {
+            if (this.state != AgentState.IDLE) {
+                try {
+                    externalEmitter.send(SseEmitter.event().name("error").data("错误：无法从状态运行代理：" + this.state));
+                } catch (IOException ignored) {}
+                externalEmitter.complete();
+                return;
+            }
+            if (StrUtil.isBlank(userPrompt)) {
+                try {
+                    externalEmitter.send(SseEmitter.event().name("error").data("错误：不能使用空提示词运行代理"));
+                } catch (IOException ignored) {}
+                externalEmitter.complete();
+                return;
+            }
+            this.state = AgentState.RUNNING;
+            messageList.add(new UserMessage(userPrompt));
+            try {
+                for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
+                    currentStep = i + 1;
+                    log.info("Executing step {}/{}", currentStep, maxSteps);
+                    String stepResult = step();
+                    externalEmitter.send(SseEmitter.event().name("message").data(stepResult));
+                }
+                if (currentStep >= maxSteps) {
+                    state = AgentState.FINISHED;
+                    externalEmitter.send(SseEmitter.event().name("message")
+                            .data("执行结束：达到最大步骤（" + maxSteps + "）"));
+                }
+                externalEmitter.complete();
+            } catch (Exception e) {
+                state = AgentState.ERROR;
+                log.error("error executing agent", e);
+                try {
+                    externalEmitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
+                    externalEmitter.complete();
+                } catch (IOException ex) {
+                    externalEmitter.completeWithError(ex);
+                }
+            } finally {
+                this.cleanup();
+            }
+        });
+    }
+
+    /**
      * 运行代理（流式输出）
      *
      * @param userPrompt 用户提示词
