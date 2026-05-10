@@ -1,5 +1,6 @@
 package com.yupi.yuaiagent.agent;
 
+import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -29,11 +30,14 @@ class OrchestratorAgentTest {
     @Resource
     private QueryRewriter queryRewriter;
 
+    @Resource
+    private ChatMemoryManager chatMemoryManager;
+
     private OrchestratorAgent orchestrator;
 
     @BeforeEach
     void setUp() {
-        orchestrator = new OrchestratorAgent(dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter);
+        orchestrator = new OrchestratorAgent(dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager);
     }
 
     /**
@@ -105,14 +109,14 @@ class OrchestratorAgentTest {
     }
 
     /**
-     * 测试边界情况：模糊问题，应降级到 GENERAL 路由
+     * 测试边界情况：模糊问题，应路由到 GeneralCareerAgent
      */
     @Test
     void testFallbackToGeneral() {
         String chatId = UUID.randomUUID().toString();
         String message = "我最近工作压力很大，感觉很迷茫";
         String answer = orchestrator.chat(message, chatId);
-        log.info("=== Fallback GENERAL 回答 ===\n{}", answer);
+        log.info("=== GeneralCareerAgent 回答 ===\n{}", answer);
         Assertions.assertNotNull(answer);
         Assertions.assertFalse(answer.isBlank());
     }

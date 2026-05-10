@@ -1,7 +1,9 @@
 package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
-import com.yupi.yuaiagent.chatmemory.FileBasedChatMemory;
+import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.rag.QueryRewriter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -13,7 +15,12 @@ import reactor.core.publisher.Flux;
 /**
  * 薪资谈判专家 Agent
  * 专注薪资谈判策略，可联网搜索市场薪资数据
+ * 
+ * 优化点：
+ * 1. 使用 ChatMemoryManager 统一管理会话记忆
+ * 2. 添加 QueryRewriter 查询重写能力
  */
+@Slf4j
 public class NegotiationAgent {
 
     private static final String SYSTEM_PROMPT = """
@@ -30,12 +37,19 @@ public class NegotiationAgent {
 
     private final ChatClient chatClient;
     private final ToolCallback[] tools;
+    private final QueryRewriter queryRewriter;
 
-    public NegotiationAgent(ChatModel chatModel, ToolCallback[] tools) {
+    /**
+     * 构造函数 - 使用注入的 ChatMemoryManager
+     */
+    public NegotiationAgent(ChatModel chatModel, ToolCallback[] tools, 
+                           QueryRewriter queryRewriter, ChatMemoryManager chatMemoryManager) {
         this.tools = tools;
-        // 文件持久化记忆，支持多轮对话
-        ChatMemory chatMemory = new FileBasedChatMemory(
-                System.getProperty("user.dir") + "/tmp/chat-memory/negotiation");
+        this.queryRewriter = queryRewriter;
+        
+        // 使用 ChatMemoryManager 获取共享的 ChatMemory
+        ChatMemory chatMemory = chatMemoryManager.getMemory("negotiation");
+        
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(
@@ -43,11 +57,16 @@ public class NegotiationAgent {
                         new MyLoggerAdvisor()
                 )
                 .build();
+        
+        log.info("NegotiationAgent 初始化完成");
     }
 
     public String chat(String message, String chatId) {
+        String rewritten = queryRewriter.doQueryRewrite(message);
+        log.debug("查询重写：{} -> {}", message, rewritten);
+        
         ChatResponse response = chatClient.prompt()
-                .user(message)
+                .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .toolCallbacks(tools)
                 .call()
@@ -56,8 +75,11 @@ public class NegotiationAgent {
     }
 
     public Flux<String> chatStream(String message, String chatId) {
+        String rewritten = queryRewriter.doQueryRewrite(message);
+        log.debug("查询重写：{} -> {}", message, rewritten);
+        
         return chatClient.prompt()
-                .user(message)
+                .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .toolCallbacks(tools)
                 .stream()

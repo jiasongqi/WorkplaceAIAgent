@@ -1,7 +1,9 @@
 package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
-import com.yupi.yuaiagent.chatmemory.FileBasedChatMemory;
+import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.rag.QueryRewriter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -13,7 +15,12 @@ import reactor.core.publisher.Flux;
 /**
  * 离职规划专家 Agent
  * 专注离职流程规划，生成证据链和工作交接清单，可生成 PDF 文件
+ * 
+ * 优化点：
+ * 1. 使用 ChatMemoryManager 统一管理会话记忆
+ * 2. 添加 QueryRewriter 查询重写能力
  */
+@Slf4j
 public class EscapeAgent {
 
     private static final String SYSTEM_PROMPT = """
@@ -31,12 +38,19 @@ public class EscapeAgent {
 
     private final ChatClient chatClient;
     private final ToolCallback[] tools;
+    private final QueryRewriter queryRewriter;
 
-    public EscapeAgent(ChatModel chatModel, ToolCallback[] tools) {
+    /**
+     * 构造函数 - 使用注入的 ChatMemoryManager
+     */
+    public EscapeAgent(ChatModel chatModel, ToolCallback[] tools, 
+                      QueryRewriter queryRewriter, ChatMemoryManager chatMemoryManager) {
         this.tools = tools;
-        // 文件持久化记忆，支持多轮对话
-        ChatMemory chatMemory = new FileBasedChatMemory(
-                System.getProperty("user.dir") + "/tmp/chat-memory/escape");
+        this.queryRewriter = queryRewriter;
+        
+        // 使用 ChatMemoryManager 获取共享的 ChatMemory
+        ChatMemory chatMemory = chatMemoryManager.getMemory("escape");
+        
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(
@@ -44,11 +58,16 @@ public class EscapeAgent {
                         new MyLoggerAdvisor()
                 )
                 .build();
+        
+        log.info("EscapeAgent 初始化完成");
     }
 
     public String chat(String message, String chatId) {
+        String rewritten = queryRewriter.doQueryRewrite(message);
+        log.debug("查询重写：{} -> {}", message, rewritten);
+        
         ChatResponse response = chatClient.prompt()
-                .user(message)
+                .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .toolCallbacks(tools)
                 .call()
@@ -57,8 +76,11 @@ public class EscapeAgent {
     }
 
     public Flux<String> chatStream(String message, String chatId) {
+        String rewritten = queryRewriter.doQueryRewrite(message);
+        log.debug("查询重写：{} -> {}", message, rewritten);
+        
         return chatClient.prompt()
-                .user(message)
+                .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .toolCallbacks(tools)
                 .stream()

@@ -10,6 +10,7 @@ import java.util.List;
 
 /**
  * 基于 AI 的文档元信息增强器（为文档补充元信息）
+ * @author jsq
  */
 @Component
 public class MyKeywordEnricher {

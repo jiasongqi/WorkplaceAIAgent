@@ -30,7 +30,7 @@ public class AiChatVectorStoreConfig {
         SimpleVectorStore simpleVectorStore = SimpleVectorStore.builder(dashscopeEmbeddingModel).build();
         // 加载文档
         List<Document> documentList = aiChatDocumentLoader.loadMarkdowns();
-        // 自主切分文档
+        // 自主切分文档不建议
 //        List<Document> splitDocuments = myTokenTextSplitter.splitCustomized(documentList);
         // 自动补充关键词元信息
         List<Document> enrichedDocuments = myKeywordEnricher.enrichDocuments(documentList);

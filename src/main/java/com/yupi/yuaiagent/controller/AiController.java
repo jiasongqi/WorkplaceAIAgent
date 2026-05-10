@@ -4,6 +4,7 @@ import com.yupi.yuaiagent.agent.OrchestratorAgent;
 import com.yupi.yuaiagent.agent.YuManus;
 import com.yupi.yuaiagent.app.AiChatAgent;
 import com.yupi.yuaiagent.auth.JwtUtil;
+import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.common.Result;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import com.yupi.yuaiagent.session.SessionManager;
@@ -43,6 +44,9 @@ public class AiController {
 
     @Resource
     private SessionManager sessionManager;
+    
+    @Resource
+    private ChatMemoryManager chatMemoryManager;
 
     // ==================== 职场顾问（基础对话）====================
 
@@ -117,8 +121,9 @@ public class AiController {
             // 用第一条消息更新会话标题
             sessionManager.updateTitle(chatId, message);
         }
+        // 使用 ChatMemoryManager 创建 OrchestratorAgent
         OrchestratorAgent orchestrator = new OrchestratorAgent(
-                dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter);
+                dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager);
         return orchestrator.chatStream(message, chatId);
     }
 

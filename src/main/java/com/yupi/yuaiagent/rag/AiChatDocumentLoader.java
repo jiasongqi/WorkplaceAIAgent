@@ -42,6 +42,7 @@ public class AiChatDocumentLoader {
                         .withHorizontalRuleCreateDocument(true)
                         .withIncludeCodeBlock(false)
                         .withIncludeBlockquote(false)
+                        // 添加元信息
                         .withAdditionalMetadata("filename", filename)
                         .withAdditionalMetadata("status", status)
                         .build();
