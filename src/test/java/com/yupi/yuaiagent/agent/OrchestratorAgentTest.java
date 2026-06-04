@@ -1,15 +1,10 @@
 package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
-import com.yupi.yuaiagent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.UUID;
@@ -18,27 +13,9 @@ import java.util.UUID;
 @Slf4j
 class OrchestratorAgentTest {
 
+    /** 直接注入容器中的单例 OrchestratorAgent，避免手动构造导致与构造函数演进脱节 */
     @Resource
-    private ChatModel dashscopeChatModel;
-
-    @Resource
-    private VectorStore aiChatVectorStore;
-
-    @Resource
-    private ToolCallback[] allTools;
-
-    @Resource
-    private QueryRewriter queryRewriter;
-
-    @Resource
-    private ChatMemoryManager chatMemoryManager;
-
     private OrchestratorAgent orchestrator;
-
-    @BeforeEach
-    void setUp() {
-        orchestrator = new OrchestratorAgent(dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager);
-    }
 
     /**
      * 测试意图路由到 ResumeAgent（简历/求职类问题）
@@ -88,6 +65,19 @@ class OrchestratorAgentTest {
         String message = "我和同事关系很差，总是被排挤，怎么改善职场人际关系？";
         String answer = orchestrator.chat(message, chatId);
         log.info("=== GeneralAgent 回答 ===\n{}", answer);
+        Assertions.assertNotNull(answer);
+        Assertions.assertFalse(answer.isBlank());
+    }
+
+    /**
+     * 测试意图路由到 ConsultationAgent（预约咨询问题）
+     */
+    @Test
+    void testRouteToConsultationAgent() {
+        String chatId = UUID.randomUUID().toString();
+        String message = "我想预约咨询";
+        String answer = orchestrator.chat(message, chatId);
+        log.info("=== ConsultationAgent 回答 ===\n{}", answer);
         Assertions.assertNotNull(answer);
         Assertions.assertFalse(answer.isBlank());
     }

@@ -11,6 +11,7 @@ public enum AgentIntent {
     RESUME("简历优化专家", "求职、简历优化、面试技巧、offer选择"),
     NEGOTIATION("薪资谈判专家", "薪资谈判、涨薪、薪酬分析"),
     ESCAPE("离职规划专家", "离职、辞职、劳动纠纷、工作交接"),
+    CONSULTATION("预约咨询专家", "预约咨询、预约专家、咨询预约"),
     GENERAL("职场通用顾问", "其他职场问题");
     
     private final String agentName;
@@ -57,6 +58,28 @@ public enum AgentIntent {
             }
         }
         
+        // 中文关键词模糊匹配（处理模型直接输出中文意图的情况）
+        // 预约咨询关键词 → CONSULTATION（Req 1.3）
+        if (containsAny(rawIntent, "预约", "咨询")) {
+            return CONSULTATION;
+        }
+        
         return GENERAL;
+    }
+    
+    /**
+     * 判断文本是否包含任意一个关键词
+     * 
+     * @param text     待检查文本
+     * @param keywords 关键词列表
+     * @return 包含任意关键词返回 true，否则返回 false
+     */
+    private static boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

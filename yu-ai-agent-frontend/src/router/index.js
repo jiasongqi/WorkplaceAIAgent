@@ -24,6 +24,18 @@ const routes = [
     name: 'LoveMaster',
     component: () => import('../views/LoveMaster.vue'),
     meta: { title: 'AI恋爱大师 - 职场生存智囊' }
+  },
+  {
+    path: '/artifact-admin',
+    name: 'ArtifactAdmin',
+    component: () => import('../views/ArtifactAdmin.vue'),
+    meta: { title: '交付物管理 - 职场生存智囊' }
+  },
+  {
+    path: '/trace/:traceId',
+    name: 'TraceDetail',
+    component: () => import('../views/TraceDetail.vue'),
+    meta: { title: '执行轨迹 - 职场生存智囊' }
   }
 ]
 

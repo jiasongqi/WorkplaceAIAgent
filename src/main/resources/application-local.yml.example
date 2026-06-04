@@ -1,0 +1,30 @@
+# ============================================================
+# 本地开发配置样例
+# 用法：复制此文件为 application-local.yml（已被 .gitignore 忽略，不会提交），
+#      填入你自己的密钥后即可本地运行。
+#
+# 生产环境请改用环境变量注入，不要把真实密钥写进任何文件。
+# ============================================================
+spring:
+  ai:
+    dashscope:
+      # 通义千问 / 百炼 API Key
+      api-key: 在此填入你的-dashscope-api-key
+
+# searchAPI 搜索服务 Key
+search-api:
+  api-key: 在此填入你的-search-api-key
+
+# JWT 签名密钥（本地随便填一个足够长的字符串即可）
+jwt:
+  secret: local-dev-secret-key-please-use-a-long-random-string
+
+# 日历服务（如需联调飞书/钉钉再填写）
+calendar:
+  provider: FEISHU
+  feishu:
+    app-id: ""
+    app-secret: ""
+  dingtalk:
+    app-key: ""
+    app-secret: ""

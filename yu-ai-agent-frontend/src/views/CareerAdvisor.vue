@@ -38,7 +38,15 @@
           <h1 class="title">💼 职场顾问</h1>
           <div class="agent-badge" :class="currentAgent.type">{{ currentAgent.name }}</div>
         </div>
-        <div class="chat-id-display">{{ currentChatId.slice(0, 8) }}...</div>
+        <div class="header-right">
+          <button class="profile-btn" @click="openProfile" title="查看我的画像">
+            👤 我的画像
+          </button>
+          <button class="profile-btn" @click="loadTraceHistory" title="查看执行轨迹历史">
+            📊 轨迹
+          </button>
+          <div class="chat-id-display">{{ currentChatId.slice(0, 8) }}...</div>
+        </div>
       </div>
 
       <div class="chat-messages" ref="messagesContainer">
@@ -77,6 +85,33 @@
         </div>
       </div>
 
+      <!-- Real-time trace panel -->
+      <div class="trace-panel" v-if="traceSteps.length > 0">
+        <div class="trace-panel-header">
+          <span class="trace-panel-title">⚡ 执行轨迹</span>
+          <span class="trace-step-count">{{ traceSteps.length }} 步</span>
+        </div>
+        <div class="trace-steps-list">
+          <div
+            v-for="step in traceSteps"
+            :key="step.sequence"
+            class="trace-step"
+            :class="step.status.toLowerCase()"
+          >
+            <div class="trace-step-dot">
+              <span v-if="step.status === 'SUCCESS'">✓</span>
+              <span v-else-if="step.status === 'RUNNING'" class="spin">⟳</span>
+              <span v-else-if="step.status === 'FAILED'">✗</span>
+              <span v-else>⊘</span>
+            </div>
+            <div class="trace-step-info">
+              <span class="trace-step-type">{{ step.stepTypeDisplayName || step.stepType }}</span>
+              <span class="trace-step-label">{{ step.label }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="input-area">
         <textarea
           v-model="inputMessage"
@@ -91,15 +126,125 @@
         </button>
       </div>
     </div>
+
+    <!-- 我的画像弹窗 -->
+    <div v-if="profileVisible" class="profile-overlay" @click.self="closeProfile">
+      <div class="profile-panel">
+        <div class="profile-header">
+          <h2 class="profile-title">👤 我的画像</h2>
+          <button class="profile-close" @click="closeProfile">×</button>
+        </div>
+
+        <div class="profile-body">
+          <!-- 加载中 -->
+          <div v-if="profileLoading" class="profile-loading">画像加载中...</div>
+
+          <!-- 加载失败 -->
+          <div v-else-if="profileError" class="profile-empty">{{ profileError }}</div>
+
+          <!-- 无画像 -->
+          <div v-else-if="!profile" class="profile-empty">
+            暂无画像。多与我对话后，系统会自动学习并构建你的专属画像。
+          </div>
+
+          <!-- 画像维度展示 -->
+          <div v-else class="profile-content">
+            <div class="profile-field">
+              <span class="field-label">沟通偏好</span>
+              <span class="field-value">{{ communicationPreferenceText }}</span>
+            </div>
+            <div class="profile-field">
+              <span class="field-label">语气偏好</span>
+              <span class="field-value">{{ profile.tonePreference || '暂无' }}</span>
+            </div>
+            <div class="profile-field">
+              <span class="field-label">关注领域</span>
+              <div class="field-value">
+                <template v-if="profile.focusAreas && profile.focusAreas.length">
+                  <span v-for="(area, i) in profile.focusAreas" :key="i" class="profile-tag">{{ area }}</span>
+                </template>
+                <span v-else class="field-empty">暂无</span>
+              </div>
+            </div>
+            <div class="profile-field">
+              <span class="field-label">已知背景</span>
+              <span class="field-value">{{ profile.knownBackground || '暂无' }}</span>
+            </div>
+            <div class="profile-field">
+              <span class="field-label">历史诉求</span>
+              <div class="field-value">
+                <template v-if="profile.historicalDemands && profile.historicalDemands.length">
+                  <span v-for="(demand, i) in profile.historicalDemands" :key="i" class="profile-tag">{{ demand }}</span>
+                </template>
+                <span v-else class="field-empty">暂无</span>
+              </div>
+            </div>
+            <div v-if="profile.updatedAt" class="profile-meta">
+              最近更新：{{ formatDateTime(profile.updatedAt) }}
+            </div>
+          </div>
+
+          <!-- 清空结果反馈 -->
+          <div v-if="clearFeedback" class="profile-feedback" :class="clearFeedback.type">
+            {{ clearFeedback.text }}
+          </div>
+        </div>
+
+        <div class="profile-footer">
+          <button
+            class="clear-profile-btn"
+            :disabled="profileLoading || clearing || !profile"
+            @click="handleClearProfile"
+          >
+            {{ clearing ? '清空中...' : '🗑 清空画像' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 轨迹历史弹窗 -->
+    <div v-if="traceHistoryVisible" class="profile-overlay" @click.self="traceHistoryVisible = false">
+      <div class="profile-panel" style="max-width: 560px;">
+        <div class="profile-header">
+          <h2 class="profile-title">📊 执行轨迹历史</h2>
+          <button class="profile-close" @click="traceHistoryVisible = false">×</button>
+        </div>
+        <div class="profile-body">
+          <div v-if="traceHistoryLoading" class="profile-loading">加载中...</div>
+          <div v-else-if="traceHistoryList.length === 0" class="profile-empty">暂无轨迹记录</div>
+          <div v-else class="trace-history-list">
+            <div
+              v-for="t in traceHistoryList"
+              :key="t.traceId"
+              class="trace-history-item"
+              @click="$router.push(`/trace/${t.traceId}`); traceHistoryVisible = false"
+            >
+              <span class="trace-history-status" :class="t.status?.toLowerCase()">
+                {{ t.status === 'SUCCESS' ? '✓' : t.status === 'FAILED' ? '✗' : t.status === 'RUNNING' ? '⟳' : '⊘' }}
+              </span>
+              <span class="trace-history-id">{{ t.traceId?.slice(0, 12) }}...</span>
+              <span class="trace-history-spans">{{ t.spans?.length || 0 }} 步</span>
+              <span class="trace-history-time">{{ formatTime(t.startTime) }}</span>
+            </div>
+            <button
+              v-if="traceHistoryHasMore && !traceHistoryLoading"
+              class="load-more-btn"
+              @click="loadMoreTraces"
+            >加载更多</button>
+            <div v-if="traceHistoryLoading" class="profile-loading" style="padding: 8px 0;">加载中...</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed, shallowReactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
-import { login, createSession, listSessions, deleteSession, chatWithOrchestrator } from '../api'
+import { login, createSession, listSessions, deleteSession, chatWithOrchestrator, getMyProfile, clearMyProfile, getTracesByChat } from '../api'
 
 useHead({ title: '职场顾问 - 职场生存智囊' })
 
@@ -113,6 +258,30 @@ const isStreaming = ref(false)
 const isThinking = ref(false)
 const sidebarCollapsed = ref(false)
 const currentAgent = ref({ name: '智能路由中', type: 'general' })
+
+// 我的画像
+const profileVisible = ref(false)
+const profileLoading = ref(false)
+const profileError = ref('')
+const profile = ref(null)
+const clearing = ref(false)
+const clearFeedback = ref(null)
+
+// 实时轨迹
+const traceMap = shallowReactive(new Map())
+const traceSteps = computed(() =>
+  Array.from(traceMap.values()).sort((a, b) => a.sequence - b.sequence)
+)
+const traceVisible = ref(false)
+const traceStatus = ref('')
+const traceRequestId = ref('')
+
+// 历史轨迹列表
+const traceHistoryVisible = ref(false)
+const traceHistoryList = ref([])
+const traceHistoryLoading = ref(false)
+const traceHistoryPage = ref(1)
+const traceHistoryHasMore = ref(true)
 
 let eventSource = null
 
@@ -196,6 +365,11 @@ const sendMessage = () => {
   if (eventSource) eventSource.close()
   eventSource = chatWithOrchestrator(msg, currentChatId.value)
 
+  // Reset trace state for new request
+  traceMap.clear()
+  traceVisible.value = true
+  traceRequestId.value = ''
+
   let aiMsgIndex = -1
 
   eventSource.addEventListener('routing', (e) => {
@@ -207,6 +381,48 @@ const sendMessage = () => {
     else if (routingText.includes('薪资')) currentAgent.value = { name: '薪资谈判专家', type: 'negotiation' }
     else if (routingText.includes('离职')) currentAgent.value = { name: '离职规划专家', type: 'escape' }
     else currentAgent.value = { name: '职场通用顾问', type: 'general' }
+  })
+
+  // Real-time trace events
+  eventSource.addEventListener('trace', (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      switch (data.type) {
+        case 'TRACE_STARTED':
+          traceStatus.value = 'RUNNING'
+          break
+        case 'SPAN_STARTED':
+          traceMap.set(data.sequence, {
+            sequence: data.sequence,
+            stepType: data.stepType,
+            stepTypeDisplayName: data.stepTypeDisplayName,
+            label: data.label,
+            status: 'RUNNING',
+            errorMessage: null,
+            startTime: new Date().toISOString()
+          })
+          break
+        case 'SPAN_ENDED': {
+          const span = traceMap.get(data.sequence)
+          if (span) {
+            span.status = data.status
+            span.errorMessage = data.errorMessage
+            span.endTime = new Date().toISOString()
+          }
+          break
+        }
+        case 'TRACE_COMPLETED':
+          traceStatus.value = 'SUCCESS'
+          break
+        case 'TRACE_FAILED':
+          traceStatus.value = 'FAILED'
+          break
+        default:
+          break
+      }
+    } catch (err) {
+      console.warn('Failed to parse trace event', err)
+    }
   })
 
   eventSource.addEventListener('message', (e) => {
@@ -223,6 +439,7 @@ const sendMessage = () => {
     isThinking.value = false
     if (e.data === '[DONE]') {
       isStreaming.value = false
+      traceVisible.value = false
       eventSource.close()
       return
     }
@@ -251,9 +468,97 @@ const scrollToBottom = async () => {
   }
 }
 
+// Load trace history for current chat
+const loadTraceHistory = async (append = false) => {
+  if (traceHistoryLoading.value) return
+  traceHistoryLoading.value = true
+  traceHistoryVisible.value = true
+  if (!append) {
+    traceHistoryPage.value = 1
+    traceHistoryHasMore.value = true
+  }
+  try {
+    const res = await getTracesByChat(currentChatId.value, traceHistoryPage.value, 20)
+    const items = res.data?.data || []
+    if (append) {
+      traceHistoryList.value.push(...items)
+    } else {
+      traceHistoryList.value = items
+    }
+    traceHistoryHasMore.value = items.length >= 20
+  } catch (e) {
+    console.error('加载轨迹历史失败', e)
+    if (!append) traceHistoryList.value = []
+  } finally {
+    traceHistoryLoading.value = false
+  }
+}
+
+const loadMoreTraces = () => {
+  traceHistoryPage.value++
+  loadTraceHistory(true)
+}
+
 const goBack = () => router.push('/')
 
 const formatTime = (ts) => new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+// 格式化画像更新时间（后端返回 ISO 字符串或时间数组）
+const formatDateTime = (value) => {
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return value
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+// 沟通偏好枚举 → 中文
+const communicationPreferenceText = computed(() => {
+  const pref = profile.value?.communicationPreference
+  if (pref === 'CONCISE') return '简洁'
+  if (pref === 'DETAILED') return '详细'
+  return '暂无'
+})
+
+// 打开画像弹窗并加载画像
+const openProfile = async () => {
+  profileVisible.value = true
+  clearFeedback.value = null
+  profileError.value = ''
+  profileLoading.value = true
+  try {
+    await ensureLogin()
+    const res = await getMyProfile()
+    // 后端 Result<UserProfile>，无画像时 data 为 null
+    profile.value = res.data?.data || null
+  } catch (e) {
+    console.error('加载画像失败', e)
+    profileError.value = '加载画像失败，请稍后重试。'
+    profile.value = null
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+const closeProfile = () => {
+  profileVisible.value = false
+}
+
+// 清空画像（确认后调用 DELETE /profile/me）
+const handleClearProfile = async () => {
+  if (clearing.value) return
+  if (!window.confirm('确定要清空你的画像吗？此操作不可恢复。')) return
+  clearing.value = true
+  clearFeedback.value = null
+  try {
+    await clearMyProfile()
+    profile.value = null
+    clearFeedback.value = { type: 'success', text: '✓ 画像已清空' }
+  } catch (e) {
+    console.error('清空画像失败', e)
+    clearFeedback.value = { type: 'error', text: '清空失败，请稍后重试。' }
+  } finally {
+    clearing.value = false
+  }
+}
 
 // 完整 Markdown 渲染（marked.js）
 const renderMarkdown = (text) => {
@@ -392,6 +697,160 @@ const renderMarkdown = (text) => {
 .agent-badge.general { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4); }
 
 .chat-id-display { font-size: 12px; opacity: 0.5; font-family: monospace; }
+
+/* 头部右侧区 + 我的画像入口 */
+.header-right { display: flex; align-items: center; gap: 14px; }
+
+.profile-btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: white;
+  border-radius: 16px;
+  padding: 5px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.profile-btn:hover { background: rgba(255,255,255,0.22); }
+
+/* 画像弹窗 */
+.profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.profile-panel {
+  width: 480px;
+  max-width: 92vw;
+  max-height: 86vh;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #1e40af;
+  color: white;
+}
+
+.profile-title { font-size: 17px; font-weight: bold; margin: 0; }
+
+.profile-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+.profile-close:hover { color: white; }
+
+.profile-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.profile-loading,
+.profile-empty {
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+  padding: 32px 12px;
+  line-height: 1.6;
+}
+
+.profile-content { display: flex; flex-direction: column; gap: 16px; }
+
+.profile-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.field-label {
+  flex-shrink: 0;
+  width: 72px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  padding-top: 2px;
+}
+
+.field-value {
+  flex: 1;
+  font-size: 14px;
+  color: #1f2937;
+  line-height: 1.6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.field-empty { color: #9ca3af; }
+
+.profile-tag {
+  background: rgba(30, 64, 175, 0.08);
+  border: 1px solid rgba(30, 64, 175, 0.2);
+  color: #1e40af;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
+.profile-meta {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 4px;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 12px;
+}
+
+.profile-feedback {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+.profile-feedback.success { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16,185,129,0.3); }
+.profile-feedback.error { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239,68,68,0.3); }
+
+.profile-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.clear-profile-btn {
+  background: white;
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.clear-profile-btn:hover:not(:disabled) { background: rgba(239, 68, 68, 0.08); }
+.clear-profile-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .chat-messages {
   flex: 1;
@@ -536,10 +995,107 @@ const renderMarkdown = (text) => {
 .send-btn:hover:not(:disabled) { background: #1d4ed8; }
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Trace panel */
+.trace-panel {
+  background: #1a1f2e;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.trace-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.trace-panel-title { color: white; font-size: 13px; font-weight: 600; }
+.trace-step-count { color: rgba(255, 255, 255, 0.4); font-size: 11px; }
+.trace-steps-list { padding: 8px 16px; display: flex; flex-direction: column; gap: 4px; }
+.trace-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.trace-step-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+.trace-step.success .trace-step-dot { background: rgba(16, 185, 129, 0.3); color: #34d399; }
+.trace-step.running .trace-step-dot { background: rgba(99, 102, 241, 0.3); color: #818cf8; }
+.trace-step.failed .trace-step-dot { background: rgba(239, 68, 68, 0.3); color: #f87171; }
+.trace-step-info { display: flex; gap: 6px; align-items: center; }
+.trace-step-type {
+  font-size: 11px;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.trace-step-label { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+
+.spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .header { padding: 12px 16px; }
   .chat-messages { padding: 12px; }
   .message { max-width: 92%; }
+  .trace-panel { display: none; }
 }
+
+/* Trace history list */
+.trace-history-list { display: flex; flex-direction: column; gap: 8px; }
+.trace-history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.trace-history-item:hover { border-color: #93c5fd; background: #f8fafc; }
+.trace-history-status {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+}
+.trace-history-status.success { background: rgba(16, 185, 129, 0.15); color: #059669; }
+.trace-history-status.failed { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+.trace-history-status.running { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
+.trace-history-id { font-size: 12px; font-family: monospace; color: #6b7280; }
+.trace-history-spans { font-size: 11px; color: #9ca3af; }
+.trace-history-time { font-size: 11px; color: #9ca3af; margin-left: auto; }
+.load-more-btn {
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.load-more-btn:hover { background: #e5e7eb; }
 </style>

@@ -79,10 +79,20 @@ public class ResumeAgent {
     }
 
     public String chat(String message, String chatId) {
+        return chat(message, chatId, null);
+    }
+
+    /**
+     * 同步对话（支持画像注入）
+     *
+     * @param profileInjection 可选的用户画像提示片段，非空时动态拼接到系统提示词
+     */
+    public String chat(String message, String chatId, String profileInjection) {
         String rewritten = queryRewriter.doQueryRewrite(message);
         log.debug("查询重写：{} -> {}", message, rewritten);
         
         ChatResponse response = chatClient.prompt()
+                .system(buildSystemPrompt(profileInjection))
                 .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .call()
@@ -91,13 +101,32 @@ public class ResumeAgent {
     }
 
     public Flux<String> chatStream(String message, String chatId) {
+        return chatStream(message, chatId, null);
+    }
+
+    /**
+     * 流式对话（支持画像注入）
+     *
+     * @param profileInjection 可选的用户画像提示片段，非空时动态拼接到系统提示词
+     */
+    public Flux<String> chatStream(String message, String chatId, String profileInjection) {
         String rewritten = queryRewriter.doQueryRewrite(message);
         log.debug("查询重写：{} -> {}", message, rewritten);
         
         return chatClient.prompt()
+                .system(buildSystemPrompt(profileInjection))
                 .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .stream()
                 .content();
+    }
+
+    /**
+     * 构建有效系统提示词：基础提示词 + 可选画像注入片段。
+     * profileInjection 为空（null 或空白）时返回基础提示词，保持默认行为。
+     */
+    private static String buildSystemPrompt(String profileInjection) {
+        return SYSTEM_PROMPT
+                + (profileInjection != null && !profileInjection.isBlank() ? "\n\n" + profileInjection : "");
     }
 }

@@ -2,6 +2,9 @@ package com.yupi.yuaiagent.agent;
 
 import cn.hutool.core.util.StrUtil;
 import com.yupi.yuaiagent.agent.model.AgentState;
+import com.yupi.yuaiagent.trace.TraceContext;
+import com.yupi.yuaiagent.trace.TraceRecorder;
+import com.yupi.yuaiagent.trace.model.TraceSpan;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -44,6 +47,10 @@ public abstract class BaseAgent {
 
     // Memory 记忆（需要自主维护会话上下文）
     private List<Message> messageList = new ArrayList<>();
+
+    // Trace context for execution tracing (Req 8.5), nullable
+    private TraceContext traceContext;
+    private TraceRecorder traceRecorder;
 
     /**
      * 运行代理

@@ -47,11 +47,12 @@ export const chatWithAiChat = (message, chatId) =>
 export const chatWithOrchestrator = (message, chatId) => {
   const token = localStorage.getItem('token')
   const params = { message, chatId }
+  // EventSource 不支持自定义 header，Token 通过 URL 参数传递供后端鉴权
+  if (token) params.token = token
   const queryString = Object.keys(params)
     .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
     .join('&')
   const fullUrl = `${API_BASE_URL}/ai/orchestrator/chat?${queryString}`
-  // EventSource 不支持自定义 header，Token 通过 URL 参数传递（简化方案）
   return new EventSource(fullUrl)
 }
 
@@ -69,4 +70,29 @@ export const uploadDocument = (file, status = '通用') => {
   })
 }
 
-export default { chatWithAiChat, chatWithManus, chatWithOrchestrator, login, createSession, listSessions, deleteSession }
+// 查看当前用户画像（JWT 自动通过拦截器带上）
+export const getMyProfile = () => request.get('/profile/me')
+
+// 清空当前用户画像
+export const clearMyProfile = () => request.delete('/profile/me')
+
+// 管理员查询交付物列表（GET /artifact/list，params 含可选 userId/chatId/type；JWT 自动通过拦截器带上）
+export const listArtifacts = (params = {}) => request.get('/artifact/list', { params })
+
+// 管理员查看交付物详情（GET /artifact/{artifactId}，含完整 content）
+export const getArtifactDetail = (artifactId) => request.get(`/artifact/${artifactId}`)
+
+// ===== Trace API =====
+
+// 查询单条轨迹详情（JWT via Authorization header, interceptor auto-injects）
+export const getTrace = (traceId) => request.get(`/trace/${traceId}`)
+
+// 查询某会话的所有轨迹（分页）
+export const getTracesByChat = (chatId, pageNum = 1, pageSize = 20) =>
+  request.get(`/trace/chat/${chatId}`, { params: { pageNum, pageSize } })
+
+// 查询某用户的所有轨迹（分页）
+export const getTracesByUser = (userId, pageNum = 1, pageSize = 20) =>
+  request.get(`/trace/user/${userId}`, { params: { pageNum, pageSize } })
+
+export default { chatWithAiChat, chatWithManus, chatWithOrchestrator, login, createSession, listSessions, deleteSession, getMyProfile, clearMyProfile, listArtifacts, getArtifactDetail, getTrace, getTracesByChat, getTracesByUser }

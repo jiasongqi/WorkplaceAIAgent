@@ -10,8 +10,8 @@ spring:
 #    password: 123456
   ai:
     dashscope:
-      # 需要替换为你自己的 key
-      api-key:
+      # API Key 通过环境变量 DASHSCOPE_API_KEY 注入，禁止硬编码到代码仓库
+      api-key: ${DASHSCOPE_API_KEY:}
       chat:
         options:
           # qwen3.5-plus 是多模态模型，需要启用多模态模式
@@ -61,11 +61,72 @@ knife4j:
     language: zh_cn
 # searchAPI
 search-api:
-  # 需要替换为你自己的 key
-  api-key: 你的 API Key
+  # API Key 通过环境变量 SEARCH_API_KEY 注入
+  api-key: ${SEARCH_API_KEY:}
 # JWT 密钥（生产环境通过环境变量 JWT_SECRET 注入，避免硬编码）
 jwt:
   secret: ${JWT_SECRET:yu-ai-agent-default-dev-secret-key-please-change-in-prod}
+# 日历服务配置
+calendar:
+  # 默认日历服务提供商：FEISHU 或 DINGTALK
+  provider: ${CALENDAR_PROVIDER:FEISHU}
+  feishu:
+    # 飞书开放平台应用凭证
+    app-id: ${FEISHU_APP_ID:}
+    app-secret: ${FEISHU_APP_SECRET:}
+    base-url: ${FEISHU_BASE_URL:https://open.feishu.cn/open-apis}
+  dingtalk:
+    # 钉钉开放平台应用凭证
+    app-key: ${DINGTALK_APP_KEY:}
+    app-secret: ${DINGTALK_APP_SECRET:}
+    base-url: ${DINGTALK_BASE_URL:https://api.dingtalk.com}
+# 预约记录存储配置
+appointment:
+  storage:
+    dir: ${APPOINTMENT_STORAGE_DIR:./tmp/appointments}
+# 会话记录存储配置
+session:
+  storage:
+    dir: ${SESSION_STORAGE_DIR:./tmp/sessions}
+# 交付物货架存储配置
+artifact:
+  storage:
+    dir: ${ARTIFACT_STORAGE_DIR:./tmp/artifacts}
+# 用户画像存储配置
+user-profile:
+  storage:
+    dir: ${USER_PROFILE_STORAGE_DIR:./tmp/user-profiles}
+# 画像注入配置（单次请求注入画像提示词的字符上限）
+profile:
+  injection:
+    max-chars: ${PROFILE_INJECTION_MAX_CHARS:1000}
+# 追问模板配置（可选，不配置则使用默认模板）
+consultation:
+  follow-up:
+    # 可以在这里覆盖默认模板
+    # core:
+    #   name:
+    #     question: "请输入您的姓名"
+# 执行轨迹配置
+trace:
+  storage:
+    dir: ${TRACE_STORAGE_DIR:./tmp/traces}          # Req 3.9：默认 ./tmp/traces
+  stream:
+    enabled: ${TRACE_STREAM_ENABLED:true}           # Req 9.5：实时 trace 事件流，默认启用
+  max-spans-per-trace: ${TRACE_MAX_SPANS:200}       # Req 11.1：[1,1000]，默认 200
+  metadata:
+    max-value-chars: ${TRACE_META_MAX_CHARS:2000}   # Req 11.3：[1,4096]，默认 2000
+  max-traces-per-user: ${TRACE_MAX_PER_USER:500}    # Req 11.5：[1,100000]，默认 500
+# 对话记忆压缩配置
+chat:
+  memory:
+    compression:
+      # Token 阈值，超过此值触发压缩
+      token-threshold: ${CHAT_TOKEN_THRESHOLD:4000}
+      # 对话轮数阈值，超过此值触发压缩
+      turn-threshold: ${CHAT_TURN_THRESHOLD:20}
+      # 保留最近 N 轮对话的完整内容
+      recent-turns: ${CHAT_RECENT_TURNS:5}
 # 修改日志级别，查看 Spring AI 更多调用细节
 logging:
   level:

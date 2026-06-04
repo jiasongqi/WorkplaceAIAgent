@@ -1,5 +1,7 @@
 package com.yupi.yuaiagent.agent;
 
+import com.yupi.yuaiagent.trace.model.TraceSpan;
+import com.yupi.yuaiagent.trace.model.TraceStepType;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
@@ -116,6 +118,13 @@ public class ToolCallAgent extends ReActAgent {
         if (!toolCallChatResponse.hasToolCalls()) {
             return "没有工具需要调用";
         }
+
+        // Record TOOL_CALL span (Req 8.5)
+        TraceSpan toolCallSpan = null;
+        if (getTraceContext() != null && getTraceRecorder() != null) {
+            toolCallSpan = getTraceRecorder().startSpan(getTraceContext(), TraceStepType.TOOL_CALL, "工具调用");
+        }
+
         // 调用工具
         Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
         ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
@@ -132,6 +141,16 @@ public class ToolCallAgent extends ReActAgent {
         String results = toolResponseMessage.getResponses().stream()
                 .map(response -> "工具 " + response.name() + " 返回的结果：" + response.responseData())
                 .collect(Collectors.joining("\n"));
+
+        // Record tool names in trace metadata (Req 8.5)
+        if (toolCallSpan != null && getTraceRecorder() != null) {
+            String toolNames = toolResponseMessage.getResponses().stream()
+                    .map(response -> response.name())
+                    .collect(Collectors.joining(","));
+            getTraceRecorder().putMetadata(toolCallSpan, "toolNames", toolNames);
+            getTraceRecorder().endSpan(getTraceContext(), toolCallSpan);
+        }
+
         log.info(results);
         return results;
     }
