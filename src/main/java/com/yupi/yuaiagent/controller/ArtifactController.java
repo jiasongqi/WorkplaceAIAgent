@@ -5,7 +5,7 @@ import com.yupi.yuaiagent.artifact.model.Artifact;
 import com.yupi.yuaiagent.artifact.model.ArtifactQuery;
 import com.yupi.yuaiagent.artifact.model.ArtifactSummary;
 import com.yupi.yuaiagent.auth.JwtUtil;
-import com.yupi.yuaiagent.common.Result;
+import com.yupi.yuaiagent.common.Response;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,13 +49,13 @@ public class ArtifactController {
      * 非管理员返回 403 且不返回任何交付物数据（Req 17.4 / 17.5）。
      */
     @GetMapping("/list")
-    public Result<List<ArtifactSummary>> list(
+    public Response<List<ArtifactSummary>> list(
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String chatId,
             @RequestParam(required = false) String type,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (!isAdmin(authHeader)) {
-            return Result.error(403, "需要管理员权限");
+            return Response.failed(403, "需要管理员权限");
         }
         List<Artifact> list = artifactShelf.query(ArtifactQuery.builder()
                 .userId(userId)
@@ -65,7 +65,7 @@ public class ArtifactController {
         List<ArtifactSummary> summaries = list.stream()
                 .map(ArtifactSummary::from)
                 .toList();
-        return Result.success(summaries);
+        return Response.success(summaries);
     }
 
     /**
@@ -73,13 +73,13 @@ public class ArtifactController {
      * 非管理员返回 403 且不返回任何交付物数据（Req 17.5）。
      */
     @GetMapping("/{artifactId}")
-    public Result<Artifact> detail(
+    public Response<Artifact> detail(
             @PathVariable String artifactId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (!isAdmin(authHeader)) {
-            return Result.error(403, "需要管理员权限");
+            return Response.failed(403, "需要管理员权限");
         }
-        return Result.success(artifactShelf.get(artifactId).orElse(null));
+        return Response.success(artifactShelf.get(artifactId).orElse(null));
     }
 
     /**

@@ -14,7 +14,40 @@
           <span>＋</span> 新对话
         </button>
 
-        <div class="session-list">
+        <!-- Search input -->
+        <div class="search-bar">
+          <input
+            v-model="searchKeyword"
+            class="search-input"
+            placeholder="搜索对话..."
+            @input="onSearchInput"
+            @keyup.escape="clearSearch"
+          />
+          <button v-if="searchKeyword" class="search-clear" @click="clearSearch">×</button>
+        </div>
+
+        <!-- Search results -->
+        <div v-if="searchMode" class="search-results">
+          <div v-if="isSearching" class="search-status">搜索中...</div>
+          <div v-else-if="searchResults.length === 0" class="search-status">无匹配结果</div>
+          <div v-else class="search-result-list">
+            <div
+              v-for="result in searchResults"
+              :key="result.chatId"
+              class="search-result-item"
+              @click="switchSession(result.chatId); clearSearch()"
+            >
+              <div class="result-header">
+                <span class="result-title">{{ result.title }}</span>
+                <span class="result-relevance">{{ result.relevance }}%</span>
+              </div>
+              <div class="result-snippet">{{ result.snippet }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session list (hidden during search) -->
+        <div v-if="!searchMode" class="session-list">
           <div
             v-for="session in sessions"
             :key="session.chatId"
@@ -22,10 +55,45 @@
             :class="{ active: session.chatId === currentChatId }"
             @click="switchSession(session.chatId)"
           >
-            <span class="session-title">{{ session.title }}</span>
-            <button class="delete-btn" @click.stop="removeSession(session.chatId)">×</button>
+            <span v-if="!session.editing" class="session-title">{{ session.title }}</span>
+            <input
+              v-else
+              v-model="session.newTitle"
+              class="rename-input"
+              @blur="saveRename(session)"
+              @keyup.enter="saveRename(session)"
+              @keyup.escape="session.editing = false"
+              @click.stop
+            />
+            <div class="session-actions">
+              <button class="action-btn" @click.stop="startRename(session)" title="重命名">✏️</button>
+              <button class="action-btn" @click.stop="handleArchive(session.chatId)" title="归档">📦</button>
+              <button class="delete-btn" @click.stop="removeSession(session.chatId)">×</button>
+            </div>
           </div>
           <div v-if="sessions.length === 0" class="empty-sessions">暂无历史对话</div>
+        </div>
+        </div>
+
+        <!-- Archived sessions -->
+        <div class="archived-section">
+          <button class="archived-toggle" @click="toggleArchived">
+            {{ showArchived ? '▼' : '▶' }} 归档会话
+          </button>
+          <div v-if="showArchived" class="archived-list">
+            <div
+              v-for="session in archivedSessions"
+              :key="session.chatId"
+              class="session-item archived"
+            >
+              <span class="session-title">{{ session.title }}</span>
+              <div class="session-actions">
+                <button class="action-btn" @click.stop="handleUnarchive(session.chatId)" title="取消归档">📤</button>
+                <button class="delete-btn" @click.stop="removeSession(session.chatId)">×</button>
+              </div>
+            </div>
+            <div v-if="archivedSessions.length === 0" class="empty-sessions">暂无归档会话</div>
+          </div>
         </div>
       </template>
     </aside>
@@ -45,6 +113,16 @@
           <button class="profile-btn" @click="loadTraceHistory" title="查看执行轨迹历史">
             📊 轨迹
           </button>
+          <button class="profile-btn" @click="$router.push('/favorites')" title="我的收藏">
+            ⭐ 收藏
+          </button>
+          <button class="profile-btn" @click="handleExport" title="导出数据">
+            📥 导出
+          </button>
+          <label class="profile-btn" title="导入数据" style="cursor: pointer;">
+            📤 导入
+            <input type="file" accept=".zip" @change="handleImport" hidden />
+          </label>
           <div class="chat-id-display">{{ currentChatId.slice(0, 8) }}...</div>
         </div>
       </div>
@@ -109,6 +187,47 @@
               <span class="trace-step-label">{{ step.label }}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Quality blocked message -->
+      <div v-if="qualityBlocked" class="quality-blocked">
+        <div class="blocked-icon">🚫</div>
+        <div class="blocked-text">{{ qualityBlocked }}</div>
+      </div>
+
+      <!-- Quality review card -->
+      <div v-if="qualityReview && !qualityBlocked" class="quality-card">
+        <div class="quality-header">
+          <span class="quality-title">⚖️ 质量审查</span>
+          <span class="quality-score" :class="scoreClass(qualityReview.overallScore)">{{ qualityReview.overallScore }} 分</span>
+          <span class="quality-risk" :class="qualityReview.riskLevel?.toLowerCase()">{{ qualityReview.riskLevel }}</span>
+        </div>
+        <div class="quality-bars">
+          <div class="quality-bar-row">
+            <span class="bar-label">准确性</span>
+            <div class="bar-track"><div class="bar-fill" :style="{ width: qualityReview.accuracyScore + '%' }"></div></div>
+            <span class="bar-value">{{ qualityReview.accuracyScore }}</span>
+          </div>
+          <div class="quality-bar-row">
+            <span class="bar-label">完整性</span>
+            <div class="bar-track"><div class="bar-fill" :style="{ width: qualityReview.completenessScore + '%' }"></div></div>
+            <span class="bar-value">{{ qualityReview.completenessScore }}</span>
+          </div>
+          <div class="quality-bar-row">
+            <span class="bar-label">逻辑性</span>
+            <div class="bar-track"><div class="bar-fill" :style="{ width: qualityReview.logicScore + '%' }"></div></div>
+            <span class="bar-value">{{ qualityReview.logicScore }}</span>
+          </div>
+          <div class="quality-bar-row">
+            <span class="bar-label">幻觉安全</span>
+            <div class="bar-track"><div class="bar-fill safe" :style="{ width: qualityReview.hallucinationScore + '%' }"></div></div>
+            <span class="bar-value">{{ qualityReview.hallucinationScore }}</span>
+          </div>
+        </div>
+        <div v-if="qualityReview.summary" class="quality-summary">{{ qualityReview.summary }}</div>
+        <div v-if="qualityReview.issues?.length > 0" class="quality-issues">
+          <div v-for="(issue, i) in qualityReview.issues" :key="i" class="issue-item">⚠️ {{ issue }}</div>
         </div>
       </div>
 
@@ -244,7 +363,7 @@ import { ref, onMounted, onBeforeUnmount, nextTick, computed, shallowReactive } 
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
-import { login, createSession, listSessions, deleteSession, chatWithOrchestrator, getMyProfile, clearMyProfile, getTracesByChat } from '../api'
+import { login, createSession, listSessions, deleteSession, chatWithOrchestrator, getMyProfile, clearMyProfile, getTracesByChat, getChatMessages, renameSession, archiveSession, listArchivedSessions, searchSessions, exportAll, importData } from '../api'
 
 useHead({ title: '职场顾问 - 职场生存智囊' })
 
@@ -275,6 +394,10 @@ const traceSteps = computed(() =>
 const traceVisible = ref(false)
 const traceStatus = ref('')
 const traceRequestId = ref('')
+
+// Quality review
+const qualityReview = ref(null)
+const qualityBlocked = ref(null)
 
 // 历史轨迹列表
 const traceHistoryVisible = ref(false)
@@ -330,11 +453,28 @@ const createNewSession = async () => {
   }
 }
 
-const switchSession = (chatId) => {
+const switchSession = async (chatId) => {
   if (eventSource) { eventSource.close(); isStreaming.value = false }
   currentChatId.value = chatId
   messages.value = []
-  addMessage('已切换到该对话，请继续提问。', false)
+  // Load history from server
+  try {
+    const res = await getChatMessages(chatId)
+    const history = res.data?.data || []
+    if (history.length > 0) {
+      messages.value = history.map(m => ({
+        content: m.content,
+        isUser: m.role === 'user',
+        type: '',
+        time: m.timestamp
+      }))
+    } else {
+      addMessage('该对话暂无历史消息，请继续提问。', false)
+    }
+  } catch (e) {
+    console.error('加载历史消息失败', e)
+    addMessage('历史消息加载失败，请重试。', false)
+  }
 }
 
 const removeSession = async (chatId) => {
@@ -346,6 +486,130 @@ const removeSession = async (chatId) => {
       else await createNewSession()
     }
   } catch (e) { console.error('删除失败', e) }
+}
+
+// Rename session
+const startRename = (session) => {
+  session.editing = true
+  session.newTitle = session.title
+}
+
+const saveRename = async (session) => {
+  if (!session.newTitle || session.newTitle.trim() === session.title) {
+    session.editing = false
+    return
+  }
+  try {
+    await renameSession(session.chatId, session.newTitle.trim())
+    session.title = session.newTitle.trim()
+  } catch (e) {
+    console.error('重命名失败', e)
+  }
+  session.editing = false
+}
+
+// Archive session
+const handleArchive = async (chatId) => {
+  try {
+    await archiveSession(chatId)
+    sessions.value = sessions.value.filter(s => s.chatId !== chatId)
+    if (currentChatId.value === chatId) {
+      if (sessions.value.length > 0) switchSession(sessions.value[0].chatId)
+      else await createNewSession()
+    }
+  } catch (e) { console.error('归档失败', e) }
+}
+
+// Load archived sessions
+const archivedSessions = ref([])
+const showArchived = ref(false)
+
+const toggleArchived = async () => {
+  if (!showArchived.value) {
+    try {
+      const res = await listArchivedSessions()
+      archivedSessions.value = res.data?.data || []
+    } catch (e) {
+      console.error('加载归档会话失败', e)
+      archivedSessions.value = []
+    }
+  }
+  showArchived.value = !showArchived.value
+}
+
+const handleUnarchive = async (chatId) => {
+  try {
+    const { unarchiveSession } = await import('../api')
+    await unarchiveSession(chatId)
+    archivedSessions.value = archivedSessions.value.filter(s => s.chatId !== chatId)
+    // Reload active sessions
+    const res = await listSessions()
+    sessions.value = res.data?.data || []
+  } catch (e) { console.error('取消归档失败', e) }
+}
+
+// Search
+const searchKeyword = ref('')
+const searchResults = ref([])
+const isSearching = ref(false)
+const searchMode = ref(false)
+
+let searchTimer = null
+const onSearchInput = () => {
+  clearTimeout(searchTimer)
+  if (!searchKeyword.value.trim()) {
+    searchMode.value = false
+    searchResults.value = []
+    return
+  }
+  searchTimer = setTimeout(doSearch, 300)
+}
+
+const doSearch = async () => {
+  const kw = searchKeyword.value.trim()
+  if (!kw) return
+  isSearching.value = true
+  searchMode.value = true
+  try {
+    const res = await searchSessions(kw)
+    searchResults.value = res.data?.data || []
+  } catch (e) {
+    console.error('搜索失败', e)
+    searchResults.value = []
+  } finally {
+    isSearching.value = false
+  }
+}
+
+const clearSearch = () => {
+  searchKeyword.value = ''
+  searchResults.value = []
+  searchMode.value = false
+  clearTimeout(searchTimer)
+}
+
+// Export/Import
+const handleExport = () => {
+  exportAll()
+}
+
+const handleImport = async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const res = await importData(formData)
+    const result = res.data?.data || {}
+    alert(`导入完成：${result.sessionsImported || 0} 个会话，${result.messagesImported || 0} 条消息，${result.favoritesImported || 0} 条收藏`)
+    // Reload sessions
+    const sessionsRes = await listSessions()
+    sessions.value = sessionsRes.data?.data || []
+  } catch (err) {
+    console.error('导入失败', err)
+    alert('导入失败，请检查文件格式')
+  }
+  e.target.value = ''
 }
 
 const addMessage = (content, isUser, type = '') => {
@@ -369,6 +633,8 @@ const sendMessage = () => {
   traceMap.clear()
   traceVisible.value = true
   traceRequestId.value = ''
+  qualityReview.value = null
+  qualityBlocked.value = null
 
   let aiMsgIndex = -1
 
@@ -423,6 +689,20 @@ const sendMessage = () => {
     } catch (err) {
       console.warn('Failed to parse trace event', err)
     }
+  })
+
+  // Quality review events
+  eventSource.addEventListener('quality-review', (e) => {
+    try {
+      const review = JSON.parse(e.data)
+      qualityReview.value = review
+    } catch (err) {
+      console.warn('Failed to parse quality-review event', err)
+    }
+  })
+
+  eventSource.addEventListener('quality-blocked', (e) => {
+    qualityBlocked.value = e.data
   })
 
   eventSource.addEventListener('message', (e) => {
@@ -502,6 +782,12 @@ const loadMoreTraces = () => {
 const goBack = () => router.push('/')
 
 const formatTime = (ts) => new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+const scoreClass = (score) => {
+  if (score >= 85) return 'good'
+  if (score >= 70) return 'ok'
+  return 'bad'
+}
 
 // 格式化画像更新时间（后端返回 ISO 字符串或时间数组）
 const formatDateTime = (value) => {
@@ -656,6 +942,91 @@ const renderMarkdown = (text) => {
   transition: opacity 0.2s;
 }
 .session-item:hover .delete-btn { opacity: 1; }
+
+.session-actions { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 0.2s; }
+.session-item:hover .session-actions { opacity: 1; }
+
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.action-btn:hover { opacity: 1; }
+
+.rename-input {
+  flex: 1;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  color: white;
+  font-size: 13px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.session-item.archived { opacity: 0.6; }
+.session-item.archived:hover { opacity: 1; }
+
+.archived-section { padding: 8px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px; }
+.archived-toggle {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  width: 100%;
+  text-align: left;
+}
+.archived-toggle:hover { color: rgba(255,255,255,0.7); }
+.archived-list { margin-top: 4px; }
+
+/* Search */
+.search-bar { padding: 4px 8px; position: relative; }
+.search-input {
+  width: 100%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  padding: 8px 12px;
+  padding-right: 28px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: rgba(96,165,250,0.5); }
+.search-input::placeholder { color: rgba(255,255,255,0.3); }
+.search-clear {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: rgba(255,255,255,0.4);
+  cursor: pointer; font-size: 14px;
+}
+
+.search-results { padding: 4px 8px; max-height: 300px; overflow-y: auto; }
+.search-status { text-align: center; color: rgba(255,255,255,0.4); font-size: 12px; padding: 12px; }
+.search-result-list { display: flex; flex-direction: column; gap: 4px; }
+.search-result-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.search-result-item:hover { background: rgba(255,255,255,0.08); }
+.result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.result-title { font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 500; }
+.result-relevance {
+  font-size: 11px; color: #60a5fa; background: rgba(96,165,250,0.15);
+  padding: 1px 6px; border-radius: 6px;
+}
+.result-snippet {
+  font-size: 11px; color: rgba(255,255,255,0.4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .delete-btn:hover { color: #f87171; }
 
 .empty-sessions { color: rgba(255,255,255,0.3); font-size: 13px; text-align: center; padding: 20px; }
@@ -1098,4 +1469,43 @@ const renderMarkdown = (text) => {
   transition: all 0.2s;
 }
 .load-more-btn:hover { background: #e5e7eb; }
+
+/* Quality review card */
+.quality-blocked {
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+  padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+  margin: 0 16px 8px;
+}
+.blocked-icon { font-size: 20px; }
+.blocked-text { font-size: 13px; color: #991b1b; line-height: 1.5; }
+
+.quality-card {
+  background: #1a1f2e; border-radius: 10px; padding: 12px 16px;
+  margin: 0 16px 8px; color: rgba(255,255,255,0.85);
+}
+.quality-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.quality-title { font-size: 13px; font-weight: 600; }
+.quality-score { font-size: 14px; font-weight: 700; margin-left: auto; }
+.quality-score.good { color: #34d399; }
+.quality-score.ok { color: #fbbf24; }
+.quality-score.bad { color: #f87171; }
+.quality-risk {
+  font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 500;
+}
+.quality-risk.low { background: rgba(16,185,129,0.15); color: #34d399; }
+.quality-risk.medium { background: rgba(245,158,11,0.15); color: #fbbf24; }
+.quality-risk.high { background: rgba(239,68,68,0.15); color: #f87171; }
+.quality-risk.critical { background: rgba(239,68,68,0.3); color: #fca5a5; }
+
+.quality-bars { display: flex; flex-direction: column; gap: 6px; }
+.quality-bar-row { display: flex; align-items: center; gap: 8px; }
+.bar-label { font-size: 11px; color: rgba(255,255,255,0.5); min-width: 56px; }
+.bar-track { flex: 1; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; background: #60a5fa; border-radius: 3px; transition: width 0.5s ease; }
+.bar-fill.safe { background: #34d399; }
+.bar-value { font-size: 11px; color: rgba(255,255,255,0.4); min-width: 24px; text-align: right; }
+
+.quality-summary { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 8px; }
+.quality-issues { margin-top: 6px; }
+.issue-item { font-size: 12px; color: #fbbf24; padding: 2px 0; }
 </style>

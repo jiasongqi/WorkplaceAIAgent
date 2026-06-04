@@ -1,6 +1,7 @@
 package com.yupi.yuaiagent.calendar;
 
 import com.yupi.yuaiagent.calendar.CalendarService.CalendarException;
+import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.common.Result;
 import com.yupi.yuaiagent.exception.GlobalExceptionHandler;
 import net.jqwik.api.Arbitraries;
@@ -74,7 +75,7 @@ class CalendarApiErrorHandlingPropertyTest {
      */
     @Property
     void handlerReturnsNonSuccessResult(@ForAll("calendarExceptions") CalendarException exception) {
-        Result<String> result = handler.handleCalendarException(exception);
+        Response<Void> result = handler.handleCalendarException(exception);
 
         assertThat(result).as("handler must always produce a result").isNotNull();
         assertThat(result.getCode())
@@ -91,7 +92,7 @@ class CalendarApiErrorHandlingPropertyTest {
      */
     @Property
     void handlerReturnsFriendlyRetryAndSupportMessage(@ForAll("calendarExceptions") CalendarException exception) {
-        Result<String> result = handler.handleCalendarException(exception);
+        Response<Void> result = handler.handleCalendarException(exception);
 
         assertThat(result.getMessage())
                 .as("user-facing message must be present")
@@ -114,7 +115,7 @@ class CalendarApiErrorHandlingPropertyTest {
      */
     @Property
     void handlerDoesNotLeakRawExceptionDetails(@ForAll("calendarExceptions") CalendarException exception) {
-        Result<String> result = handler.handleCalendarException(exception);
+        Response<Void> result = handler.handleCalendarException(exception);
 
         String raw = exception.getMessage();
         if (raw != null && !raw.isBlank()) {

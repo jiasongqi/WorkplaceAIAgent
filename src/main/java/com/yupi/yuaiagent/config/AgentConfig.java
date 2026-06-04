@@ -10,6 +10,7 @@ import com.yupi.yuaiagent.artifact.ArtifactShelf;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.profile.UserProfileService;
+import com.yupi.yuaiagent.quality.*;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import com.yupi.yuaiagent.repository.AppointmentRepository;
 import com.yupi.yuaiagent.skill.SkillExecutor;
@@ -63,12 +64,16 @@ public class AgentConfig {
             UserProfileService userProfileService,
             ArtifactShelf artifactShelf,
             TraceRecorder traceRecorder,
-            TraceRepository traceRepository) {
+            TraceRepository traceRepository,
+            QualityGuardAgent qualityGuardAgent,
+            QualityModeResolver qualityModeResolver,
+            QualityReviewRepository qualityReviewRepository) {
         return new OrchestratorAgent(
                 dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager,
                 followUpTemplateConfig, infoValidator, calendarServiceFactory, appointmentRepository,
                 skillExecutor, skillRegistry, userProfileService, artifactShelf,
-                traceRecorder, traceRepository);
+                traceRecorder, traceRepository,
+                qualityGuardAgent, qualityModeResolver, qualityReviewRepository);
     }
 
     /**

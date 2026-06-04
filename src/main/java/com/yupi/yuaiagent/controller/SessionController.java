@@ -1,7 +1,12 @@
 package com.yupi.yuaiagent.controller;
 
+import com.yupi.yuaiagent.auth.AuthService;
 import com.yupi.yuaiagent.auth.JwtUtil;
-import com.yupi.yuaiagent.common.Result;
+import com.yupi.yuaiagent.common.Response;
+import com.yupi.yuaiagent.dto.RenameRequest;
+import com.yupi.yuaiagent.dto.SessionSearchResponse;
+import com.yupi.yuaiagent.message.PersistentChatMessage;
+import com.yupi.yuaiagent.service.SessionAppService;
 import com.yupi.yuaiagent.session.SessionManager;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
@@ -11,7 +16,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 会话管理 + 用户认证接口
+ * Session management controller — thin HTTP adapter.
+ * All business logic is in {@link SessionAppService}.
+ *
+ * @author jsq
  */
 @RestController
 @RequestMapping("/session")
@@ -21,62 +29,132 @@ public class SessionController {
     private JwtUtil jwtUtil;
 
     @Resource
-    private SessionManager sessionManager;
+    private AuthService authService;
 
-    /**
-     * 游客登录（生成临时用户 ID 和 Token）
-     * 实际项目可替换为真实的用户名密码认证
-     */
+    @Resource
+    private SessionAppService sessionAppService;
+
+    // ─── Auth ───
+
     @PostMapping("/login")
-    public Result<Map<String, String>> login(
+    public Response<Map<String, String>> login(
             @RequestParam(value = "username", defaultValue = "游客") String username) {
         String userId = UUID.randomUUID().toString();
         String token = jwtUtil.generateToken(userId, username);
-        return Result.success(Map.of(
-                "token", token,
-                "userId", userId,
-                "username", username
-        ));
+        return Response.success(Map.of("token", token, "userId", userId, "username", username));
     }
 
-    /**
-     * 创建新会话
-     */
+    // ─── Session CRUD ───
+
     @PostMapping("/create")
-    public Result<SessionManager.SessionInfo> createSession(
-            @RequestHeader("Authorization") String authHeader,
+    public Response<SessionManager.SessionInfo> createSession(
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestParam(value = "title", defaultValue = "新对话") String title) {
-        String userId = extractUserId(authHeader);
-        if (userId == null) return Result.error(401, "未授权，请先登录");
-        return Result.success(sessionManager.createSession(userId, title));
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(sessionAppService.create(userId, title));
     }
 
-    /**
-     * 获取当前用户的会话列表
-     */
     @GetMapping("/list")
-    public Result<List<SessionManager.SessionInfo>> listSessions(
-            @RequestHeader("Authorization") String authHeader) {
-        String userId = extractUserId(authHeader);
-        if (userId == null) return Result.error(401, "未授权，请先登录");
-        return Result.success(sessionManager.getUserSessions(userId));
+    public Response<List<SessionManager.SessionInfo>> listSessions(
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(sessionAppService.listActive(userId));
     }
 
-    /**
-     * 删除会话
-     */
+    @GetMapping("/archived")
+    public Response<List<SessionManager.SessionInfo>> listArchived(
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(sessionAppService.listArchived(userId));
+    }
+
+    @GetMapping("/trash")
+    public Response<List<SessionManager.SessionInfo>> listTrash(
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(sessionAppService.listTrash(userId));
+    }
+
+    // ─── Rename ───
+
+    @PutMapping("/{chatId}/title")
+    public Response<Void> renameSession(
+            @PathVariable String chatId,
+            @RequestBody RenameRequest request,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        sessionAppService.rename(userId, chatId, request.title());
+        return Response.success();
+    }
+
+    // ─── Archive / Unarchive ───
+
+    @PutMapping("/{chatId}/archive")
+    public Response<Void> archiveSession(
+            @PathVariable String chatId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        sessionAppService.archive(userId, chatId);
+        return Response.success();
+    }
+
+    @PutMapping("/{chatId}/unarchive")
+    public Response<Void> unarchiveSession(
+            @PathVariable String chatId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        sessionAppService.unarchive(userId, chatId);
+        return Response.success();
+    }
+
+    // ─── Delete / Restore ───
+
     @DeleteMapping("/{chatId}")
-    public Result<String> deleteSession(
-            @RequestHeader("Authorization") String authHeader,
-            @PathVariable String chatId) {
-        String userId = extractUserId(authHeader);
-        if (userId == null) return Result.error(401, "未授权，请先登录");
-        boolean deleted = sessionManager.deleteSession(userId, chatId);
-        return deleted ? Result.success("删除成功") : Result.error(403, "无权删除该会话");
+    public Response<Void> deleteSession(
+            @PathVariable String chatId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        sessionAppService.softDelete(userId, chatId);
+        return Response.success();
     }
 
-    private String extractUserId(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) return null;
-        return jwtUtil.validateToken(authHeader.substring(7));
+    @PutMapping("/{chatId}/restore")
+    public Response<Void> restoreSession(
+            @PathVariable String chatId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        sessionAppService.restore(userId, chatId);
+        return Response.success();
+    }
+
+    // ─── Search ───
+
+    @GetMapping("/search")
+    public Response<List<SessionSearchResponse>> search(
+            @RequestParam String keyword,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(sessionAppService.search(userId, keyword));
+    }
+
+    // ─── Message History ───
+
+    @GetMapping("/{chatId}/messages")
+    public Response<List<PersistentChatMessage>> getMessages(
+            @PathVariable String chatId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(sessionAppService.getMessages(userId, chatId));
     }
 }

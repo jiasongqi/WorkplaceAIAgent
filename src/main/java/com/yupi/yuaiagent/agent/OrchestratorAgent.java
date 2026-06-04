@@ -9,6 +9,7 @@ import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.config.FollowUpTemplateConfig;
 import com.yupi.yuaiagent.profile.UserProfileService;
+import com.yupi.yuaiagent.quality.*;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import com.yupi.yuaiagent.repository.AppointmentRepository;
 import com.yupi.yuaiagent.skill.SkillExecutor;
@@ -77,6 +78,9 @@ public class OrchestratorAgent {
     private final ArtifactShelf artifactShelf;
     private final TraceRecorder traceRecorder;
     private final TraceRepository traceRepository;
+    private final QualityGuardAgent qualityGuardAgent;
+    private final QualityModeResolver qualityModeResolver;
+    private final QualityReviewRepository qualityReviewRepository;
 
     /**
      * 构造函数 - 使用 ChatMemoryManager
@@ -93,7 +97,10 @@ public class OrchestratorAgent {
                              UserProfileService userProfileService,
                              ArtifactShelf artifactShelf,
                              TraceRecorder traceRecorder,
-                             TraceRepository traceRepository) {
+                             TraceRepository traceRepository,
+                             QualityGuardAgent qualityGuardAgent,
+                             QualityModeResolver qualityModeResolver,
+                             QualityReviewRepository qualityReviewRepository) {
         this.intentClient = ChatClient.builder(chatModel)
                 .defaultAdvisors(new MyLoggerAdvisor())
                 .build();
@@ -111,6 +118,9 @@ public class OrchestratorAgent {
         this.artifactShelf = artifactShelf;
         this.traceRecorder = traceRecorder;
         this.traceRepository = traceRepository;
+        this.qualityGuardAgent = qualityGuardAgent;
+        this.qualityModeResolver = qualityModeResolver;
+        this.qualityReviewRepository = qualityReviewRepository;
         
         log.info("OrchestratorAgent 初始化完成，已创建 5 个专业 Agent，已加载 {} 个技能", skillRegistry.size());
     }
@@ -330,9 +340,13 @@ public class OrchestratorAgent {
         traceRecorder.putMetadata(consumeSpan, "consumedCount", String.valueOf(readyArtifacts.size()));
         traceRecorder.endSpan(traceCtx, consumeSpan);
 
+        // Collect full answer for quality review
+        StringBuilder answerCollector = new StringBuilder();
+
         tokenFlux
                 .doOnNext(token -> {
                     try {
+                        answerCollector.append(token);
                         emitter.send(SseEmitter.event().name("message").data(token));
                     } catch (IOException e) {
                         throw new RuntimeException(e);
@@ -353,10 +367,19 @@ public class OrchestratorAgent {
                 })
                 .doOnComplete(() -> {
                     traceRecorder.endSpan(traceCtx, subAgentSpan);
+
+                    // Quality Guard review
+                    String fullAnswer = answerCollector.toString();
+                    runQualityReview(message, fullAnswer, chatId, intent, traceCtx, emitter);
+
                     traceRecorder.endTrace(traceCtx);
                     traceCtx.markSseClosed();
                     persistTrace(traceCtx);
-                    emitter.complete();
+                    try {
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        log.debug("Emitter already completed", ex);
+                    }
                     // 对话结束：异步更新用户画像
                     triggerProfileUpdate(userId, intent, chatId, traceCtx);
                 })
@@ -440,6 +463,69 @@ public class OrchestratorAgent {
             return artifactContext;
         }
         return "";
+    }
+
+    /**
+     * Runs quality review after agent answer is complete.
+     * Sends quality-review SSE event. Blocks answer if CRITICAL risk.
+     */
+    private void runQualityReview(String userQuestion, String agentAnswer, String chatId,
+                                   AgentIntent intent, TraceContext traceCtx, SseEmitter emitter) {
+        if (agentAnswer == null || agentAnswer.isBlank()) {
+            return;
+        }
+
+        // Resolve quality mode (AUTO)
+        QualityMode mode = qualityModeResolver.resolve(userQuestion, intent, QualityMode.AUTO);
+        if (mode == QualityMode.OFF) {
+            return;
+        }
+
+        TraceSpan reviewSpan = traceRecorder.startSpan(traceCtx, TraceStepType.QUALITY_REVIEW, "质量审查");
+        try {
+            QualityReview review;
+            if (mode == QualityMode.RED_TEAM) {
+                review = qualityGuardAgent.redTeamReview(userQuestion, agentAnswer, chatId);
+            } else {
+                review = qualityGuardAgent.review(userQuestion, agentAnswer, chatId);
+            }
+
+            // Record trace metadata
+            traceRecorder.putMetadata(reviewSpan, "overallScore", String.valueOf(review.getOverallScore()));
+            traceRecorder.putMetadata(reviewSpan, "riskLevel", review.getRiskLevel().name());
+            traceRecorder.putMetadata(reviewSpan, "mode", mode.name());
+            traceRecorder.endSpan(traceCtx, reviewSpan);
+
+            // Persist HIGH/CRITICAL reviews
+            qualityReviewRepository.saveIfHighRisk(review);
+
+            // Send quality-review SSE event
+            try {
+                emitter.send(SseEmitter.event().name("quality-review").data(review));
+            } catch (IOException e) {
+                log.debug("Failed to send quality-review SSE event", e);
+            }
+
+            // Block if CRITICAL risk
+            if (review.getRiskLevel().isBlocking()) {
+                TraceSpan blockedSpan = traceRecorder.startSpan(traceCtx, TraceStepType.QUALITY_BLOCKED, "质量阻断");
+                traceRecorder.putMetadata(blockedSpan, "reason", review.getSummary());
+                traceRecorder.endSpan(traceCtx, blockedSpan);
+
+                try {
+                    emitter.send(SseEmitter.event().name("quality-blocked").data(
+                            "⚠️ 该回答已被质量守卫阻断。风险原因：" + review.getSummary() + "。建议咨询相关领域的专业人士。"));
+                } catch (IOException e) {
+                    log.debug("Failed to send quality-blocked SSE event", e);
+                }
+            }
+
+            log.info("[QualityGuard] mode={}, overall={}, risk={}", mode, review.getOverallScore(), review.getRiskLevel());
+
+        } catch (Exception e) {
+            log.error("Quality review failed, continuing normally", e);
+            traceRecorder.failSpan(traceCtx, reviewSpan, e.getMessage());
+        }
     }
 
     /**

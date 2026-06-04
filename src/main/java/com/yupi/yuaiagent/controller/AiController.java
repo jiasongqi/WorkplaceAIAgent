@@ -1,14 +1,12 @@
 package com.yupi.yuaiagent.controller;
 
-import com.yupi.yuaiagent.agent.OrchestratorAgent;
 import com.yupi.yuaiagent.agent.YuManus;
 import com.yupi.yuaiagent.app.AiChatAgent;
 import com.yupi.yuaiagent.auth.AuthService;
-import com.yupi.yuaiagent.common.Result;
-import com.yupi.yuaiagent.session.SessionManager;
+import com.yupi.yuaiagent.common.Response;
+import com.yupi.yuaiagent.service.OrchestratorAppService;
 import com.yupi.yuaiagent.trace.TraceContext;
 import com.yupi.yuaiagent.trace.TraceRecorder;
-import com.yupi.yuaiagent.trace.TraceRepository;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
@@ -25,9 +23,6 @@ import java.util.UUID;
 @RequestMapping("/ai")
 public class AiController {
 
-    /** 单条消息最大长度，防止超长请求滥用 LLM 资源 */
-    private static final int MAX_MESSAGE_LENGTH = 2000;
-
     @Resource
     private AiChatAgent aiChatAgent;
 
@@ -41,17 +36,10 @@ public class AiController {
     private AuthService authService;
 
     @Resource
-    private SessionManager sessionManager;
-
-    /** 单例 OrchestratorAgent，应用启动时创建一次（见 AgentConfig） */
-    @Resource
-    private OrchestratorAgent orchestratorAgent;
+    private OrchestratorAppService orchestratorAppService;
 
     @Resource
     private TraceRecorder traceRecorder;
-
-    @Resource
-    private TraceRepository traceRepository;
 
     // ==================== 职场顾问（基础对话）====================
 
@@ -59,8 +47,8 @@ public class AiController {
      * 同步调用 AI 职场顾问应用
      */
     @GetMapping("/ai_chat/chat/sync")
-    public Result<String> doChatWithAiChatSync(String message, String chatId) {
-        return Result.success(aiChatAgent.doChat(message, chatId));
+    public Response<String> doChatWithAiChatSync(String message, String chatId) {
+        return Response.success(aiChatAgent.doChat(message, chatId));
     }
 
     /**
@@ -114,48 +102,8 @@ public class AiController {
             @RequestParam(defaultValue = "default") String chatId,
             @RequestParam(value = "token", required = false) String tokenParam,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        SseEmitter emitter = new SseEmitter(300000L);
-
-        // 1. 基础参数校验：消息非空且长度受限，防止滥用与超长请求
-        if (message == null || message.isBlank()) {
-            return sendErrorAndComplete(emitter, "消息不能为空");
-        }
-        if (message.length() > MAX_MESSAGE_LENGTH) {
-            return sendErrorAndComplete(emitter,
-                    "消息过长，请控制在 " + MAX_MESSAGE_LENGTH + " 字以内");
-        }
-
-        // 2. 鉴权：从 URL token 参数或 Authorization 头解析 Token
-        String userId;
-        try {
-            userId = authService.authenticate(tokenParam, authHeader);
-        } catch (Exception e) {
-            return sendErrorAndComplete(emitter, e.getMessage());
-        }
-        // 校验会话归属，防止访问他人对话
-        if (!sessionManager.isOwner(userId, chatId)) {
-            return sendErrorAndComplete(emitter, "无权访问该会话");
-        }
-        // 用第一条消息更新会话标题
-        sessionManager.updateTitle(chatId, message);
-
-        // 3. 使用单例 OrchestratorAgent 流式响应（透传 userId 用于画像注入与对话结束触发）
-        // Generate requestId for trace correlation (Req 8.1)
-        String requestId = UUID.randomUUID().toString().replace("-", "");
-        return orchestratorAgent.chatStream(message, chatId, userId, requestId);
-    }
-
-    /**
-     * 通过 SSE 推送错误信息并结束连接
-     */
-    private SseEmitter sendErrorAndComplete(SseEmitter emitter, String errorMessage) {
-        try {
-            emitter.send(SseEmitter.event().name("error").data(errorMessage));
-            emitter.complete();
-        } catch (IOException e) {
-            emitter.completeWithError(e);
-        }
-        return emitter;
+        String userId = authService.authenticate(tokenParam, authHeader);
+        return orchestratorAppService.chatStream(userId, chatId, message);
     }
 
     // ==================== Manus 超级智能体 ====================
@@ -180,8 +128,8 @@ public class AiController {
      * RAG 知识库对话（含 Multi-Query 多路召回，同步）
      */
     @GetMapping("/ai_chat/rag/sync")
-    public Result<String> doChatWithRagSync(String message, String chatId) {
-        return Result.success(aiChatAgent.doChatWithRag(message, chatId));
+    public Response<String> doChatWithRagSync(String message, String chatId) {
+        return Response.success(aiChatAgent.doChatWithRag(message, chatId));
     }
 
     // ==================== 工具调用对话 ====================
@@ -190,8 +138,8 @@ public class AiController {
      * 工具调用对话（同步）
      */
     @GetMapping("/ai_chat/tools/sync")
-    public Result<String> doChatWithToolsSync(String message, String chatId) {
-        return Result.success(aiChatAgent.doChatWithTools(message, chatId));
+    public Response<String> doChatWithToolsSync(String message, String chatId) {
+        return Response.success(aiChatAgent.doChatWithTools(message, chatId));
     }
 
     // ==================== MCP 服务对话 ====================
@@ -200,8 +148,8 @@ public class AiController {
      * MCP 服务对话（同步）
      */
     @GetMapping("/ai_chat/mcp/sync")
-    public Result<String> doChatWithMcpSync(String message, String chatId) {
-        return Result.success(aiChatAgent.doChatWithMcp(message, chatId));
+    public Response<String> doChatWithMcpSync(String message, String chatId) {
+        return Response.success(aiChatAgent.doChatWithMcp(message, chatId));
     }
 
     // ==================== 职场报告（结构化输出）====================
@@ -210,7 +158,7 @@ public class AiController {
      * 职场报告生成（结构化输出，同步）
      */
     @GetMapping("/ai_chat/report/sync")
-    public Result<AiChatAgent.AiChatReport> doChatWithReportSync(String message, String chatId) {
-        return Result.success(aiChatAgent.doChatWithReport(message, chatId));
+    public Response<AiChatAgent.AiChatReport> doChatWithReportSync(String message, String chatId) {
+        return Response.success(aiChatAgent.doChatWithReport(message, chatId));
     }
 }

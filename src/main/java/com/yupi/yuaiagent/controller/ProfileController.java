@@ -1,7 +1,7 @@
 package com.yupi.yuaiagent.controller;
 
 import com.yupi.yuaiagent.auth.JwtUtil;
-import com.yupi.yuaiagent.common.Result;
+import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.profile.model.UserProfile;
 import jakarta.annotation.Resource;
@@ -34,11 +34,11 @@ public class ProfileController {
      * 无有效 JWT 返回未授权（Req 13.5）。
      */
     @GetMapping("/me")
-    public Result<UserProfile> getMyProfile(
+    public Response<UserProfile> getMyProfile(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String userId = extractUserId(authHeader);
-        if (userId == null) return Result.error(401, "未授权，请先登录");
-        return Result.success(userProfileService.get(userId).orElse(null));
+        if (userId == null) return Response.failed(401, "未授权，请先登录");
+        return Response.success(userProfileService.get(userId).orElse(null));
     }
 
     /**
@@ -46,12 +46,12 @@ public class ProfileController {
      * 无有效 JWT 返回未授权（Req 13.5）。
      */
     @DeleteMapping("/me")
-    public Result<String> clearMyProfile(
+    public Response<String> clearMyProfile(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String userId = extractUserId(authHeader);
-        if (userId == null) return Result.error(401, "未授权，请先登录");
+        if (userId == null) return Response.failed(401, "未授权，请先登录");
         userProfileService.clear(userId);
-        return Result.success("画像已清空");
+        return Response.success("画像已清空");
     }
 
     private String extractUserId(String authHeader) {

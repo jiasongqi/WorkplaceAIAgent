@@ -24,7 +24,7 @@ public class TraceRecorder {
     private TraceProperties traceProperties;
 
     // P2 placeholder — injected as null when not registered as Bean
-    @Resource(required = false)
+    @Resource
     private TraceStreamPublisher streamPublisher;
 
     /**

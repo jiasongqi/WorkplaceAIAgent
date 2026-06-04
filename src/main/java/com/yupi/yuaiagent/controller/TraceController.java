@@ -1,7 +1,7 @@
 package com.yupi.yuaiagent.controller;
 
 import com.yupi.yuaiagent.auth.AuthService;
-import com.yupi.yuaiagent.common.Result;
+import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.exception.BusinessException;
 import com.yupi.yuaiagent.session.SessionManager;
 import com.yupi.yuaiagent.trace.TraceRepository;
@@ -45,7 +45,7 @@ public class TraceController {
      * The caller must own the trace or own the chat session.
      */
     @GetMapping("/{traceId}")
-    public Result<ExecutionTrace> getTrace(
+    public Response<ExecutionTrace> getTrace(
             @PathVariable String traceId,
             @RequestParam(value = "token", required = false) String token,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -59,7 +59,7 @@ public class TraceController {
             throw BusinessException.forbidden();
         }
 
-        return Result.success(trace);
+        return Response.success(trace);
     }
 
     /**
@@ -67,7 +67,7 @@ public class TraceController {
      * Verifies the caller owns the chat session before returning traces.
      */
     @GetMapping("/chat/{chatId}")
-    public Result<List<ExecutionTrace>> getTracesByChat(
+    public Response<List<ExecutionTrace>> getTracesByChat(
             @PathVariable String chatId,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "20") int pageSize,
@@ -81,7 +81,7 @@ public class TraceController {
         }
 
         List<ExecutionTrace> traces = traceRepository.findByChatId(chatId, pageNum, pageSize);
-        return Result.success(traces);
+        return Response.success(traces);
     }
 
     /**
@@ -89,7 +89,7 @@ public class TraceController {
      * The caller can only access their own traces.
      */
     @GetMapping("/user/{userId}")
-    public Result<List<ExecutionTrace>> getTracesByUser(
+    public Response<List<ExecutionTrace>> getTracesByUser(
             @PathVariable String userId,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "20") int pageSize,
@@ -103,7 +103,7 @@ public class TraceController {
         }
 
         List<ExecutionTrace> traces = traceRepository.findByUserId(userId, pageNum, pageSize);
-        return Result.success(traces);
+        return Response.success(traces);
     }
 
     // --- helpers ---

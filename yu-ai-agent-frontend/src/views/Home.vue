@@ -65,6 +65,24 @@
           <span class="btn-icon">→</span>
         </div>
       </div>
+
+      <div class="app-card" @click="navigateTo('/knowledge-base')">
+        <div class="card-glow"></div>
+        <div class="app-icon kb-icon">📚</div>
+        <div class="app-info">
+          <div class="app-title">知识库管理</div>
+          <div class="app-desc">文档上传 · 向量索引 · RAG 增强 · 文档管理</div>
+          <div class="app-tags">
+            <span class="tag tag-green">Markdown</span>
+            <span class="tag tag-green">RAG</span>
+            <span class="tag tag-green">向量检索</span>
+          </div>
+        </div>
+        <div class="app-button app-button-green">
+          <span class="btn-text">管理文档</span>
+          <span class="btn-icon">→</span>
+        </div>
+      </div>
     </div>
 
     <div class="cyber-circles">
@@ -250,12 +268,24 @@ const navigateTo = (path) => router.push(path)
   color: #ff8fab;
 }
 
+.tag-green {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
 .app-button-pink {
   background: linear-gradient(90deg, #ff6b8b, #ff4d6d);
   border-color: rgba(255, 107, 139, 0.4);
 }
 
 .app-button-pink:hover { box-shadow: 0 0 20px rgba(255, 77, 109, 0.6); }
+
+.app-button-green {
+  background: linear-gradient(90deg, #059669, #10b981);
+  border-color: rgba(5, 150, 105, 0.4);
+}
+.app-button-green:hover { box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); }
 
 .app-button {
   background: linear-gradient(90deg, #0088ff, #00b2ff);

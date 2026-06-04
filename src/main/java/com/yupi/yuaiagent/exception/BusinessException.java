@@ -1,40 +1,51 @@
 package com.yupi.yuaiagent.exception;
 
+import com.yupi.yuaiagent.common.ResultCode;
+
 /**
  * Base business exception for domain-specific errors.
- * Subclasses or direct usage with error codes enables structured error handling
- * in {@link GlobalExceptionHandler}.
+ * Uses {@link ResultCode} for consistent error codes.
  *
  * @author jsq
  */
 public class BusinessException extends RuntimeException {
 
-    private final int code;
+    private final long code;
 
-    public BusinessException(int code, String message) {
+    public BusinessException(long code, String message) {
         super(message);
         this.code = code;
     }
 
-    public BusinessException(String message) {
-        this(400, message);
+    public BusinessException(ResultCode resultCode) {
+        super(resultCode.getMessage());
+        this.code = resultCode.getCode();
     }
 
-    public int getCode() {
+    public BusinessException(ResultCode resultCode, String message) {
+        super(message);
+        this.code = resultCode.getCode();
+    }
+
+    public long getCode() {
         return code;
     }
 
-    // --- factory methods for common scenarios ---
+    // --- factory methods ---
 
     public static BusinessException notLoggedIn() {
-        return new BusinessException(401, "未授权，请先登录");
+        return new BusinessException(ResultCode.UNAUTHORIZED);
     }
 
     public static BusinessException forbidden() {
-        return new BusinessException(403, "无权访问该资源");
+        return new BusinessException(ResultCode.FORBIDDEN);
     }
 
     public static BusinessException notFound(String resource) {
-        return new BusinessException(404, resource + "不存在");
+        return new BusinessException(ResultCode.NOT_FOUND, resource + "不存在");
+    }
+
+    public static BusinessException badRequest(String message) {
+        return new BusinessException(ResultCode.VALIDATE_FAILED, message);
     }
 }

@@ -95,4 +95,60 @@ export const getTracesByChat = (chatId, pageNum = 1, pageSize = 20) =>
 export const getTracesByUser = (userId, pageNum = 1, pageSize = 20) =>
   request.get(`/trace/user/${userId}`, { params: { pageNum, pageSize } })
 
-export default { chatWithAiChat, chatWithManus, chatWithOrchestrator, login, createSession, listSessions, deleteSession, getMyProfile, clearMyProfile, listArtifacts, getArtifactDetail, getTrace, getTracesByChat, getTracesByUser }
+// ===== Session API =====
+
+// 获取会话历史消息
+export const getChatMessages = (chatId) => request.get(`/session/${chatId}/messages`)
+
+// 重命名会话
+export const renameSession = (chatId, title) =>
+  request.put(`/session/${chatId}/title`, { title })
+
+// 归档会话
+export const archiveSession = (chatId) => request.put(`/session/${chatId}/archive`)
+
+// 取消归档
+export const unarchiveSession = (chatId) => request.put(`/session/${chatId}/unarchive`)
+
+// 获取已归档会话列表
+export const listArchivedSessions = () => request.get('/session/archived')
+
+// 恢复已删除会话
+export const restoreSession = (chatId) => request.put(`/session/${chatId}/restore`)
+
+// 获取回收站列表
+export const listTrashSessions = () => request.get('/session/trash')
+
+// 搜索会话
+export const searchSessions = (keyword) =>
+  request.get('/session/search', { params: { keyword } })
+
+// ===== Favorite API =====
+
+// 添加收藏
+export const addFavorite = (chatId, messageId) =>
+  request.post('/favorite', { chatId, messageId })
+
+// 取消收藏
+export const removeFavorite = (favoriteId) =>
+  request.delete(`/favorite/${favoriteId}`)
+
+// 收藏列表
+export const listFavorites = () => request.get('/favorite/list')
+
+// ===== Export/Import API =====
+
+// 导出所有数据为 ZIP
+export const exportAll = () => {
+  const token = localStorage.getItem('token')
+  const base = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8123/api'
+  window.open(`${base}/export/all?token=${token}`, '_blank')
+}
+
+// 导入数据
+export const importData = (formData) =>
+  request.post('/export/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+
+export default { chatWithAiChat, chatWithManus, chatWithOrchestrator, login, createSession, listSessions, deleteSession, getMyProfile, clearMyProfile, listArtifacts, getArtifactDetail, getTrace, getTracesByChat, getTracesByUser, getChatMessages, renameSession, archiveSession, unarchiveSession, listArchivedSessions, restoreSession, listTrashSessions }

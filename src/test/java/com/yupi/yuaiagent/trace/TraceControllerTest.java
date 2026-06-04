@@ -20,6 +20,7 @@ import java.nio.file.Path;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -176,10 +177,28 @@ class TraceControllerTest {
     @Test
     @DisplayName("GET /trace/{traceId} — Authorization header 鉴权成功返回 200")
     void getTrace_authHeader_returns200() throws Exception {
-        // AuthService.authenticate is called with (null, "Bearer token-a")
-        when(authService.authenticate(null, "Bearer " + TOKEN_A)).thenReturn(USER_A);
+        // Create a fresh mock that returns USER_A for this specific call
+        AuthService headerAuth = org.mockito.Mockito.mock(AuthService.class);
+        when(headerAuth.authenticate(eq(null), eq("Bearer " + TOKEN_A))).thenReturn(USER_A);
 
-        mockMvc.perform(get("/trace/{traceId}", VALID_TRACE_ID)
+        // Create a dedicated controller with this mock
+        TraceController ctrl = new TraceController();
+        var authF = TraceController.class.getDeclaredField("authService");
+        authF.setAccessible(true);
+        authF.set(ctrl, headerAuth);
+        var repoF = TraceController.class.getDeclaredField("traceRepository");
+        repoF.setAccessible(true);
+        repoF.set(ctrl, traceRepository);
+        var sessF = TraceController.class.getDeclaredField("sessionManager");
+        sessF.setAccessible(true);
+        sessF.set(ctrl, sessionManager);
+
+        MockMvc localMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                .standaloneSetup(ctrl)
+                .setControllerAdvice(new com.yupi.yuaiagent.exception.GlobalExceptionHandler())
+                .build();
+
+        localMvc.perform(get("/trace/{traceId}", VALID_TRACE_ID)
                         .header("Authorization", "Bearer " + TOKEN_A))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))

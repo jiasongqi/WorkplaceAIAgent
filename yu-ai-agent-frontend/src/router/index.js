@@ -36,6 +36,18 @@ const routes = [
     name: 'TraceDetail',
     component: () => import('../views/TraceDetail.vue'),
     meta: { title: '执行轨迹 - 职场生存智囊' }
+  },
+  {
+    path: '/knowledge-base',
+    name: 'KnowledgeBase',
+    component: () => import('../views/KnowledgeBase.vue'),
+    meta: { title: '知识库管理 - 职场生存智囊' }
+  },
+  {
+    path: '/favorites',
+    name: 'Favorites',
+    component: () => import('../views/Favorites.vue'),
+    meta: { title: '我的收藏 - 职场生存智囊' }
   }
 ]
 

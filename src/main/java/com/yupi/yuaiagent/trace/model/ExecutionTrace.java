@@ -145,9 +145,9 @@ public class ExecutionTrace {
     }
 
     /**
-     * Package-private: adds a span to this trace. Called by TraceContext.
+     * Adds a span to this trace. Called by TraceContext.
      */
-    void addSpan(TraceSpan span) {
+    public void addSpan(TraceSpan span) {
         spans.add(span);
     }
 }

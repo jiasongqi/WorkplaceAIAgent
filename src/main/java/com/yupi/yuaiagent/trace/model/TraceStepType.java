@@ -57,7 +57,27 @@ public enum TraceStepType {
     /**
      * Profile update phase — user profile is asynchronously updated after conversation.
      */
-    PROFILE_UPDATE("画像更新");
+    PROFILE_UPDATE("画像更新"),
+
+    /**
+     * Quality review phase — QualityGuardAgent reviews the agent's answer.
+     */
+    QUALITY_REVIEW("质量审查"),
+
+    /**
+     * Red team review phase — adversarial review by QualityGuardAgent.
+     */
+    RED_TEAM_REVIEW("红队审查"),
+
+    /**
+     * Red team revision phase — agent revises answer based on red team feedback.
+     */
+    RED_TEAM_REVISION("蓝队整改"),
+
+    /**
+     * Quality blocked — CRITICAL risk, answer was blocked.
+     */
+    QUALITY_BLOCKED("质量阻断");
 
     private final String displayName;
 
