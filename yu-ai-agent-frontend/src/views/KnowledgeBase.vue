@@ -237,9 +237,9 @@ onMounted(loadDocuments)
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 14px 24px;
-  background: #059669;
-  color: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text);
+border: 0.5px solid var(--border); box-shadow: none;
 }
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; }
 .back-button:hover { opacity: 1; }
@@ -252,19 +252,19 @@ onMounted(loadDocuments)
 .upload-section { margin-bottom: 24px; }
 .upload-zone {
   border: 2px dashed #d1d5db;
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 32px;
   text-align: center;
   transition: all 0.2s;
-  background: white;
+  background: var(--surface);
 }
 .upload-zone.dragging { border-color: #059669; background: rgba(5,150,105,0.05); }
 .upload-icon { font-size: 32px; margin-bottom: 8px; }
-.upload-text { color: #6b7280; font-size: 14px; margin-bottom: 8px; }
+.upload-text { color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
 .upload-btn {
   display: inline-block;
-  background: #059669;
-  color: white;
+  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text);
   padding: 8px 20px;
   border-radius: 8px;
   cursor: pointer;
@@ -279,14 +279,14 @@ onMounted(loadDocuments)
 .upload-result.error { background: rgba(239,68,68,0.1); color: #dc2626; }
 
 /* Document list */
-.doc-list-section { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.doc-list-section { background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 0.5px solid var(--border); }
 .list-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
 .list-title { font-size: 16px; font-weight: 600; margin: 0; }
 .refresh-btn { background: #f3f4f6; border: none; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
 .refresh-btn:hover { background: #e5e7eb; }
 .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.placeholder { text-align: center; color: #6b7280; font-size: 14px; padding: 40px; }
+.placeholder { text-align: center; color: var(--text-muted); font-size: 14px; padding: 40px; }
 
 .doc-list { padding: 12px 20px; }
 .doc-item {
@@ -307,7 +307,7 @@ onMounted(loadDocuments)
 .doc-status.indexed { background: rgba(16,185,129,0.12); color: #059669; }
 .doc-status.processing { background: rgba(245,158,11,0.12); color: #d97706; }
 .doc-status.failed { background: rgba(239,68,68,0.12); color: #dc2626; }
-.doc-status.deleted { background: rgba(107,114,128,0.12); color: #6b7280; }
+.doc-status.deleted { background: rgba(107,114,128,0.12); color: var(--text-muted); }
 .doc-time { font-size: 11px; color: #9ca3af; margin-top: 2px; }
 .doc-error { font-size: 12px; color: #dc2626; margin-top: 4px; }
 .doc-actions { display: flex; gap: 6px; }
@@ -328,17 +328,17 @@ onMounted(loadDocuments)
   display: flex; align-items: center; justify-content: center; z-index: 1000;
 }
 .modal {
-  background: white; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%;
+  background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 400px; width: 90%;
 }
 .modal-text { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
-.modal-hint { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+.modal-hint { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .cancel-btn {
   background: #f3f4f6; border: none; border-radius: 8px; padding: 8px 16px;
   font-size: 13px; cursor: pointer;
 }
 .confirm-delete-btn {
-  background: #dc2626; color: white; border: none; border-radius: 8px; padding: 8px 16px;
+  background: #dc2626; color: var(--text); border: none; border-radius: 8px; padding: 8px 16px;
   font-size: 13px; cursor: pointer;
 }
 .confirm-delete-btn:hover { background: #b91c1c; }

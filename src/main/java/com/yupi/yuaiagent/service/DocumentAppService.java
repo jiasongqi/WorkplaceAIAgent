@@ -3,6 +3,8 @@ package com.yupi.yuaiagent.service;
 import com.yupi.yuaiagent.document.DocumentMeta;
 import com.yupi.yuaiagent.document.DocumentMetadataManager;
 import com.yupi.yuaiagent.document.DocumentStatus;
+import com.yupi.yuaiagent.usage.UsageEventType;
+import com.yupi.yuaiagent.usage.UsageTracker;
 import com.yupi.yuaiagent.dto.DocumentResponse;
 import com.yupi.yuaiagent.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class DocumentAppService {
 
     private final VectorStore aiChatVectorStore;
     private final DocumentMetadataManager documentMetadataManager;
+    private final UsageTracker usageTracker;
 
     public DocumentResponse upload(MultipartFile file, String status) throws IOException {
         if (file.isEmpty()) {
@@ -71,6 +74,7 @@ public class DocumentAppService {
         aiChatVectorStore.add(documents);
 
         documentMetadataManager.updateStatus(meta.getDocId(), DocumentStatus.INDEXED);
+        usageTracker.track("system", UsageEventType.DOCUMENT_UPLOAD, null, 0);
         log.info("Document uploaded: docId={}, file={}, fragments={}", meta.getDocId(), filename, documents.size());
         return toResponse(meta);
     }

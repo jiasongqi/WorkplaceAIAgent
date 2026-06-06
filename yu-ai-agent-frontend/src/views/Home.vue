@@ -1,330 +1,339 @@
 <template>
-  <div class="home-container">
-    <div class="header">
-      <div class="glitch-wrapper">
-        <h1 class="glitch-title">职场生存智囊</h1>
-      </div>
-      <p class="subtitle">/ 全场景职场 AI 决策系统 /</p>
-      <div class="cyber-line"></div>
+  <div class="workbench">
+    <!-- Hero -->
+    <section class="hero">
+      <h1 class="hero-title">你的 AI 职业教练</h1>
+      <p class="hero-sub">越用越懂你，每次对话都有产出</p>
+    </section>
+
+    <!-- Input -->
+    <div class="input-box">
+      <input
+        v-model="taskInput"
+        class="task-input"
+        placeholder="描述你的职业困惑，例如：帮我优化简历..."
+        @keydown.enter="startTask"
+      />
+      <button class="send-btn" @click="startTask" :disabled="!taskInput.trim()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8H13M10 5L13 8L10 11" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
     </div>
 
-    <div class="apps-container">
-      <div class="app-card" @click="navigateTo('/career-advisor')">
-        <div class="card-glow"></div>
-        <div class="app-icon career-icon">💼</div>
-        <div class="app-info">
-          <div class="app-title">职场顾问</div>
-          <div class="app-desc">智能路由 · 简历优化 · 薪资谈判 · 离职规划</div>
-          <div class="app-tags">
-            <span class="tag">简历</span>
-            <span class="tag">谈薪</span>
-            <span class="tag">离职</span>
-            <span class="tag">晋升</span>
-          </div>
-        </div>
-        <div class="app-button">
-          <span class="btn-text">立即咨询</span>
-          <span class="btn-icon">→</span>
-        </div>
-      </div>
-
-      <div class="app-card" @click="navigateTo('/super-agent')">
-        <div class="card-glow"></div>
-        <div class="app-icon robot-icon">🤖</div>
-        <div class="app-info">
-          <div class="app-title">超级智能体</div>
-          <div class="app-desc">多步推理 · 工具调用 · 自主规划 · 文件生成</div>
-          <div class="app-tags">
-            <span class="tag">搜索</span>
-            <span class="tag">PDF</span>
-            <span class="tag">代码</span>
-            <span class="tag">文件</span>
-          </div>
-        </div>
-        <div class="app-button">
-          <span class="btn-text">立即体验</span>
-          <span class="btn-icon">→</span>
-        </div>
-      </div>
-
-      <div class="app-card" @click="navigateTo('/love-master')">
-        <div class="card-glow"></div>
-        <div class="app-icon love-icon">💘</div>
-        <div class="app-info">
-          <div class="app-title">恋爱大师</div>
-          <div class="app-desc">情感分析 · 恋爱话术 · 关系修复 · 脱单攻略</div>
-          <div class="app-tags">
-            <span class="tag tag-pink">表白</span>
-            <span class="tag tag-pink">挽回</span>
-            <span class="tag tag-pink">约会</span>
-            <span class="tag tag-pink">情感</span>
-          </div>
-        </div>
-        <div class="app-button app-button-pink">
-          <span class="btn-text">立即咨询</span>
-          <span class="btn-icon">→</span>
-        </div>
-      </div>
-
-      <div class="app-card" @click="navigateTo('/knowledge-base')">
-        <div class="card-glow"></div>
-        <div class="app-icon kb-icon">📚</div>
-        <div class="app-info">
-          <div class="app-title">知识库管理</div>
-          <div class="app-desc">文档上传 · 向量索引 · RAG 增强 · 文档管理</div>
-          <div class="app-tags">
-            <span class="tag tag-green">Markdown</span>
-            <span class="tag tag-green">RAG</span>
-            <span class="tag tag-green">向量检索</span>
-          </div>
-        </div>
-        <div class="app-button app-button-green">
-          <span class="btn-text">管理文档</span>
-          <span class="btn-icon">→</span>
-        </div>
+    <!-- Capabilities -->
+    <div class="section-label">我能帮你做什么</div>
+    <div class="cap-grid">
+      <div
+        v-for="cap in capabilities"
+        :key="cap.name"
+        class="cap-card"
+        :style="{ '--cap-color': cap.color }"
+        @click="$router.push(cap.route)"
+      >
+        <div class="cap-icon" :style="{ background: cap.bg }">{{ cap.icon }}</div>
+        <div class="cap-name">{{ cap.name }}</div>
+        <div class="cap-desc">{{ cap.desc }}</div>
       </div>
     </div>
 
-    <div class="cyber-circles">
-      <div class="circle circle-1"></div>
-      <div class="circle circle-2"></div>
-      <div class="circle circle-3"></div>
+    <!-- Recent deliverables -->
+    <div class="section-label">最近成果</div>
+    <div class="deliverables">
+      <div v-if="recentDeliverables.length === 0" class="empty-state">暂无成果，开始对话后自动生成</div>
+      <div
+        v-for="del in recentDeliverables"
+        :key="del.id"
+        class="deliverable-item"
+      >
+        <div class="del-icon" :style="{ background: del.iconBg }">{{ del.iconEmoji }}</div>
+        <div class="del-info">
+          <div class="del-name">{{ del.name }}</div>
+          <div class="del-meta">{{ del.time }} · {{ del.type }}</div>
+        </div>
+        <div class="del-status" :class="del.statusClass">{{ del.statusText }}</div>
+      </div>
     </div>
 
-    <AppFooter />
+    <!-- Stats -->
+    <div class="section-label">我的数据</div>
+    <div class="stats-row">
+      <div class="stat-item">
+        <div class="stat-num">{{ stats.sessions }}</div>
+        <div class="stat-label">对话次数</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">{{ stats.artifacts }}</div>
+        <div class="stat-label">交付物</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">{{ stats.documents }}</div>
+        <div class="stat-label">知识文档</div>
+      </div>
+    </div>
+
+    <!-- Profile -->
+    <div class="section-label">你的画像</div>
+    <div class="profile-card">
+      <div v-if="!profile" class="profile-empty">多与 AI 对话后，系统会自动构建你的专属画像</div>
+      <template v-else>
+        <div class="profile-header">
+          <div class="profile-avatar">{{ userInitial }}</div>
+          <div>
+            <div class="profile-name">{{ username }}</div>
+            <div class="profile-meta">已对话 {{ stats.sessions }} 次</div>
+          </div>
+        </div>
+        <div class="profile-tags">
+          <span v-for="tag in profileTags" :key="tag" class="profile-tag">{{ tag }}</span>
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useHead } from '@vueuse/head'
-import AppFooter from '../components/AppFooter.vue'
-
-useHead({
-  title: '职场生存智囊 - 全场景职场 AI 决策系统',
-  meta: [{ name: 'description', content: '融合长链推理与多 Agent 协作的职场智能决策系统' }]
-})
+import { getTracesByUser, listArtifacts, listFavorites } from '../api'
 
 const router = useRouter()
-const navigateTo = (path) => router.push(path)
+const username = ref(localStorage.getItem('username') || '用户')
+const userInitial = computed(() => (username.value || 'U').charAt(0).toUpperCase())
+const taskInput = ref('')
+
+const capabilities = [
+  { name: '简历优化', desc: '分析简历问题，给出修改建议', icon: '📄', color: '#6366f1', bg: '#ede9fe', route: '/chat/career' },
+  { name: '谈薪策略', desc: '薪资分析，谈判话术', icon: '💰', color: '#10b981', bg: '#d1fae5', route: '/chat/career' },
+  { name: '离职规划', desc: '离职时机，交接方案', icon: '🚪', color: '#f59e0b', bg: '#fef3c7', route: '/chat/career' },
+  { name: '行业调研', desc: '行业趋势，岗位分析', icon: '📊', color: '#3b82f6', bg: '#dbeafe', route: '/chat/super' },
+  { name: '面试准备', desc: '模拟面试，高频问题', icon: '🎯', color: '#ec4899', bg: '#fce7f3', route: '/chat/career' },
+  { name: '预约咨询', desc: '连接人类职业顾问', icon: '📅', color: '#8b5cf6', bg: '#ede9fe', route: '/chat/career' },
+]
+
+const recentDeliverables = ref([])
+const stats = ref({ sessions: 0, artifacts: 0, documents: 0 })
+const profile = ref(null)
+const profileTags = ref([])
+
+const startTask = () => {
+  if (!taskInput.value.trim()) return
+  router.push('/chat/career')
+}
+
+const formatTime = (val) => {
+  if (!val) return ''
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+  const diffMs = now - d
+  if (diffMs < 60000) return '刚刚'
+  if (diffMs < 3600000) return Math.floor(diffMs / 60000) + ' 分钟前'
+  if (diffMs < 86400000) return Math.floor(diffMs / 3600000) + ' 小时前'
+  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+}
+
+onMounted(async () => {
+  const userId = localStorage.getItem('userId')
+  if (!userId) return
+
+  try {
+    const [traceRes, artRes, favRes] = await Promise.all([
+      getTracesByUser(userId, 1, 5).catch(() => ({ data: { data: [] } })),
+      listArtifacts({}).catch(() => ({ data: { data: [] } })),
+      listFavorites().catch(() => ({ data: { data: [] } })),
+    ])
+
+    const traces = traceRes.data?.data || []
+    stats.value.sessions = traces.length
+    stats.value.artifacts = (artRes.data?.data || []).length
+    stats.value.favorites = (favRes.data?.data || []).length
+
+    // Build recent deliverables from traces
+    recentDeliverables.value = traces.slice(0, 3).map((t, i) => ({
+      id: t.traceId,
+      name: t.spans?.find(s => s.stepType === 'SUB_AGENT_EXECUTION')?.label || '任务 ' + (i + 1),
+      time: formatTime(t.startTime),
+      type: '对话成果',
+      iconEmoji: '📄',
+      iconBg: '#ede9fe',
+      statusClass: t.status === 'SUCCESS' ? 'done' : t.status === 'RUNNING' ? 'running' : 'error',
+      statusText: t.status === 'SUCCESS' ? '已完成' : t.status === 'RUNNING' ? '生成中' : '失败',
+    }))
+
+    // Load profile
+    try {
+      const { getMyProfile } = await import('../api')
+      const profileRes = await getMyProfile()
+      const p = profileRes.data?.data
+      if (p) {
+        profile.value = p
+        const tags = []
+        if (p.tonePreference) tags.push('沟通风格：' + p.tonePreference)
+        if (p.focusAreas?.length) tags.push('关注领域：' + p.focusAreas[0])
+        if (p.coreNeeds?.length) tags.push('核心诉求：' + p.coreNeeds[0])
+        profileTags.value = tags
+      }
+    } catch {}
+  } catch (e) {
+    console.error('Failed to load workbench data', e)
+  }
+})
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap');
-
-:root {
-  --neon-blue: #00f0ff;
-  --neon-purple: #9000ff;
-  --neon-green: #00ff88;
-  --cyber-dark: #0a0f1e;
-}
-
-.home-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background-color: #0a0f1e;
-  background-image:
-    linear-gradient(0deg, rgba(8, 17, 34, 0.95), rgba(5, 8, 20, 0.95)),
-    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="0" y="0" width="100" height="1" fill="%23111133" opacity="0.3"/><rect x="0" y="0" width="1" height="100" fill="%23111133" opacity="0.3"/></svg>');
-  background-size: auto, 40px 40px;
-  position: relative;
-  overflow: hidden;
-}
-
-.header {
-  padding: 70px 20px 50px;
-  text-align: center;
-  position: relative;
-  z-index: 2;
-}
-
-.glitch-wrapper { position: relative; display: inline-block; margin-bottom: 20px; }
-
-.glitch-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 3.2rem;
-  font-weight: 700;
-  color: #edf7ff;
-  text-shadow: 0 0 5px rgba(0, 240, 255, 0.7), 0 0 20px rgba(0, 240, 255, 0.3);
-  letter-spacing: 2px;
-  animation: glitch 3s infinite;
-}
-
-.subtitle {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 3px;
-  margin: 0 auto 20px;
-}
-
-.cyber-line {
-  height: 2px;
-  width: 80%;
-  max-width: 600px;
+.workbench {
+  padding: 40px 20px 80px;
+  max-width: 720px;
   margin: 0 auto;
-  background: linear-gradient(90deg, transparent, #00f0ff, transparent);
 }
 
-.apps-container {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 50px;
-  max-width: 1200px;
-  margin: 60px auto;
-  padding: 0 20px;
-  flex: 1;
-  position: relative;
-  z-index: 2;
+/* Hero */
+.hero { text-align: center; margin-bottom: 40px; }
+.hero-title {
+  font-size: 32px; font-weight: 700; letter-spacing: -1px;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--text), var(--primary));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hero-sub { font-size: 15px; color: var(--text-muted); }
+
+/* Input */
+.input-box {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 48px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+.input-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-muted), 0 2px 12px rgba(0,0,0,0.04);
+}
+.task-input {
+  flex: 1; border: none; outline: none;
+  font-size: 15px; color: var(--text); background: transparent;
+}
+.task-input::placeholder { color: var(--text-muted); }
+.send-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.send-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* Section label */
+.section-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 14px;
 }
 
-.app-card {
-  width: 360px;
-  background-color: rgba(17, 23, 41, 0.8);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 240, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  padding: 32px;
-  cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  overflow: hidden;
+/* Capabilities */
+.cap-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 48px;
+}
+.cap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px; cursor: pointer;
+  transition: all 0.2s; position: relative; overflow: hidden;
+}
+.cap-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; background: var(--cap-color, var(--primary));
+  opacity: 0; transition: opacity 0.2s;
+}
+.cap-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+}
+.cap-card:hover::before { opacity: 1; }
+.cap-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 10px;
+}
+.cap-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.cap-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+/* Deliverables */
+.deliverables { margin-bottom: 48px; }
+.empty-state {
+  text-align: center; color: var(--text-muted); font-size: 13px;
+  padding: 32px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.deliverable-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
+}
+.deliverable-item:hover { border-color: var(--primary); transform: translateX(4px); }
+.del-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.del-info { flex: 1; min-width: 0; }
+.del-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.del-meta { font-size: 11px; color: var(--text-muted); }
+.del-status {
+  font-size: 10px; padding: 2px 8px; border-radius: 6px;
+  font-weight: 500; flex-shrink: 0;
+}
+.del-status.done { background: var(--success-light); color: #059669; }
+.del-status.running { background: var(--primary-light); color: var(--primary); }
+.del-status.error { background: var(--danger-light); color: var(--danger); }
+
+/* Stats */
+.stats-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 48px;
+}
+.stat-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px; text-align: center;
+}
+.stat-num { font-size: 24px; font-weight: 700; color: var(--primary); }
+.stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* Profile */
+.profile-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+}
+.profile-empty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 16px; }
+.profile-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.profile-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #ec4899);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: #fff; font-weight: 600;
+}
+.profile-name { font-size: 15px; font-weight: 600; }
+.profile-meta { font-size: 12px; color: var(--text-muted); }
+.profile-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-tag {
+  font-size: 11px; padding: 4px 10px; border-radius: 6px;
+  background: var(--primary-light); color: var(--primary); font-weight: 500;
 }
 
-.card-glow {
-  position: absolute;
-  top: -50%; left: -50%;
-  width: 200%; height: 200%;
-  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.08) 0%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.5s;
-  pointer-events: none;
-}
-
-.app-card:hover {
-  transform: translateY(-12px) scale(1.02);
-  box-shadow: 0 20px 60px rgba(0, 240, 255, 0.25), inset 0 0 0 1px rgba(0, 240, 255, 0.4);
-}
-
-.app-card:hover .card-glow { opacity: 1; }
-
-.app-icon {
-  font-size: 3.5rem;
-  margin-bottom: 20px;
-  width: 80px; height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-}
-
-.career-icon {
-  background: linear-gradient(135deg, #0088ff, #00d4ff);
-  box-shadow: 0 0 20px rgba(0, 136, 255, 0.5);
-}
-
-.robot-icon {
-  background: linear-gradient(135deg, #7c3aed, #4f56ff);
-  box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
-}
-
-.love-icon {
-  background: linear-gradient(135deg, #ff6b8b, #ff4d6d);
-  box-shadow: 0 0 20px rgba(255, 107, 139, 0.5);
-}
-
-.app-info { text-align: center; margin-bottom: 24px; width: 100%; }
-
-.app-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: white;
-  margin-bottom: 10px;
-  text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
-}
-
-.app-desc { font-size: 0.95rem; color: rgba(255, 255, 255, 0.65); line-height: 1.6; margin-bottom: 12px; }
-
-.app-tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-
-.tag {
-  background: rgba(0, 240, 255, 0.1);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  color: #00f0ff;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 0.78rem;
-}
-
-.tag-pink {
-  background: rgba(255, 107, 139, 0.1);
-  border: 1px solid rgba(255, 107, 139, 0.35);
-  color: #ff8fab;
-}
-
-.tag-green {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: #6ee7b7;
-}
-
-.app-button-pink {
-  background: linear-gradient(90deg, #ff6b8b, #ff4d6d);
-  border-color: rgba(255, 107, 139, 0.4);
-}
-
-.app-button-pink:hover { box-shadow: 0 0 20px rgba(255, 77, 109, 0.6); }
-
-.app-button-green {
-  background: linear-gradient(90deg, #059669, #10b981);
-  border-color: rgba(5, 150, 105, 0.4);
-}
-.app-button-green:hover { box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); }
-
-.app-button {
-  background: linear-gradient(90deg, #0088ff, #00b2ff);
-  color: white;
-  padding: 12px 28px;
-  border-radius: 30px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  transition: all 0.3s;
-}
-
-.app-button:hover { box-shadow: 0 0 20px rgba(0, 178, 255, 0.6); transform: scale(1.05); }
-
-.btn-text { margin-right: 8px; letter-spacing: 1px; }
-.btn-icon { font-size: 1.2rem; transition: transform 0.3s; }
-.app-button:hover .btn-icon { transform: translateX(4px); }
-
-.cyber-circles { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
-
-.circle { position: absolute; border-radius: 50%; opacity: 0.12; }
-.circle-1 { width: 300px; height: 300px; top: -100px; right: -100px; background: linear-gradient(135deg, #00f0ff, #9000ff); animation: float 15s infinite alternate; }
-.circle-2 { width: 500px; height: 500px; bottom: -200px; left: -200px; background: linear-gradient(135deg, #9000ff, #00ff88); animation: float 20s infinite alternate-reverse; }
-.circle-3 { width: 200px; height: 200px; top: 40%; right: 15%; background: linear-gradient(135deg, #00ff88, #00f0ff); animation: float 12s infinite alternate; }
-
-@keyframes float {
-  0% { transform: translate(0, 0) rotate(0deg); }
-  100% { transform: translate(50px, 50px) rotate(10deg); }
-}
-
-@keyframes glitch {
-  0%, 100% { text-shadow: 0 0 5px rgba(0, 240, 255, 0.7), 0 0 10px rgba(0, 240, 255, 0.5); }
-  50% { text-shadow: 0 0 5px rgba(0, 240, 255, 0.7), 0 0 20px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1); }
-}
-
-@media (max-width: 768px) {
-  .glitch-title { font-size: 2.2rem; }
-  .apps-container { gap: 24px; margin: 40px auto; }
-  .app-card { width: 100%; max-width: 420px; }
+@media (max-width: 640px) {
+  .cap-grid { grid-template-columns: repeat(2, 1fr); }
+  .hero-title { font-size: 24px; }
+  .workbench { padding: 24px 16px 60px; }
 }
 </style>

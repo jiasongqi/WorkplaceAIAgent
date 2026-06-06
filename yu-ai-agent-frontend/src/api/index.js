@@ -151,4 +151,9 @@ export const importData = (formData) =>
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 
+// ===== Usage API =====
+
+// 获取用量统计
+export const getUsageStats = () => request.get('/usage/stats')
+
 export default { chatWithAiChat, chatWithManus, chatWithOrchestrator, login, createSession, listSessions, deleteSession, getMyProfile, clearMyProfile, listArtifacts, getArtifactDetail, getTrace, getTracesByChat, getTracesByUser, getChatMessages, renameSession, archiveSession, unarchiveSession, listArchivedSessions, restoreSession, listTrashSessions }

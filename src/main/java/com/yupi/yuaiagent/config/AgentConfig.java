@@ -9,6 +9,7 @@ import com.yupi.yuaiagent.agent.data.PromotionPlannerAgent;
 import com.yupi.yuaiagent.artifact.ArtifactShelf;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.message.ChatMemoryAdapter;
 import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.quality.*;
 import com.yupi.yuaiagent.rag.QueryRewriter;
@@ -65,6 +66,7 @@ public class AgentConfig {
             ArtifactShelf artifactShelf,
             TraceRecorder traceRecorder,
             TraceRepository traceRepository,
+            ChatMemoryAdapter chatMemoryAdapter,
             QualityGuardAgent qualityGuardAgent,
             QualityModeResolver qualityModeResolver,
             QualityReviewRepository qualityReviewRepository) {
@@ -72,7 +74,7 @@ public class AgentConfig {
                 dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager,
                 followUpTemplateConfig, infoValidator, calendarServiceFactory, appointmentRepository,
                 skillExecutor, skillRegistry, userProfileService, artifactShelf,
-                traceRecorder, traceRepository,
+                traceRecorder, traceRepository, chatMemoryAdapter,
                 qualityGuardAgent, qualityModeResolver, qualityReviewRepository);
     }
 

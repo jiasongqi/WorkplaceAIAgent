@@ -303,9 +303,9 @@ const formatDateTime = (value) => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: #1e40af;
-  color: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text);
+border: 0.5px solid var(--border);
 }
 
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; transition: opacity 0.2s; }
@@ -335,7 +335,7 @@ const formatDateTime = (value) => {
 .admin-login-btn {
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  color: white;
+  color: var(--text);
   border-radius: 16px;
   padding: 5px 14px;
   font-size: 13px;
@@ -363,7 +363,7 @@ const formatDateTime = (value) => {
   flex-direction: column;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+border: 0.5px solid var(--border);
   overflow: hidden;
 }
 
@@ -395,7 +395,7 @@ const formatDateTime = (value) => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.query-btn { background: #1e40af; color: white; flex: 1; }
+.query-btn { background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); color: var(--text); flex: 1; }
 .query-btn:hover:not(:disabled) { background: #1d4ed8; }
 .query-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .reset-btn { background: #f3f4f6; color: #374151; flex: 1; }
@@ -507,7 +507,7 @@ const formatDateTime = (value) => {
   flex: 1;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+border: 0.5px solid var(--border);
   overflow-y: auto;
   padding: 24px;
 }

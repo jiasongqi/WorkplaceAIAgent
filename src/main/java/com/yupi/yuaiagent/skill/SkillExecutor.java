@@ -6,6 +6,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -28,7 +29,7 @@ public class SkillExecutor {
     private final ChatClient chatClient;
     private final SkillRegistry skillRegistry;
     
-    public SkillExecutor(ChatModel chatModel, SkillRegistry skillRegistry) {
+    public SkillExecutor(@Qualifier("dashscopeChatModel") ChatModel chatModel, SkillRegistry skillRegistry) {
         this.chatClient = ChatClient.builder(chatModel).build();
         this.skillRegistry = skillRegistry;
     }

@@ -79,8 +79,8 @@ onMounted(loadFavorites)
 }
 .header {
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
-  padding: 14px 24px; background: #d97706; color: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  padding: 14px 24px; background: var(--glass-bg); color: white;
+  border: 0.5px solid var(--border);
 }
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; }
 .back-button:hover { opacity: 1; }
@@ -88,18 +88,18 @@ onMounted(loadFavorites)
 .fav-count { justify-self: end; font-size: 13px; opacity: 0.8; }
 
 .content { flex: 1; overflow-y: auto; padding: 20px; max-width: 720px; margin: 0 auto; width: 100%; }
-.placeholder { text-align: center; color: #6b7280; font-size: 14px; padding: 60px 16px; }
+.placeholder { text-align: center; color: var(--text-muted); font-size: 14px; padding: 60px 16px; }
 
 .fav-list { display: flex; flex-direction: column; gap: 12px; }
 .fav-item {
-  background: white; border-radius: 12px; padding: 16px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08); transition: all 0.2s;
+  background: var(--surface); border-radius: var(--radius); padding: 16px;
+  border: 0.5px solid var(--border); transition: all 0.2s;
 }
 .fav-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
 .fav-item.orphaned { opacity: 0.7; border-left: 3px solid #f59e0b; }
 
 .fav-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.fav-source { font-size: 12px; color: #6b7280; }
+.fav-source { font-size: 12px; color: var(--text-muted); }
 .orphaned-badge { font-size: 11px; color: #92400e; background: #fef3c7; padding: 1px 6px; border-radius: 6px; }
 .fav-role { font-size: 14px; margin-left: auto; }
 
@@ -113,7 +113,7 @@ onMounted(loadFavorites)
 .fav-time { font-size: 11px; color: #9ca3af; }
 .remove-btn {
   background: none; border: 1px solid #e5e7eb; border-radius: 6px;
-  padding: 4px 10px; font-size: 12px; color: #6b7280; cursor: pointer;
+  padding: 4px 10px; font-size: 12px; color: var(--text-muted); cursor: pointer;
 }
 .remove-btn:hover { border-color: #dc2626; color: #dc2626; }
 </style>

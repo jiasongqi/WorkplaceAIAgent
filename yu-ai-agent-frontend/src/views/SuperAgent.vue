@@ -205,7 +205,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f0f2f5;
+background: var(--glass-bg);
   overflow: hidden;
 }
 
@@ -214,9 +214,9 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 14px 24px;
-  background: #3f51b5;
-  color: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  background: var(--glass-bg);
+  color: var(--text);
+  border-bottom: 0.5px solid var(--border);
 }
 
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; transition: opacity 0.2s; }
@@ -257,18 +257,18 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; flex-shrink: 0;
 }
-.user-avatar { background: #3f51b5; color: white; font-size: 13px; font-weight: bold; }
+.user-avatar { background: var(--glass-bg); color: var(--text); font-size: 13px; font-weight: bold; }
 
-.message-bubble { padding: 12px 16px; border-radius: 16px; max-width: 100%; }
-.ai-bubble { background: white; color: #1f2937; border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-.user-bubble { background: #3f51b5; color: white; border-bottom-right-radius: 4px; }
+.message-bubble { padding: 12px 16px; border-radius: var(--radius); max-width: 100%; }
+.ai-bubble { background: var(--surface); color: var(--text-secondary); border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.user-bubble { background: var(--glass-bg); color: var(--text); border-bottom-right-radius: 4px; }
 
 .message-content { font-size: 15px; line-height: 1.6; word-break: break-word; }
 
 /* marked.js 渲染的 Markdown 元素样式 */
 .ai-bubble :deep(h1),
 .ai-bubble :deep(h2),
-.ai-bubble :deep(h3) { font-weight: 600; margin: 10px 0 6px; color: #111827; }
+.ai-bubble :deep(h3) { font-weight: 600; margin: 10px 0 6px; color: var(--text); }
 .ai-bubble :deep(h1) { font-size: 1.2em; }
 .ai-bubble :deep(h2) { font-size: 1.1em; }
 .ai-bubble :deep(h3) { font-size: 1em; }
@@ -276,14 +276,14 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 .ai-bubble :deep(ul),
 .ai-bubble :deep(ol) { padding-left: 20px; margin: 6px 0; }
 .ai-bubble :deep(li) { margin: 3px 0; }
-.ai-bubble :deep(strong) { font-weight: 600; color: #111827; }
+.ai-bubble :deep(strong) { font-weight: 600; color: var(--text); }
 .ai-bubble :deep(em) { font-style: italic; }
 .ai-bubble :deep(code) {
   background: #f3f4f6; border-radius: 4px;
-  padding: 1px 5px; font-size: 0.88em; font-family: monospace; color: #374151;
+  padding: 1px 5px; font-size: 0.88em; font-family: monospace; color: var(--text-secondary);
 }
 .ai-bubble :deep(pre) {
-  background: #1f2937; border-radius: 8px;
+  background: #1f2937; border-radius: var(--radius-sm);
   padding: 12px 14px; overflow-x: auto; margin: 8px 0;
 }
 .ai-bubble :deep(pre code) {
@@ -291,10 +291,10 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 }
 .ai-bubble :deep(blockquote) {
   border-left: 3px solid #d1d5db; padding-left: 12px;
-  color: #6b7280; margin: 6px 0;
+  color: var(--text-muted); margin: 6px 0;
 }
 .ai-bubble :deep(hr) { border: none; border-top: 1px solid #e5e7eb; margin: 10px 0; }
-.ai-bubble :deep(a) { color: #3f51b5; text-decoration: underline; }
+.ai-bubble :deep(a) { color: var(--glass-bg); text-decoration: underline; }
 .message-time { font-size: 11px; opacity: 0.5; margin-top: 6px; text-align: right; }
 
 .typing-cursor { display: inline-block; animation: blink 0.7s infinite; margin-left: 2px; }
@@ -302,7 +302,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 
 .thinking-bubble { display: flex; align-items: center; gap: 10px; align-self: flex-start; }
 .thinking-dots {
-  background: white; border-radius: 16px; border-bottom-left-radius: 4px;
+  background: var(--surface); border-radius: var(--radius); border-bottom-left-radius: 4px;
   padding: 14px 18px; display: flex; gap: 5px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
@@ -316,18 +316,18 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 
 .input-area {
   display: flex; gap: 12px; padding: 16px 20px;
-  background: white; border-top: 1px solid #e5e7eb; align-items: flex-end;
+  background: var(--surface); border-top: 1px solid #e5e7eb; align-items: flex-end;
 }
 .input-area textarea {
-  flex: 1; border: 1px solid #d1d5db; border-radius: 12px;
+  flex: 1; border: 1px solid #d1d5db; border-radius: var(--radius);
   padding: 10px 14px; font-size: 15px; resize: none; outline: none;
   font-family: inherit; transition: border-color 0.2s; line-height: 1.5;
 }
-.input-area textarea:focus { border-color: #3f51b5; }
+.input-area textarea:focus { border-color: var(--glass-bg); }
 .input-area textarea:disabled { background: #f9fafb; }
 
 .send-btn {
-  background: #3f51b5; color: white; border: none; border-radius: 12px;
+  background: var(--glass-bg); color: var(--text); border: none; border-radius: var(--radius);
   padding: 10px 22px; font-size: 15px; cursor: pointer; transition: all 0.2s;
   white-space: nowrap; height: 44px;
 }
@@ -338,7 +338,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 .progress-panel {
   width: 300px;
   min-width: 300px;
-  background: #1a1f2e;
+background: var(--warning-light);
   display: flex;
   flex-direction: column;
   border-left: 1px solid rgba(255,255,255,0.08);
@@ -348,7 +348,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
 }
-.panel-title { color: white; font-size: 14px; font-weight: 600; }
+.panel-title { color: var(--text); font-size: 14px; font-weight: 600; }
 .step-count { color: rgba(255,255,255,0.4); font-size: 12px; }
 
 .steps-list { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -356,7 +356,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 .step-item {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px; padding: 10px 12px;
+  border-radius: var(--radius-sm); padding: 10px 12px;
 }
 .step-item.done { border-color: rgba(16,185,129,0.3); }
 .step-item.running { border-color: rgba(99,102,241,0.4); animation: pulse 1.5s infinite; }

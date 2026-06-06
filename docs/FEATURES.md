@@ -20,7 +20,13 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L7 记忆压缩   Token/轮数策略 + LLM 摘要
                        └─ L8 黑板协作   交付物货架 + 数据员工 + 用户画像
                        └─ L9 技能系统   YAML 声明式技能热加载
-横切关注点：JWT 鉴权 · 会话归属隔离 · 全局异常处理 · 结构化输出
+                       └─ L10 质量守护  自动审查(Review/RedTeam) + 风险分级 + 审计持久化
+                       └─ L11 收藏系统  消息快照 + orphan 标记
+                       └─ L12 用量追踪  7 种事件 + 多维度统计
+                       └─ L13 导入导出  ZIP 全量备份/恢复
+                       └─ L14 对话搜索  加权评分 + 时间衰减
+                       └─ L15 持久化消息  Source of Truth + 双索引
+横切关注点：JWT 鉴权 · 会话三态生命周期 · 归档/回收站 · AppService 业务编排层 · 全局异常处理 · 结构化输出
 ```
 
 ---
@@ -218,14 +224,110 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 
 ---
 
+## L10 · 质量守护（Quality Guard）
+
+对其他 Agent 的输出进行质量审查，检测事实准确性、幻觉风险和安全隐患。
+
+| 组件 | 职责 |
+|------|------|
+| `QualityGuardAgent` | 审查执行（REVIEW 单次 / RED_TEAM 红队对抗） |
+| `QualityModeResolver` | 模式自动解析（意图 + LLM 风险分类） |
+| `QualityReview` | 审查结果（5 维评分 + 风险等级 + issues + suggestions） |
+| `QualityReviewRepository` | HIGH/CRITICAL 审查持久化（审计告警） |
+
+**审查维度**：accuracyScore(30%)、completenessScore(20%)、logicScore(20%)、hallucinationScore(30%)、riskScore(参考)。
+
+**模式解析**：RESUME/NEGOTIATION/ESCAPE 意图 → REVIEW；其他意图 → LLM 风险分类（LOW→OFF, MEDIUM→REVIEW, HIGH/CRITICAL→RED_TEAM）。
+
+**持久化策略**：仅 HIGH/CRITICAL 风险审查写入 `quality-reviews.json`，普通审查仅记录在 ExecutionTrace。
+
+---
+
+## L11 · 收藏系统（Favorites）
+
+收藏消息快照，即使原消息或会话被删除，收藏内容依然保留。
+
+| 组件 | 职责 |
+|------|------|
+| `Favorite` | 收藏实体（含 contentSnapshot + sessionTitleSnapshot 防丢失） |
+| `FavoriteRepository` | 文件持久化 + orphan 标记（会话删除时自动标记） |
+| `FavoriteAppService` | 业务编排 |
+
+**API**：`POST /api/favorite`（添加）、`DELETE /api/favorite/{id}`（取消）、`GET /api/favorite/list`（列表）。均需 JWT。
+
+---
+
+## L12 · 用量追踪（Usage Tracking）
+
+记录用户操作事件，提供多维度使用统计。
+
+| 事件类型 | 说明 |
+|----------|------|
+| CHAT | 普通对话 |
+| RAG | RAG 知识库查询 |
+| TOOL_CALL | 工具调用 |
+| DOCUMENT_UPLOAD | 文档上传 |
+| EXPORT | 数据导出 |
+| COMPARE | Agent 对比 |
+| QUALITY_REVIEW | 质量审查 |
+
+**统计维度**：totalEvents、eventsByType、eventsByAgent、dailyCounts（近 7 天）、totalDurationMs。
+
+**存储**：`usage-events.json`，append-only。**API**：`GET /api/usage/stats`（JWT）。
+
+---
+
+## L13 · 数据导入导出（Import/Export）
+
+用户数据全量备份（ZIP）与恢复，覆盖会话、消息、收藏三类数据。
+
+| 组件 | 职责 |
+|------|------|
+| `DataExportService` | ZIP 打包导出（sessions + messages + favorites） |
+| `DataImportService` | ZIP 解析 + chatId 冲突处理（自动生成新 ID） |
+| `ExportAppService` | 业务编排 |
+
+**API**：`GET /api/export/all`（ZIP 下载）、`POST /api/export/import`（multipart 上传）。均需 JWT。
+
+---
+
+## L14 · 对话搜索（Chat Search）
+
+跨会话加权搜索，支持标题、用户消息、AI 消息多区域匹配。
+
+**评分模型**：标题权重 100、用户消息 30、AI 消息 20。匹配类型：equals(100) > startsWith(70) > contains(50)。时间衰减：≤1d(+30)、≤7d(+20)、≤30d(+10)。命中次数：count × 10。
+
+**返回**：chatId、title、relevance(0-100)、snippet、bestHit(messageId + offset，前端高亮定位)。
+
+**关键类**：`ChatSearchService` — 内存直扫（万级会话毫秒级），未来可升级 Lucene/ES。
+
+---
+
+## L15 · 持久化消息（Persistent Messages）
+
+对话消息的 **Source of Truth**，所有下游功能（历史、搜索、收藏、导出）基于此模型。
+
+| 组件 | 职责 |
+|------|------|
+| `PersistentChatMessage` | 消息实体（ULID messageId + chatId + role + content + timestamp） |
+| `PersistentMessageRepository` | 双索引持久化（chatIndex + messageIdIndex） |
+| `ChatMemoryAdapter` | Truth ↔ ChatMemory 桥接（写入先持久化再同步缓存，读取先检查一致性） |
+
+**存储**：`{session.storage.dir}/messages/{chatId}.json`，每个会话一个文件。
+
+**压缩支持**：`replaceWithSummary(chatId, summary, keepRecent)` — 压缩时替换旧消息为摘要 + 最近 N 条。
+
+---
+
 ## 横切关注点
 
 | 关注点 | 实现 | 说明 |
 |--------|------|------|
-| 鉴权 | `JwtUtil` | JWT 校验；SSE 接口因 EventSource 不支持自定义头，token 走 URL 参数，兼容 `Authorization` 头 |
-| 会话归属 | `SessionManager` | `chatOwner` 反向索引防止越权访问他人会话；按 userId 管理会话列表 |
+| 鉴权 | `JwtUtil` + `AuthService` | JWT 校验；SSE 接口 token 走 URL 参数，兼容 `Authorization` 头 |
+| 会话三态 | `SessionManager` | ACTIVE / ARCHIVED / DELETED（软删除，30 天物理清理）；`chatOwner` 反向索引防越权 |
+| AppService 编排 | `OrchestratorAppService` 等 | 输入校验、归属检查、用量追踪、编排 Agent/Repository |
 | 异常处理 | `GlobalExceptionHandler` | 全局统一异常响应 |
-| 统一响应 | `common/Result` | 标准化返回结构 |
+| 统一响应 | `common/Response` + `ResultCode` | 标准化返回结构 |
 | 结构化输出 | `AiChatAgent.AiChatReport` | 职场报告结构化（victools jsonschema） |
 | 健康检查 | `HealthController` | 探活 |
 | 跨域 | `CorsConfig` | 前端联调 |
@@ -238,10 +340,14 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 
 | 逻辑"表" | 存储位置（默认） | 负责组件 | 关键字段 |
 |----------|-----------------|----------|----------|
-| 会话 sessions | `./tmp/sessions/sessions.json` | `SessionManager` | chatId、userId、title、createdAt、lastActiveAt；`chatOwner` 反向索引 |
+| 会话 sessions | `./tmp/sessions/sessions.json` | `SessionManager` | chatId、userId、title、status、createdAt、lastActiveAt、archivedAt、deletedAt；`chatOwner` 反向索引 |
+| 消息 messages | `./tmp/sessions/messages/{chatId}.json` | `PersistentMessageRepository` | messageId(ULID)、chatId、role、content、timestamp；双索引 chatIndex + messageIdIndex |
 | 预约 appointments | `./tmp/appointments/` | `AppointmentRepository` | name、contact、appointmentTime、calendarEventId、calendarUrl、provider、status、chatId、createdAt |
 | 交付物 artifacts | `./tmp/artifacts/artifacts.json` | `ArtifactRepository` | artifactId、userId、chatId、type、producer、title、content、status、scope、createdAt、updatedAt |
 | 用户画像 user-profiles | `./tmp/user-profiles/` | `UserProfileRepository` | userId、communicationPreference、tonePreference、focusAreas[]、knownBackground、historicalDemands[]、createdAt、updatedAt |
+| 收藏 favorites | `./tmp/artifacts/favorites.json` | `FavoriteRepository` | favoriteId、userId、chatId、messageId、contentSnapshot、sessionTitleSnapshot、role、orphaned |
+| 质量审查 quality-reviews | `./tmp/artifacts/quality-reviews.json` | `QualityReviewRepository` | reviewId、chatId、mode、5 维评分、riskLevel、issues[]、suggestions[]（仅 HIGH/CRITICAL） |
+| 用量事件 usage-events | `./tmp/artifacts/usage-events.json` | `UsageTracker` | eventId、userId、type、agentType、durationMs、timestamp（append-only） |
 | 对话记忆 chat-memory | 文件（Kryo） | `FileBasedChatMemory` | chatId → List<Message>（按 agent 类型隔离） |
 | 向量库 | PgVector / 内存 | `*VectorStoreConfig` | 文档 embedding + 元数据（filename、status） |
 
@@ -256,6 +362,10 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | `AnalysisSource` | CONVERSATION、UPLOADED_DOCUMENT |
 | `AppointmentStatus` | PENDING、CONFIRMED、COMPLETED、CANCELLED、FAILED |
 | `CalendarProvider` | FEISHU、DINGTALK |
+| `SessionStatus` | ACTIVE、ARCHIVED、DELETED |
+| `QualityMode` | OFF、AUTO、REVIEW、RED_TEAM |
+| `RiskLevel` | LOW、MEDIUM、HIGH、CRITICAL |
+| `UsageEventType` | CHAT、RAG、TOOL_CALL、DOCUMENT_UPLOAD、EXPORT、COMPARE、QUALITY_REVIEW |
 
 ---
 
@@ -291,6 +401,9 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | 文档入库 | POST | `/api/document/upload` · `/api/document/add` |
 | 用户画像 | GET/DELETE | `/api/profile/me`（JWT） |
 | 交付物 | GET | `/api/artifact/list` · `/api/artifact/{id}`（管理员） |
-| 会话 | - | `SessionController`（增删查会话） |
-| API 文档 | - | `/api/swagger-ui.html`（Knife4j） |
+|| 会话 | - | `SessionController`（增删查/归档/搜索/消息历史） |
+|| 收藏 | POST/DELETE/GET | `/api/favorite` · `/api/favorite/{id}` · `/api/favorite/list`（JWT） |
+|| 用量 | GET | `/api/usage/stats`（JWT） |
+|| 导入导出 | GET/POST | `/api/export/all` · `/api/export/import`（JWT） |
+|| API 文档 | - | `/api/swagger-ui.html`（Knife4j） |
 ```

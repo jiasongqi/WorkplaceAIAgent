@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkPilot — AI 职业教练</title>
+<style>
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --border: rgba(0,0,0,0.06);
+  --text: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #aeaeb2;
+  --primary: #6366f1;
+  --primary-light: #ede9fe;
+  --primary-muted: rgba(99,102,241,0.12);
+  --success: #10b981;
+  --success-light: #d1fae5;
+  --warning: #f59e0b;
+  --warning-light: #fef3c7;
+  --danger: #ef4444;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dot grid background */
+.dot-bg {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Topbar */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 0.5px solid var(--border);
+  padding: 0 32px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topbar-left { display: flex; align-items: center; gap: 24px; }
+.brand { font-size: 16px; font-weight: 700; letter-spacing: -0.5px; }
+.brand span { color: var(--primary); }
+.topbar-nav { display: flex; gap: 4px; }
+.nav-item {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.nav-item:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+.nav-item.active { background: var(--primary-muted); color: var(--primary); }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.avatar-sm {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: #fff; font-weight: 600;
+}
+
+/* Main */
+.main { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+
+/* Hero */
+.hero { text-align: center; margin-bottom: 40px; }
+.hero-title {
+  font-size: 32px; font-weight: 700; letter-spacing: -1px;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #1d1d1f, #6366f1);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hero-sub { font-size: 15px; color: var(--text-2); line-height: 1.6; }
+
+/* Input box */
+.input-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 48px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+.input-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-muted), 0 2px 12px rgba(0,0,0,0.04);
+}
+.input-box input {
+  flex: 1; border: none; outline: none;
+  font-size: 15px; color: var(--text);
+  background: transparent;
+}
+.input-box input::placeholder { color: var(--text-3); }
+.send-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.send-btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+
+/* Section label */
+.section-label {
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 14px;
+}
+
+/* Capability grid */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 48px;
+}
+.cap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.cap-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--cap-color, var(--primary));
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.cap-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+}
+.cap-card:hover::before { opacity: 1; }
+.cap-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 10px;
+}
+.cap-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.cap-desc { font-size: 11px; color: var(--text-2); line-height: 1.4; }
+
+/* Deliverables */
+.deliverables { margin-bottom: 48px; }
+.deliverable-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.deliverable-item:hover {
+  border-color: var(--primary);
+  transform: translateX(4px);
+}
+.del-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.del-info { flex: 1; min-width: 0; }
+.del-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.del-meta { font-size: 11px; color: var(--text-3); }
+.del-status {
+  font-size: 10px; padding: 2px 8px; border-radius: 6px;
+  font-weight: 500; flex-shrink: 0;
+}
+
+/* Profile card */
+.profile-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 48px;
+}
+.profile-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+}
+.profile-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #ec4899);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: #fff; font-weight: 600;
+}
+.profile-name { font-size: 15px; font-weight: 600; }
+.profile-sessions { font-size: 12px; color: var(--text-3); }
+.profile-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-tag {
+  font-size: 11px; padding: 4px 10px; border-radius: 6px;
+  background: var(--primary-light); color: var(--primary);
+  font-weight: 500;
+}
+
+/* Stats row */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 48px;
+}
+.stat-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  text-align: center;
+}
+.stat-num { font-size: 24px; font-weight: 700; color: var(--primary); }
+.stat-label { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .cap-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-row { grid-template-columns: repeat(3, 1fr); }
+  .hero-title { font-size: 24px; }
+  .main { padding: 24px 16px 60px; }
+}
+</style>
+</head>
+<body class="dot-bg">
+
+<!-- Topbar -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="brand"><span>Work</span>Pilot</div>
+    <nav class="topbar-nav">
+      <a class="nav-item active">首页</a>
+      <a class="nav-item">对话</a>
+      <a class="nav-item">成果</a>
+      <a class="nav-item">知识库</a>
+    </nav>
+  </div>
+  <div class="topbar-right">
+    <div class="avatar-sm">宋</div>
+  </div>
+</header>
+
+<!-- Main content -->
+<main class="main">
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1 class="hero-title">你的 AI 职业教练</h1>
+    <p class="hero-sub">越用越懂你，每次对话都有产出</p>
+  </section>
+
+  <!-- Input -->
+  <div class="input-box">
+    <input type="text" placeholder="描述你的职业困惑，例如：帮我优化简历..." />
+    <button class="send-btn">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 8H13M10 5L13 8L10 11" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Capabilities -->
+  <div class="section-label">我能帮你做什么</div>
+  <div class="cap-grid">
+    <div class="cap-card" style="--cap-color: #6366f1;">
+      <div class="cap-icon" style="background: #ede9fe;">📄</div>
+      <div class="cap-name">简历优化</div>
+      <div class="cap-desc">分析简历问题，给出修改建议</div>
+    </div>
+    <div class="cap-card" style="--cap-color: #10b981;">
+      <div class="cap-icon" style="background: #d1fae5;">💰</div>
+      <div class="cap-name">谈薪策略</div>
+      <div class="cap-desc">薪资分析，谈判话术</div>
+    </div>
+    <div class="cap-card" style="--cap-color: #f59e0b;">
+      <div class="cap-icon" style="background: #fef3c7;">🚪</div>
+      <div class="cap-name">离职规划</div>
+      <div class="cap-desc">离职时机，交接方案</div>
+    </div>
+    <div class="cap-card" style="--cap-color: #3b82f6;">
+      <div class="cap-icon" style="background: #dbeafe;">📊</div>
+      <div class="cap-name">行业调研</div>
+      <div class="cap-desc">行业趋势，岗位分析</div>
+    </div>
+    <div class="cap-card" style="--cap-color: #ec4899;">
+      <div class="cap-icon" style="background: #fce7f3;">🎯</div>
+      <div class="cap-name">面试准备</div>
+      <div class="cap-desc">模拟面试，高频问题</div>
+    </div>
+    <div class="cap-card" style="--cap-color: #8b5cf6;">
+      <div class="cap-icon" style="background: #ede9fe;">📅</div>
+      <div class="cap-name">预约咨询</div>
+      <div class="cap-desc">连接人类职业顾问</div>
+    </div>
+  </div>
+
+  <!-- Recent deliverables -->
+  <div class="section-label">最近成果</div>
+  <div class="deliverables">
+    <div class="deliverable-item">
+      <div class="del-icon" style="background: #ede9fe;">📄</div>
+      <div class="del-info">
+        <div class="del-name">简历修改建议 — 高级 Java 工程师</div>
+        <div class="del-meta">2 小时前 · 简历类</div>
+      </div>
+      <div class="del-status" style="background: #d1fae5; color: #059669;">已完成</div>
+    </div>
+    <div class="deliverable-item">
+      <div class="del-icon" style="background: #fef3c7;">💰</div>
+      <div class="del-info">
+        <div class="del-name">薪资谈判话术 — 30% 涨幅方案</div>
+        <div class="del-meta">昨天 · 谈薪类</div>
+      </div>
+      <div class="del-status" style="background: #d1fae5; color: #059669;">已完成</div>
+    </div>
+    <div class="deliverable-item">
+      <div class="del-icon" style="background: #dbeafe;">📊</div>
+      <div class="del-info">
+        <div class="del-name">AI Agent 行业调研报告</div>
+        <div class="del-meta">进行中 · 调研类</div>
+      </div>
+      <div class="del-status" style="background: #ede9fe; color: #6366f1;">生成中</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="section-label">我的数据</div>
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-num">23</div>
+      <div class="stat-label">对话次数</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">8</div>
+      <div class="stat-label">交付物</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">5</div>
+      <div class="stat-label">知识文档</div>
+    </div>
+  </div>
+
+  <!-- Profile -->
+  <div class="section-label">你的画像</div>
+  <div class="profile-card">
+    <div class="profile-header">
+      <div class="profile-avatar">宋</div>
+      <div>
+        <div class="profile-name">宋奇</div>
+        <div class="profile-sessions">已对话 23 次 · 上次 2 小时前</div>
+      </div>
+    </div>
+    <div class="profile-tags">
+      <span class="profile-tag">沟通风格：直接型</span>
+      <span class="profile-tag">关注领域：技术管理</span>
+      <span class="profile-tag">核心诉求：跳槽</span>
+      <span class="profile-tag">行业：互联网</span>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

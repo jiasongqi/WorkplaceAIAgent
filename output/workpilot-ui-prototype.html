@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WorkPilot UI Prototype</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f9fafc;
+      --surface-tint: #eef2ff;
+      --text: #151924;
+      --text-secondary: #4b5565;
+      --text-muted: #858b9a;
+      --line: #e7e9f0;
+      --line-strong: #d8dce8;
+      --primary: #635bff;
+      --primary-dark: #5148e5;
+      --primary-soft: #eef0ff;
+      --success: #15a46d;
+      --warning: #d97706;
+      --danger: #dc3545;
+      --sidebar: #10131f;
+      --sidebar-2: #171b2a;
+      --sidebar-text: rgba(255,255,255,.64);
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --shadow-card: 0 18px 45px rgba(17, 24, 39, .07);
+      --shadow-soft: 0 10px 30px rgba(99, 91, 255, .12);
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at 28% 6%, rgba(99,91,255,.12), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(34,197,94,.08), transparent 26%),
+        linear-gradient(180deg, #fbfcff 0%, var(--bg) 48%, #f3f5fa 100%);
+      min-height: 100vh;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button, input { font: inherit; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 264px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background: linear-gradient(180deg, var(--sidebar) 0%, var(--sidebar-2) 100%);
+      border-right: 1px solid rgba(255,255,255,.08);
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 8px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #6d66ff, #8f7cff 54%, #2dd4bf);
+      box-shadow: 0 12px 32px rgba(99,91,255,.45);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 800;
+      letter-spacing: -.04em;
+    }
+
+    .brand-name { color: #fff; font-size: 15px; font-weight: 720; letter-spacing: -.02em; }
+    .brand-meta { margin-top: 2px; color: rgba(255,255,255,.42); font-size: 11px; }
+
+    .nav-group { display: flex; flex-direction: column; gap: 6px; }
+    .nav-title {
+      color: rgba(255,255,255,.32);
+      font-size: 11px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 10px 4px;
+    }
+
+    .nav-item {
+      height: 40px;
+      border-radius: 12px;
+      color: var(--sidebar-text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 11px;
+      font-size: 13px;
+      font-weight: 560;
+      transition: .18s ease;
+    }
+
+    .nav-item svg { opacity: .74; }
+    .nav-item.active {
+      color: #fff;
+      background: rgba(255,255,255,.105);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+    .nav-item:hover { background: rgba(255,255,255,.075); color: #fff; }
+
+    .sidebar-card {
+      margin-top: auto;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.055);
+      border-radius: 18px;
+      padding: 14px;
+      color: #fff;
+    }
+    .sidebar-card .small { color: rgba(255,255,255,.52); font-size: 12px; line-height: 1.6; }
+    .quota {
+      height: 7px;
+      margin: 12px 0 8px;
+      background: rgba(255,255,255,.12);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .quota span { display: block; width: 68%; height: 100%; background: linear-gradient(90deg, #6d66ff, #2dd4bf); border-radius: inherit; }
+
+    .main { min-width: 0; padding: 26px 34px 36px; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .breadcrumb { color: var(--text-muted); font-size: 13px; }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .search {
+      width: 280px;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.76);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      color: var(--text-muted);
+      box-shadow: 0 8px 28px rgba(17,24,39,.04);
+    }
+    .search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 13px; }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #fff;
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-weight: 760;
+      color: var(--primary);
+      box-shadow: 0 8px 28px rgba(17,24,39,.06);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      border: 1px solid rgba(99,91,255,.14);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.82)),
+        radial-gradient(circle at 78% 20%, rgba(99,91,255,.22), transparent 28%),
+        radial-gradient(circle at 86% 86%, rgba(45,212,191,.16), transparent 30%);
+      box-shadow: var(--shadow-card);
+      padding: 28px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) 380px;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      font-size: 12px;
+      font-weight: 680;
+      margin-bottom: 14px;
+    }
+    .pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 5px rgba(34,197,94,.13);
+    }
+    h1 {
+      margin: 0;
+      max-width: 680px;
+      font-size: 36px;
+      line-height: 1.16;
+      letter-spacing: -.045em;
+    }
+    .hero p {
+      margin: 12px 0 0;
+      max-width: 610px;
+      color: var(--text-secondary);
+      line-height: 1.75;
+      font-size: 15px;
+    }
+
+    .composer {
+      margin-top: 24px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 16px 40px rgba(99,91,255,.10);
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .composer input {
+      min-width: 0;
+      flex: 1;
+      height: 42px;
+      border: 0;
+      outline: 0;
+      padding: 0 8px;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .primary-btn {
+      border: 0;
+      height: 42px;
+      padding: 0 16px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), #7c6cff);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+      white-space: nowrap;
+    }
+
+    .hero-panel {
+      border-radius: 24px;
+      border: 1px solid rgba(99,91,255,.12);
+      background: rgba(255,255,255,.72);
+      backdrop-filter: blur(16px);
+      padding: 18px;
+    }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .panel-title { font-weight: 760; letter-spacing: -.02em; }
+    .tag { font-size: 12px; color: var(--success); background: rgba(21,164,109,.1); padding: 5px 9px; border-radius: 999px; font-weight: 680; }
+    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric {
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 13px;
+    }
+    .metric strong { display: block; font-size: 22px; letter-spacing: -.04em; }
+    .metric span { color: var(--text-muted); font-size: 12px; }
+    .activity { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .activity-row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 14px; background: #fff; border: 1px solid var(--line); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 5px rgba(99,91,255,.1); }
+    .activity-row:nth-child(2) .dot { background: var(--success); box-shadow: 0 0 0 5px rgba(21,164,109,.1); }
+    .activity-row:nth-child(3) .dot { background: var(--warning); box-shadow: 0 0 0 5px rgba(217,119,6,.1); }
+    .activity-text { min-width: 0; flex: 1; }
+    .activity-text b { display: block; font-size: 13px; font-weight: 680; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .activity-text small { color: var(--text-muted); }
+
+    .section-row {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      margin: 24px 0 12px;
+    }
+    .section-row h2 { margin: 0; font-size: 18px; letter-spacing: -.03em; }
+    .section-row p { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; }
+    .link-btn { color: var(--primary); font-weight: 700; font-size: 13px; }
+
+    .agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .agent-card {
+      position: relative;
+      overflow: hidden;
+      background: rgba(255,255,255,.88);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 12px 35px rgba(17,24,39,.045);
+      transition: .2s ease;
+    }
+    .agent-card:hover { transform: translateY(-3px); border-color: rgba(99,91,255,.34); box-shadow: var(--shadow-card); }
+    .agent-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 15px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+    .agent-card.green .agent-icon { background: rgba(21,164,109,.10); color: var(--success); }
+    .agent-card.orange .agent-icon { background: rgba(217,119,6,.10); color: var(--warning); }
+    .agent-card h3 { margin: 0; font-size: 15px; letter-spacing: -.02em; }
+    .agent-card p { margin: 7px 0 16px; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .chip { padding: 5px 8px; border-radius: 999px; background: var(--surface-soft); border: 1px solid var(--line); color: var(--text-secondary); font-size: 11px; font-weight: 620; }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .card {
+      background: rgba(255,255,255,.88);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 12px 35px rgba(17,24,39,.045);
+      padding: 16px;
+    }
+    .card-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .card-title b { font-size: 15px; letter-spacing: -.02em; }
+
+    .task-list { display: flex; flex-direction: column; gap: 8px; }
+    .task {
+      display: grid;
+      grid-template-columns: 9px minmax(0,1fr) auto auto;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 12px;
+      border-radius: 15px;
+      border: 1px solid transparent;
+      background: var(--surface-soft);
+    }
+    .task:hover { background: #fff; border-color: var(--line-strong); }
+    .status { width: 9px; height: 9px; border-radius: 50%; background: var(--success); }
+    .status.running { background: var(--primary); box-shadow: 0 0 0 5px rgba(99,91,255,.1); }
+    .status.warn { background: var(--warning); }
+    .task-name { min-width: 0; }
+    .task-name b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-name small { color: var(--text-muted); }
+    .task-type { padding: 5px 9px; border-radius: 999px; background: #fff; border: 1px solid var(--line); color: var(--text-secondary); font-size: 12px; font-weight: 650; }
+    .time { color: var(--text-muted); font-size: 12px; }
+
+    .insight-list { display: flex; flex-direction: column; gap: 10px; }
+    .insight {
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--surface-soft);
+      padding: 13px;
+    }
+    .insight b { display: block; font-size: 13px; margin-bottom: 5px; }
+    .insight span { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+
+    @media (max-width: 1120px) {
+      .hero { grid-template-columns: 1fr; }
+      .content-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 860px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; }
+      .main { padding: 22px 18px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .search { width: 100%; }
+      .agent-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+      .metric-grid { grid-template-columns: 1fr; }
+      .task { grid-template-columns: 9px minmax(0,1fr); }
+      .task-type, .time { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">W</div>
+        <div>
+          <div class="brand-name">WorkPilot</div>
+          <div class="brand-meta">AI 工作台 · Beta</div>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-title">Main</div>
+        <a class="nav-item active" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>工作台</a>
+        <a class="nav-item" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>职场顾问</a>
+        <a class="nav-item" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>超级智能体</a>
+        <a class="nav-item" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>知识库</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-title">Data</div>
+        <a class="nav-item" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>交付物</a>
+        <a class="nav-item" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>收藏</a>
+        <a class="nav-item" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>用量</a>
+      </div>
+
+      <div class="sidebar-card">
+        <b>本月 Agent 用量</b>
+        <div class="quota"><span></span></div>
+        <div class="small">已使用 68%，当前运行稳定。建议将高频工作沉淀为模板。</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="breadcrumb">工作台 / 今日概览</div>
+        </div>
+        <div class="top-actions">
+          <label class="search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input placeholder="搜索任务、交付物或知识库" />
+          </label>
+          <div class="avatar">琪</div>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div>
+          <div class="eyebrow"><span class="pulse"></span>Agent 在线 · 可处理复杂工作流</div>
+          <h1>你好，小琪。把任务交给 WorkPilot，聚焦更重要的决策。</h1>
+          <p>统一后的界面采用低噪音背景、单一主色、清晰卡片层级和一致的圆角/阴影体系，减少原先多风格混用带来的视觉割裂。</p>
+          <div class="composer">
+            <input value="帮我分析这份前端界面哪里风格不统一，并给出优化方案" />
+            <button class="primary-btn">启动任务</button>
+          </div>
+        </div>
+        <div class="hero-panel">
+          <div class="panel-head">
+            <div class="panel-title">今日状态</div>
+            <span class="tag">运行正常</span>
+          </div>
+          <div class="metric-grid">
+            <div class="metric"><strong>18</strong><span>知识文档</span></div>
+            <div class="metric"><strong>7</strong><span>交付物</span></div>
+            <div class="metric"><strong>12</strong><span>收藏</span></div>
+          </div>
+          <div class="activity">
+            <div class="activity-row"><span class="dot"></span><div class="activity-text"><b>界面重构建议生成中</b><small>超级智能体 · 2分钟前</small></div></div>
+            <div class="activity-row"><span class="dot"></span><div class="activity-text"><b>简历优化报告已完成</b><small>职场顾问 · 36分钟前</small></div></div>
+            <div class="activity-row"><span class="dot"></span><div class="activity-text"><b>知识库新增 3 篇文档</b><small>文档解析 · 今天</small></div></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="section-row">
+        <div>
+          <h2>常用智能体</h2>
+          <p>统一图标容器、标签样式和描述信息密度。</p>
+        </div>
+        <a class="link-btn" href="#">管理智能体</a>
+      </div>
+
+      <section class="agent-grid">
+        <article class="agent-card">
+          <div class="agent-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <h3>职场顾问</h3>
+          <p>覆盖简历、面试、谈薪、离职等职场高频场景。</p>
+          <div class="chips"><span class="chip">简历</span><span class="chip">面试</span><span class="chip">谈薪</span></div>
+        </article>
+        <article class="agent-card green">
+          <div class="agent-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <h3>超级智能体</h3>
+          <p>面向研究、写作、分析和多工具调用的通用执行器。</p>
+          <div class="chips"><span class="chip">研究</span><span class="chip">写作</span><span class="chip">分析</span></div>
+        </article>
+        <article class="agent-card orange">
+          <div class="agent-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+          <h3>知识库问答</h3>
+          <p>基于上传文档回答问题，沉淀团队知识资产。</p>
+          <div class="chips"><span class="chip">文档</span><span class="chip">检索</span><span class="chip">问答</span></div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <div class="card">
+          <div class="card-title"><b>最近任务</b><a class="link-btn" href="#">查看全部</a></div>
+          <div class="task-list">
+            <div class="task"><span class="status running"></span><div class="task-name"><b>前端界面风格统一诊断</b><small>识别设计 token、组件一致性与信息层级问题</small></div><span class="task-type">设计优化</span><span class="time">进行中</span></div>
+            <div class="task"><span class="status"></span><div class="task-name"><b>生成一版 HTML 原型</b><small>用于快速评审视觉方向和页面结构</small></div><span class="task-type">交付物</span><span class="time">刚刚</span></div>
+            <div class="task"><span class="status warn"></span><div class="task-name"><b>知识库文档结构整理</b><small>建议补充标签、来源和更新时间字段</small></div><span class="task-type">知识库</span><span class="time">1小时前</span></div>
+          </div>
+        </div>
+        <aside class="card">
+          <div class="card-title"><b>设计统一建议</b></div>
+          <div class="insight-list">
+            <div class="insight"><b>1. 固定一套主视觉</b><span>使用深色侧栏 + 浅色内容区 + 紫色主色，避免红/绿/蓝大面积抢占。</span></div>
+            <div class="insight"><b>2. 组件统一规格</b><span>卡片圆角 22px，按钮圆角 14px，列表圆角 15px，减少形态跳变。</span></div>
+            <div class="insight"><b>3. 信息层级清晰</b><span>首页先放任务输入和概览，再放智能体与最近任务，符合工作台使用路径。</span></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

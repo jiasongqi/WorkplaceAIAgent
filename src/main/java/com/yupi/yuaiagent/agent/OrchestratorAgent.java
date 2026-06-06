@@ -8,6 +8,7 @@ import com.yupi.yuaiagent.artifact.model.ArtifactStatus;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.config.FollowUpTemplateConfig;
+import com.yupi.yuaiagent.message.ChatMemoryAdapter;
 import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.quality.*;
 import com.yupi.yuaiagent.rag.QueryRewriter;
@@ -78,6 +79,7 @@ public class OrchestratorAgent {
     private final ArtifactShelf artifactShelf;
     private final TraceRecorder traceRecorder;
     private final TraceRepository traceRepository;
+    private final ChatMemoryAdapter chatMemoryAdapter;
     private final QualityGuardAgent qualityGuardAgent;
     private final QualityModeResolver qualityModeResolver;
     private final QualityReviewRepository qualityReviewRepository;
@@ -98,6 +100,7 @@ public class OrchestratorAgent {
                              ArtifactShelf artifactShelf,
                              TraceRecorder traceRecorder,
                              TraceRepository traceRepository,
+                             ChatMemoryAdapter chatMemoryAdapter,
                              QualityGuardAgent qualityGuardAgent,
                              QualityModeResolver qualityModeResolver,
                              QualityReviewRepository qualityReviewRepository) {
@@ -118,6 +121,7 @@ public class OrchestratorAgent {
         this.artifactShelf = artifactShelf;
         this.traceRecorder = traceRecorder;
         this.traceRepository = traceRepository;
+        this.chatMemoryAdapter = chatMemoryAdapter;
         this.qualityGuardAgent = qualityGuardAgent;
         this.qualityModeResolver = qualityModeResolver;
         this.qualityReviewRepository = qualityReviewRepository;
@@ -371,6 +375,14 @@ public class OrchestratorAgent {
                     // Quality Guard review
                     String fullAnswer = answerCollector.toString();
                     runQualityReview(message, fullAnswer, chatId, intent, traceCtx, emitter);
+
+                    // Persist messages to PersistentMessageRepository (Source of Truth)
+                    try {
+                        chatMemoryAdapter.addUserMessage(chatId, message);
+                        chatMemoryAdapter.addAssistantMessage(chatId, fullAnswer);
+                    } catch (Exception e) {
+                        log.error("Failed to persist messages to PersistentMessageRepository", e);
+                    }
 
                     traceRecorder.endTrace(traceCtx);
                     traceCtx.markSseClosed();

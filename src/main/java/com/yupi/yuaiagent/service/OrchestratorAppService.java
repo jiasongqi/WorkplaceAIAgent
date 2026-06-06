@@ -2,7 +2,11 @@ package com.yupi.yuaiagent.service;
 
 import com.yupi.yuaiagent.agent.OrchestratorAgent;
 import com.yupi.yuaiagent.exception.BusinessException;
+import com.yupi.yuaiagent.usage.UsageEventType;
+import com.yupi.yuaiagent.usage.UsageTracker;
 import com.yupi.yuaiagent.session.SessionManager;
+import com.yupi.yuaiagent.usage.UsageEventType;
+import com.yupi.yuaiagent.usage.UsageTracker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +29,7 @@ public class OrchestratorAppService {
 
     private final OrchestratorAgent orchestratorAgent;
     private final SessionManager sessionManager;
+    private final UsageTracker usageTracker;
 
     /**
      * Starts a streaming chat via OrchestratorAgent.
@@ -50,6 +55,12 @@ public class OrchestratorAppService {
 
         // Update session title from first message
         sessionManager.updateTitle(chatId, message);
+
+        // Track usage
+        usageTracker.track(userId, UsageEventType.CHAT, null, 0);
+
+        // Track usage
+        usageTracker.track(userId, UsageEventType.CHAT, null, 0);
 
         // Delegate to OrchestratorAgent
         String requestId = UUID.randomUUID().toString().replace("-", "");

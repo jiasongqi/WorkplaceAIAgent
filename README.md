@@ -125,45 +125,194 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 - ⭐️ 对话记忆压缩（Token/轮数策略）
 - ⭐️ 模板化追问机制
 - ⭐️ 文件持久化存储（JSON）
+- ⭐️ 质量守护（Review/RedTeam 自动审查 + 风险分级）
+- ⭐️ 收藏系统（消息快照 + orphan 标记）
+- ⭐️ 用量追踪（7 种事件类型 + 多维度统计）
+- ⭐️ 数据导入导出（ZIP 全量备份/恢复）
+- ⭐️ 对话搜索（加权评分 + 时间衰减）
+- ⭐️ 持久化消息（Source of Truth + 双索引）
+- ⭐️ 会话三态生命周期（ACTIVE/ARCHIVED/DELETED）
 
 ## 项目结构
 
 ```
 src/main/java/com/yupi/yuaiagent/
-├── agent/                      # Agent 相关
-│   ├── model/                  # 数据模型
-│   │   ├── Appointment.java    # 预约记录实体
-│   │   ├── CoreInformation.java # 核心信息实体
-│   │   └── FollowUpQuestion.java # 追问问题实体
-│   ├── AgentIntent.java        # 意图枚举（含 CONSULTATION）
-│   ├── ConsultationAgent.java  # 🆕 预约咨询 Agent
-│   ├── OrchestratorAgent.java  # 主控 Agent（路由分发）
-│   ├── ResumeAgent.java        # 简历优化 Agent
-│   ├── NegotiationAgent.java   # 薪资谈判 Agent
-│   ├── EscapeAgent.java        # 离职规划 Agent
-│   └── GeneralCareerAgent.java # 通用职场 Agent
-├── calendar/                   # 🆕 日历服务
-│   ├── CalendarService.java    # 日历服务接口
-│   ├── CalendarEvent.java      # 日历事件模型
-│   ├── CalendarServiceFactory.java # 日历服务工厂
-│   ├── FeishuCalendarService.java  # 飞书日历实现
-│   └── DingTalkCalendarService.java # 钉钉日历实现
-├── chatmemory/                 # 🆕 对话记忆管理
-│   ├── ChatMemoryManager.java  # 记忆管理器（增强版）
-│   ├── FileBasedChatMemory.java # 文件记忆（增强版）
-│   ├── CompressionStrategy.java # 压缩策略接口
-│   ├── TokenCompressionStrategy.java # Token 压缩策略
-│   ├── TurnCompressionStrategy.java  # 轮数压缩策略
-│   └── MemoryCompressor.java   # 记忆压缩器
-├── config/                     # 🆕 配置类
-│   └── FollowUpTemplateConfig.java # 追问模板配置
-├── repository/                 # 🆕 数据存储
-│   └── AppointmentRepository.java # 预约记录存储
-├── validation/                 # 🆕 验证器
-│   └── InfoValidator.java      # 信息验证器
-├── controller/                 # 控制器
-│   └── AiController.java       # AI 接口（已更新）
-└── ...
+├── agent/                          # Agent 层
+│   ├── model/                      # Agent 数据模型
+│   │   ├── AgentState.java         # 智能体状态机
+│   │   ├── Appointment.java        # 预约记录实体
+│   │   ├── CoreInformation.java    # 核心信息实体
+│   │   ├── CoreInfoType.java       # 核心信息类型枚举
+│   │   ├── FollowUpQuestion.java   # 追问问题实体
+│   │   └── CompressedMemory.java   # 压缩记忆模型
+│   ├── data/                       # 数据员工 Agent 族
+│   │   ├── DataEmployeeAgent.java  # 数据员工基类（模板方法）
+│   │   ├── DataAnalystAgent.java   # 数据分析师
+│   │   ├── CareerCoachAgent.java   # 岗位辅导
+│   │   ├── ProfileCuratorAgent.java# 用户画像整理
+│   │   ├── PromotionPlannerAgent.java    # 晋升路径规划
+│   │   ├── LearningResourceRecommenderAgent.java # 学习资源推荐
+│   │   ├── ProductionResult.java   # 生产结果
+│   │   ├── ProductionContext.java  # 生产上下文
+│   │   ├── AnalysisReport.java     # 分析报告
+│   │   └── AnalysisSource.java     # 分析来源枚举
+│   ├── AgentIntent.java            # 意图枚举
+│   ├── BaseAgent.java              # Agent 基类
+│   ├── ReActAgent.java             # ReAct 思考-行动循环
+│   ├── ToolCallAgent.java          # 工具调用 Agent
+│   ├── OrchestratorAgent.java      # 主控 Agent（路由分发）
+│   ├── ConsultationAgent.java      # 预约咨询 Agent
+│   ├── ResumeAgent.java            # 简历优化 Agent
+│   ├── NegotiationAgent.java       # 薪资谈判 Agent
+│   ├── EscapeAgent.java            # 离职规划 Agent
+│   ├── GeneralCareerAgent.java     # 通用职场 Agent
+│   └── YuManus.java                # 超级智能体（工具调用）
+├── controller/                     # Controller 层（HTTP 适配）
+│   ├── AiController.java           # AI 对话接口
+│   ├── TraceController.java        # 执行轨迹查询
+│   ├── SessionController.java      # 会话管理（CRUD/归档/搜索/消息）
+│   ├── ProfileController.java      # 用户画像
+│   ├── ArtifactController.java     # 交付物管理
+│   ├── DocumentController.java     # 文档管理（上传/列表/删除）
+│   ├── FavoriteController.java     # 收藏管理
+│   ├── UsageController.java        # 用量统计
+│   ├── ExportController.java       # 数据导入导出
+│   └── HealthController.java       # 健康检查
+├── service/                        # AppService 层（业务编排）
+│   ├── OrchestratorAppService.java # 智能路由编排（校验/归属/追踪）
+│   ├── SessionAppService.java      # 会话业务（CRUD/归档/搜索/消息）
+│   ├── FavoriteAppService.java     # 收藏业务
+│   ├── ExportAppService.java       # 导入导出业务
+│   └── DocumentAppService.java     # 文档业务
+├── artifact/                       # 交付物货架
+│   ├── model/                      # 交付物模型
+│   │   ├── Artifact.java           # 交付物实体
+│   │   ├── ArtifactStatus.java     # 状态枚举
+│   │   ├── ArtifactScope.java      # 作用域枚举
+│   │   ├── ArtifactQuery.java      # 查询条件
+│   │   └── ArtifactSummary.java    # 摘要
+│   ├── ArtifactShelf.java          # 货架（存取编排）
+│   └── ArtifactRepository.java     # 文件持久化
+├── profile/                        # 用户画像系统
+│   ├── model/
+│   │   ├── UserProfile.java        # 画像实体
+│   │   └── CommunicationPreference.java # 沟通偏好枚举
+│   ├── UserProfileService.java     # 画像编排
+│   ├── UserProfileExtractor.java   # LLM 提取器
+│   ├── ProfilePromptBuilder.java   # 提示词注入
+│   └── UserProfileRepository.java  # 画像持久化
+├── quality/                        # 质量守护
+│   ├── QualityGuardAgent.java      # 审查执行（REVIEW/RED_TEAM）
+│   ├── QualityModeResolver.java    # 模式自动解析
+│   ├── QualityReview.java          # 审查结果
+│   ├── QualityReviewRepository.java# 高风险审查持久化
+│   ├── QualityMode.java            # 审查模式枚举
+│   └── RiskLevel.java              # 风险等级枚举
+├── favorite/                       # 收藏系统
+│   ├── Favorite.java               # 收藏实体（含快照）
+│   └── FavoriteRepository.java     # 文件持久化 + orphan 标记
+├── usage/                          # 用量追踪
+│   ├── UsageTracker.java           # 事件记录 + 统计聚合
+│   ├── UsageEvent.java             # 事件实体
+│   └── UsageEventType.java         # 事件类型枚举
+├── export/                         # 数据导入导出
+│   ├── DataExportService.java      # ZIP 打包导出
+│   └── DataImportService.java      # ZIP 解析 + 冲突处理
+├── search/                         # 对话搜索
+│   └── ChatSearchService.java      # 加权搜索引擎
+├── message/                        # 持久化消息（Source of Truth）
+│   ├── PersistentChatMessage.java  # 消息实体（ULID）
+│   ├── PersistentMessageRepository.java # 双索引持久化
+│   └── ChatMemoryAdapter.java      # Truth ↔ ChatMemory 桥接
+├── session/                        # 会话管理
+│   ├── SessionManager.java         # 三态会话（ACTIVE/ARCHIVED/DELETED）
+│   └── SessionStatus.java          # 会话状态枚举
+├── trace/                          # 执行轨迹
+│   ├── model/                      # 轨迹模型
+│   │   ├── ExecutionTrace.java     # 轨迹实体
+│   │   ├── TraceSpan.java          # 步骤实体
+│   │   ├── TraceStepType.java      # 步骤类型枚举（10 种）
+│   │   ├── TraceStepStatus.java    # 步骤状态枚举
+│   │   ├── TraceStatus.java        # 轨迹状态枚举
+│   │   └── TraceConstants.java     # 常量
+│   ├── TraceRecorder.java          # 采集门面
+│   ├── TraceContext.java           # 请求级上下文
+│   ├── TraceStreamPublisher.java   # SSE 推送
+│   ├── TraceRepository.java        # 文件持久化 + 保留策略
+│   └── TraceProperties.java        # 配置属性
+├── chatmemory/                     # 对话记忆管理
+│   ├── ChatMemoryManager.java      # 记忆管理编排
+│   ├── FileBasedChatMemory.java    # 文件持久化（Kryo）
+│   ├── CompressionStrategy.java    # 压缩策略接口
+│   ├── TokenCompressionStrategy.java # Token 阈值策略
+│   ├── TurnCompressionStrategy.java  # 轮数阈值策略
+│   └── MemoryCompressor.java       # LLM 压缩器
+├── skill/                          # 技能系统
+│   ├── SkillDefinition.java        # 技能定义
+│   ├── SkillRegistry.java          # 技能注册表
+│   └── SkillExecutor.java          # 技能执行器
+├── calendar/                       # 日历集成
+│   ├── CalendarService.java        # 日历服务接口
+│   ├── CalendarServiceFactory.java # 工厂
+│   ├── CalendarEvent.java          # 日历事件模型
+│   ├── FeishuCalendarService.java  # 飞书实现
+│   └── DingTalkCalendarService.java# 钉钉实现
+├── auth/                           # 认证鉴权
+│   ├── AuthService.java            # 双通道认证（Header + URL 参数）
+│   └── JwtUtil.java                # JWT 工具
+├── rag/                            # RAG 知识库
+│   ├── AiChatDocumentLoader.java   # 文档加载器
+│   ├── MyTokenTextSplitter.java    # 文本分割
+│   ├── MyKeywordEnricher.java      # 关键词增强
+│   ├── QueryRewriter.java          # 查询改写
+│   ├── MultiQueryRetriever.java    # 多路召回
+│   ├── AiChatRagCustomAdvisorFactory.java # RAG 增强
+│   ├── AiChatVectorStoreConfig.java # 内存向量库
+│   ├── PgVectorVectorStoreConfig.java # PgVector 向量库
+│   └── AiChatRagCloudAdvisorConfig.java # 云端 RAG
+├── tools/                          # 工具集
+│   ├── WebSearchTool.java          # 联网搜索
+│   ├── WebScrapingTool.java        # 网页抓取
+│   ├── FileOperationTool.java      # 文件操作
+│   ├── PDFGenerationTool.java      # PDF 生成
+│   ├── ResourceDownloadTool.java   # 资源下载
+│   ├── TerminalOperationTool.java  # 终端执行
+│   ├── TerminateTool.java          # 终止工具
+│   └── ToolRegistration.java       # 工具注册
+├── advisor/                        # Advisor
+│   ├── MyLoggerAdvisor.java        # 调用日志
+│   └── ReReadingAdvisor.java       # Re2 提升推理
+├── dto/                            # 数据传输对象
+│   ├── DocumentResponse.java
+│   ├── FavoriteResponse.java
+│   ├── SessionSearchResponse.java
+│   ├── ImportResult.java
+│   ├── AddFavoriteRequest.java
+│   └── RenameRequest.java
+├── common/                         # 通用组件
+│   ├── Response.java               # 统一响应
+│   └── ResultCode.java             # 响应码
+├── config/                         # 配置类
+│   ├── AgentConfig.java
+│   ├── CalendarConfig.java
+│   ├── CompressionConfig.java
+│   ├── FollowUpTemplateConfig.java # 追问模板
+│   └── CorsConfig.java             # 跨域
+├── exception/                      # 异常处理
+│   ├── GlobalExceptionHandler.java # 全局异常
+│   └── BusinessException.java      # 业务异常
+├── validation/                     # 验证器
+│   └── InfoValidator.java          # 信息格式校验
+├── repository/                     # 预约存储
+│   └── AppointmentRepository.java
+├── constant/                       # 常量
+│   └── FileConstant.java
+├── demo/                           # 示例代码
+│   ├── invoke/                     # AI 调用示例（5 种方式）
+│   └── rag/                        # RAG 示例
+├── app/                            # 基础对话
+│   └── AiChatAgent.java            # 基础 AI 对话 Agent
+└── AiAgentApplication.java         # 启动类
 ```
 
 ## 配置说明
@@ -216,6 +365,44 @@ GET /api/ai/orchestrator/chat?message={message}&chatId={chatId}
 - 离职规划 → EscapeAgent
 - **预约咨询 → ConsultationAgent** 🆕
 - 其他职场问题 → GeneralCareerAgent
+
+### 会话管理接口
+
+```
+POST /api/session/login?username=xxx     # 游客登录
+POST /api/session/create?title=xxx       # 创建会话
+GET  /api/session/list                   # 活跃会话
+GET  /api/session/archived               # 已归档会话
+GET  /api/session/trash                  # 回收站
+PUT  /api/session/{chatId}/title         # 重命名
+PUT  /api/session/{chatId}/archive       # 归档
+PUT  /api/session/{chatId}/unarchive     # 取消归档
+PUT  /api/session/{chatId}/restore       # 恢复
+DELETE /api/session/{chatId}             # 软删除
+GET  /api/session/search?keyword=xxx     # 搜索会话
+GET  /api/session/{chatId}/messages      # 消息历史
+```
+
+### 🆕 收藏接口
+
+```
+POST   /api/favorite                    # 添加收藏
+DELETE /api/favorite/{favoriteId}       # 取消收藏
+GET    /api/favorite/list               # 我的收藏列表
+```
+
+### 🆕 用量统计接口
+
+```
+GET /api/usage/stats                    # 我的使用统计
+```
+
+### 🆕 数据导入导出接口
+
+```
+GET  /api/export/all                    # 导出全量数据（ZIP）
+POST /api/export/import                 # 导入数据
+```
 
 ### 预约咨询流程示例
 
