@@ -1,6 +1,6 @@
 # WorkPilot 项目功能 Wiki
 
-> 更新日期：2026-06-24  
+> 更新日期：2026-06-25  
 > 品牌名：WorkPilot（职场生存智囊）  
 > 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope
 
@@ -21,6 +21,8 @@
 - [十一、API 接口速查](#十一api-接口速查)
 - [十二、数据存储](#十二数据存储)
 - [十三、配置清单](#十三配置清单)
+- [十四、评测与质量](#十四评测与质量)
+- [十五、Agent 注册与 Prompt 管理](#十五agent-注册与-prompt-管理)
 
 ---
 
@@ -36,6 +38,7 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 | 预约咨询 | 信息收集追问、企业日历创建 | ConsultationAgent |
 | 通用职场 | 人际关系、压力管理、职业规划 | GeneralCareerAgent |
 | 复杂任务 | 联网搜索、PDF 生成、代码执行 | YuManus (超级智能体) |
+| 沟通助手 | 情感顾问、恋爱问题解答 | LoveMaster（隐藏路由） |
 
 ---
 
@@ -45,6 +48,7 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Frontend (Vue 3)                         │
 │  Home · CareerAdvisor · SuperAgent · Knowledge · Artifacts ...   │
+│  Favorites · Usage · TraceDetail · CompareView · LoveMaster      │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │ SSE / REST (JWT Auth)
 ┌───────────────────────────────┼─────────────────────────────────┐
@@ -57,19 +61,24 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 │                      Agent Layer (Core)                          │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │  OrchestratorAgent (主控)                                │    │
-│  │    ├─ NluPipeline (意图理解)                              │    │
+│  │    ├─ KeywordRouter (快速路径，零LLM)                     │    │
+│  │    ├─ NluPipeline (意图理解，1次LLM)                      │    │
 │  │    ├─ SkillExecutor (技能匹配)                            │    │
 │  │    ├─ WorkflowMatcher (工作流匹配)                        │    │
-│  │    ├─ TaskExecutor (任务执行)                             │    │
-│  │    └─ ResultAggregator (结果聚合)                         │    │
+│  │    ├─ TaskExecutor (V2任务执行)                           │    │
+│  │    ├─ ResultAggregator (结果聚合)                         │    │
+│  │    ├─ ContextInjectionService (上下文注入)                │    │
+│  │    └─ QualityReviewHandler (质量审查)                     │    │
 │  ├─────────────────────────────────────────────────────────┤    │
 │  │  专业子 Agent: Resume · Negotiation · Escape · General   │    │
+│  │  AgentRunner 适配层: ResumeAgentRunner · Negotiation...  │    │
 │  │  数据员工: DataAnalyst · CareerCoach · ProfileCurator     │    │
 │  └─────────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────────┤
 │                     Infrastructure Layer                         │
 │  ChatMemory · VectorStore · Trace · Sandbox · Access Control     │
 │  Artifact · UserProfile · EventBus · Quality Guard               │
+│  MemoryCoordinator · EvalCenter · AgentRegistry · PromptRegistry │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -163,16 +172,33 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 ```
 用户消息
   │
+  ├─ KeywordRouter: 快速路径（零LLM，规则匹配）
+  │     ├─ 命中 → 直接路由到对应 Agent
+  │     └─ 未命中 → 走 NLU Pipeline
+  │
   ├─ SkillExecutor: 技能匹配（命中则直答）
   │
   ├─ NluPipeline: 意图理解（1次LLM）
   │     ├─ 需要澄清 → 返回追问
   │     └─ 明确意图 → 路由
   │
+  ├─ ContextInjectionService: 上下文注入
+  │     ├─ 用户画像注入
+  │     ├─ 交付物注入
+  │     ├─ 跨 Agent 历史注入
+  │     └─ L27 分层记忆注入
+  │
   ├─ 单意图: 分发给对应 Agent
   │
-  └─ 多意图: 串行执行 + agent-turn SSE 事件
+  ├─ 多意图: 串行执行 + agent-turn SSE 事件
+  │
+  └─ QualityReviewHandler: 质量审查（异步）
 ```
+
+**关键设计**：
+- **快速路径**：`KeywordRouter.containsCareerKeyword()` 判断是否走 NLU，简单问候/模糊消息直接走 GENERAL Agent，避免 3-8s DashScope 延迟
+- **职责拆分**：`ContextInjectionService`（上下文注入）、`QualityReviewHandler`（质量审查）从 OrchestratorAgent 抽离，降低 God Class 复杂度
+- **V2 桥接**：`AgentRunner` 适配层将 V1 Agent 包装为 V2 `TaskExecutor` 可消费的 Runner
 
 ### 4.2 专业 Agent
 
@@ -184,7 +210,18 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 | GeneralCareerAgent | 温暖共情 + 职业规划 | ❌ | ❌ |
 | ConsultationAgent | 状态机追问 + 日历 | ❌ | ✅ |
 
-### 4.3 超级智能体 (YuManus)
+### 4.3 AgentRunner 适配层 (`agent/runner/`)
+
+将 V1 Agent 适配为 V2 `AgentRunner` 接口，供 `TaskExecutor` 统一调度：
+
+| Runner | 适配 Agent |
+|--------|-----------|
+| `ResumeAgentRunner` | ResumeAgent |
+| `NegotiationAgentRunner` | NegotiationAgent |
+| `EscapeAgentRunner` | EscapeAgent |
+| `GeneralCareerAgentRunner` | GeneralCareerAgent |
+
+### 4.4 超级智能体 (YuManus)
 
 ReAct 自主规划型 Agent，支持自主拆解复杂任务：
 
@@ -192,7 +229,7 @@ ReAct 自主规划型 Agent，支持自主拆解复杂任务：
 BaseAgent → ReActAgent（思考-行动循环）→ ToolCallAgent → YuManus
 ```
 
-### 4.4 数据员工 Agent
+### 4.5 数据员工 Agent
 
 黑板模式协作，异步产出交付物：
 
@@ -204,7 +241,13 @@ BaseAgent → ReActAgent（思考-行动循环）→ ToolCallAgent → YuManus
 | PromotionPlannerAgent | 晋升路径规划 |
 | LearningResourceRecommenderAgent | 学习资源推荐 |
 
-### 4.5 质量守护 (QualityGuardAgent)
+**数据模型**：
+- `ProductionContext` — 执行上下文（userId、chatId、source、memoryAgentType、documentContent）
+- `ProductionResult` — 加工结果（success、artifact、errorMessage）
+- `AnalysisReport` — 结构化分析报告（summary、keyFindings、metrics、recommendations）
+- `AnalysisSource` — 输入来源枚举（CONVERSATION / UPLOADED_DOCUMENT）
+
+### 4.6 质量守护 (QualityGuardAgent)
 
 - 模式：OFF / AUTO / REVIEW（单次审查）/ RED_TEAM（红队对抗）
 - 5 维评分：准确性(30%) + 完整性(20%) + 逻辑性(20%) + 幻觉风险(30%) + 风险分
@@ -215,23 +258,32 @@ BaseAgent → ReActAgent（思考-行动循环）→ ToolCallAgent → YuManus
 ## 五、NLU 意图理解管道
 
 ```
-用户消息 → AliasResolver（别名元数据，不改原文）
-         → UnifiedNluExtractor（1次LLM：intent排名 + slots + domain + action）
-         → IntentReranker（alias domain re-rank）
-         → IntentAmbiguityDetector（同类意图检测）
-         → RouteTemplate（点分记法路由）
-         → ContextShiftDetector（3态：FOLLOW_UP/ENTITY_SWITCH/NEW_QUERY）
-         → ConversationState.smartMerge
-         → IntentRequirementRegistry（槽位需求校验）
-         → ClarificationHandler（模板追问，零LLM）
-         → NluResult
+用户消息
+  │
+  ├─ KeywordRouter 快速路径（零LLM）
+  │     ├─ containsCareerKeyword() = false → GENERAL
+  │     └─ keywordRouteIntent() 命中 → 直接路由
+  │
+  └─ NluPipeline 完整路径（1次LLM）
+        → AliasResolver（别名元数据，不改原文）
+        → UnifiedNluExtractor（1次LLM：intent排名 + slots + domain + action）
+        → IntentReranker（alias domain re-rank）
+        → IntentAmbiguityDetector（同类意图检测）
+        → RouteTemplate（点分记法路由）
+        → ContextShiftDetector（3态：FOLLOW_UP/ENTITY_SWITCH/NEW_QUERY）
+        → ConversationState.smartMerge
+        → IntentRequirementRegistry（槽位需求校验）
+        → ClarificationHandler（模板追问，零LLM）
+        → NluResult
 ```
 
 关键设计决策：
+- 快速路径：简单消息跳过 NLU LLM 调用，避免 3-8s 延迟
 - 1 次 LLM 调用完成全部意图理解（延迟减半）
 - 别名只输出元数据（不改原文）
 - Confidence = Top1-Top2 差值
 - 澄清用模板（零额外 LLM）
+- `DataQueryRouter` 透传 slots，不调 LLM
 
 ---
 
@@ -293,6 +345,8 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 
 **容错设计**：每层查询超时独立（默认 2000ms），失败时使用 `layerCache` 中的 last-known-good 数据。总预算 6000 tokens，按 L1→L4 优先级递减分配。
 
+**集成点**：`OrchestratorAgent` 在每次对话完成后调用 `memoryCoordinator.onTurnCompleted()` 触发提取管道。
+
 ---
 
 ## 七、工具与执行
@@ -340,7 +394,22 @@ Agent ──put(READY)──► ArtifactShelf ──query/get──► 下游 Ag
 - 作用域：USER_PROFILE（跨会话）/ TASK（会话级）
 - 生命周期：DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED
 
-### 8.2 执行轨迹 (Trace)
+### 8.2 交付物生命周期管理 (L24)
+
+`ArtifactLifecycleManager` 控制状态流转合法性并记录审计事件：
+
+```
+DRAFT → REVIEWING（提交审核）
+REVIEWING → APPROVED（审核通过）
+REVIEWING → DRAFT（审核拒绝，含原因）
+APPROVED → PUBLISHED（发布）
+任意 → ARCHIVED（归档）
+```
+
+- 合法性校验 + 旧状态兼容（PENDING→DRAFT, READY→APPROVED）
+- `ArtifactLifecycleEvent` 审计事件记录
+
+### 8.3 执行轨迹 (Trace)
 
 - 全链路记录：10+ 种 StepType
 - 实时 SSE 推送 trace 事件
@@ -392,6 +461,7 @@ Agent ──put(READY)──► ArtifactShelf ──query/get──► 下游 Ag
 | 轨迹详情 | `/trace/:traceId` | 执行轨迹时间线 |
 | 管理后台 | `/admin` | 管理员视图 |
 | Agent 对比 | `/compare` | Agent 对比测试 |
+| 沟通助手 | `/love-master` | AI 恋爱大师（隐藏路由，向后兼容） |
 
 ### 前端特色功能
 
@@ -443,6 +513,9 @@ Agent ──put(READY)──► ArtifactShelf ──query/get──► 下游 Ag
 | 用量事件 | JSON (append-only) | `./tmp/artifacts/usage-events.json` |
 | 执行轨迹 | JSON | `./tmp/traces/` |
 | 向量库 | PgVector / 内存 | PostgreSQL / SimpleVectorStore |
+| Agent 描述符 | YAML | `classpath:agents/*.yaml` |
+| 权限画像 | YAML | `classpath:permissions/*.yaml` |
+| 评测用例 | YAML | `classpath:eval/*.yaml` |
 
 ---
 
@@ -463,3 +536,119 @@ Agent ──put(READY)──► ArtifactShelf ──query/get──► 下游 Ag
 | `memory.coordinator.enabled` | true | 分层记忆开关 |
 | `memory.coordinator.timeout-ms` | 2000 | 记忆层查询超时 |
 | `memory.coordinator.total-token-budget` | 6000 | 记忆总 Token 预算 |
+
+---
+
+## 十四、评测与质量
+
+### 14.1 评测中心 (L22 EvalCenter)
+
+Agent 质量评测框架，支持回归测试和发版评估：
+
+```
+评测流程：加载用例(YAML) → 调用 Agent → 评分 → 生成报告 → 检测回归
+```
+
+| 组件 | 职责 |
+|------|------|
+| `EvalCenter` | 评测服务，加载 YAML 评测套件，运行评测，生成报告 |
+| `EvalCase` | 评测用例（caseId、input、expectedOutput、scoringRule、passThreshold） |
+| `EvalReport` | 评测报告（overallScore、passRate、regression、caseResults） |
+
+**评分规则**：EXACT_MATCH / SEMANTIC_SIMILARITY / LLM_JUDGE
+
+**路由评测测试**：
+- `AgentRoutingEvalTest` — 路由准确率 + 快速路径覆盖率 + 响应时间
+- `FastPathRoutingTest` — 快速路径规则匹配验证
+
+### 14.2 质量守护 (L10 QualityGuardAgent)
+
+- 模式：OFF / AUTO / REVIEW / RED_TEAM
+- 5 维评分：accuracyScore(30%) + completenessScore(20%) + logicScore(20%) + hallucinationScore(30%) + riskScore
+- HIGH/CRITICAL 审查自动持久化审计
+- `QualityReviewHandler` 从 OrchestratorAgent 抽离，独立处理质量审查逻辑
+
+---
+
+## 十五、Agent 注册与 Prompt 管理
+
+### 15.1 Agent 注册中心 (L21)
+
+YAML 声明式 Agent 描述符，支持 Agent Marketplace 场景：
+
+| 组件 | 职责 |
+|------|------|
+| `AgentRegistry` | 注册中心接口 |
+| `InMemoryAgentRegistry` | 内存实现 |
+| `AgentDescriptor` | Agent 描述符（agentCode、capabilities、intentKeywords、permissionProfile） |
+
+**加载方式**：从 `resources/agents/*.yaml` 加载，启动时自动注册。
+
+**查询能力**：按编码获取、按能力标签查找、按意图关键词匹配。
+
+### 15.2 Prompt 版本管理 (L23)
+
+管理 Prompt 版本，支持灰度发布和 A/B 测试流量分配：
+
+| 组件 | 职责 |
+|------|------|
+| `PromptRegistry` | 注册中心 |
+| `PromptVersion` | 版本定义 |
+
+**流量分配逻辑**：
+- 只有 1 个 ACTIVE → 直接返回
+- 多个 ACTIVE → 按 trafficPercent 加权随机选择
+- 无 ACTIVE → 返回最新版本（降级）
+
+**版本限制**：每个 promptKey 最多保留 50 个版本（MAX_VERSIONS_PER_KEY），超出自动清理最旧版本。
+
+---
+
+## 附录：能力分层总览
+
+```
+L0  基础对话         单轮 / 多轮对话 + 对话记忆持久化
+L1  RAG 知识库       11篇职场文档检索 + Multi-Query 多路召回 + 查询改写
+L2  工具调用         联网搜索 / 文件 / 网页抓取 / 资源下载 / 终端 / PDF
+L3  MCP              图片搜索等外部 MCP 服务
+L4  Manus 超级智能体  ReAct 自主规划 + 工具循环
+L5  Multi-Agent      意图识别 → 5 个专业 Agent
+L6  预约咨询         状态机追问 + 飞书/钉钉日历
+L7  记忆压缩         Token/轮数策略 + LLM 摘要
+L8  黑板协作         交付物货架 + 数据员工 + 用户画像
+L9  技能系统         YAML 声明式技能热加载
+L10 质量守护         自动审查(Review/RedTeam) + 风险分级 + 审计持久化
+L11 收藏系统         消息快照 + orphan 标记
+L12 用量追踪         7 种事件 + 多维度统计
+L13 导入导出         ZIP 全量备份/恢复
+L14 对话搜索         加权评分 + 时间衰减
+L15 持久化消息       Source of Truth + 双索引
+L16 NLU 意图理解层   1次LLM + 别名解析 + 槽位提取 + 意图分类 + 澄清 + 快速路径
+L17 多 Agent 运行时  群聊模式 + Task Orchestrator + AgentRunner 适配层
+L18 工作流引擎       6种节点 + 实例状态 + 持久化
+L19 沙箱执行         Docker/本地进程隔离 + 5层防护
+L20 访问控制与治理   投票式决策 + Agent权限 + MCP信任 + Quota配额
+L21 Agent 注册中心   YAML声明式 + Marketplace就绪
+L22 评测中心         回归测试 + 发版评估 + YAML评测套件
+L23 Prompt 版本管理  多版本 + 灰度发布 + A/B测试
+L24 交付物生命周期   DRAFT→REVIEWING→APPROVED→PUBLISHED→ARCHIVED + 审计
+L25 事件总线         异步治理事件 + 审计日志
+L26 安全防护         循环检测 + 工具结果分级 + Token预算
+L27 分层记忆系统     四层记忆 + 异步提取 + Token预算分配
+横切关注点：JWT 鉴权 · 会话三态生命周期 · 归档/回收站 · AppService 业务编排层 · 全局异常处理 · 结构化输出
+```
+
+---
+
+## 附录：测试覆盖
+
+| 测试类别 | 测试文件数 | 覆盖范围 |
+|----------|-----------|----------|
+| 记忆系统 | 9 | L1-L4 四层 + 协调器 + 提取管道 + 预算分配 + 集成 |
+| 执行轨迹 | 10 | 模型属性 + 记录器 + 上下文 + 持久化 + 流 + 控制器 + 集成 |
+| 预约咨询 | 5 | Agent集成 + 仓库 + 日历 + 校验 + 模型 |
+| Agent 路由 | 3 | 路由评测 + 快速路径 + OrchestratorAgent |
+| 工具 | 5 | Web搜索 + 网页抓取 + 资源下载 + PDF + 文件操作 |
+| RAG | 3 | 向量库 + 文档加载 + MultiQuery |
+| 其他 | 6 | YuManus + AiChatAgent + 应用启动 + 日历错误处理 |
+| **合计** | **41** | |
