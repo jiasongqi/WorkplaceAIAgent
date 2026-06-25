@@ -1,28 +1,32 @@
 package com.yupi.yuaiagent.agent;
 
-import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
-import com.yupi.yuaiagent.artifact.ArtifactShelf;
-import com.yupi.yuaiagent.artifact.model.Artifact;
-import com.yupi.yuaiagent.artifact.model.ArtifactQuery;
-import com.yupi.yuaiagent.artifact.model.ArtifactStatus;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.memory.MemoryCoordinator;
 import com.yupi.yuaiagent.config.FollowUpTemplateConfig;
 import com.yupi.yuaiagent.message.ChatMemoryAdapter;
-import com.yupi.yuaiagent.profile.UserProfileService;
-import com.yupi.yuaiagent.quality.*;
+import com.yupi.yuaiagent.message.MessageSource;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import com.yupi.yuaiagent.repository.AppointmentRepository;
 import com.yupi.yuaiagent.skill.SkillExecutor;
 import com.yupi.yuaiagent.skill.SkillRegistry;
+import com.yupi.yuaiagent.nlu.NluPipeline;
+import com.yupi.yuaiagent.nlu.RouteHint;
+import com.yupi.yuaiagent.context.ConversationContextBuilder;
+import com.yupi.yuaiagent.workflow.WorkflowMatcher;
+import com.yupi.yuaiagent.workflow.WorkflowRegistry;
+import com.yupi.yuaiagent.agent.runner.ResumeAgentRunner;
+import com.yupi.yuaiagent.agent.runner.NegotiationAgentRunner;
+import com.yupi.yuaiagent.agent.runner.EscapeAgentRunner;
+import com.yupi.yuaiagent.agent.runner.GeneralCareerAgentRunner;
 import com.yupi.yuaiagent.trace.TraceContext;
 import com.yupi.yuaiagent.trace.TraceRecorder;
 import com.yupi.yuaiagent.trace.TraceRepository;
 import com.yupi.yuaiagent.trace.model.TraceSpan;
 import com.yupi.yuaiagent.trace.model.TraceStepType;
+import com.yupi.yuaiagent.access.AccessDecisionService;
 import com.yupi.yuaiagent.validation.InfoValidator;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
@@ -36,6 +40,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
  * 主控 Agent（Orchestrator）
@@ -53,20 +58,14 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class OrchestratorAgent {
 
-    // 意图识别提示词
-    private static final String INTENT_PROMPT = """
-            你是一个职场问题分类器。请分析用户的问题，判断属于以下哪个类别，只输出类别名称，不要有任何其他内容：
-            
-            - RESUME：涉及简历优化、面试技巧、求职投递、offer 选择、跳槽等求职相关问题
-            - NEGOTIATION：涉及薪资谈判、涨薪、薪资包分析、绩效奖金等薪酬相关问题
-            - ESCAPE：涉及离职、辞职、被裁员、劳动纠纷、工作交接等离职相关问题
-            - CONSULTATION：涉及预约咨询、预约专家、咨询预约、约时间聊聊、请教问题等预约相关问题
-            - GENERAL：其他职场问题，如职场人际关系、工作压力、职业规划、职场困惑、情绪问题等
-            
-            用户问题：{message}
-            """;
-
-    private final ChatClient intentClient;
+    private final NluPipeline nluPipeline;
+    private final DataQueryRouter dataQueryRouter;
+    // V2 workflow infrastructure
+    private final WorkflowMatcher workflowMatcher;
+    private final WorkflowRegistry workflowRegistry;
+    private final ConversationContextBuilder contextBuilder;
+    private final TaskExecutor taskExecutor;
+    private final ResultAggregator resultAggregator;
     private final ResumeAgent resumeAgent;
     private final NegotiationAgent negotiationAgent;
     private final EscapeAgent escapeAgent;
@@ -75,14 +74,15 @@ public class OrchestratorAgent {
     private final SkillExecutor skillExecutor;
     private final SkillRegistry skillRegistry;
     private final ChatMemoryManager chatMemoryManager;
-    private final UserProfileService userProfileService;
-    private final ArtifactShelf artifactShelf;
+    private final MemoryCoordinator memoryCoordinator; // nullable if memory.coordinator.enabled=false
     private final TraceRecorder traceRecorder;
     private final TraceRepository traceRepository;
     private final ChatMemoryAdapter chatMemoryAdapter;
-    private final QualityGuardAgent qualityGuardAgent;
-    private final QualityModeResolver qualityModeResolver;
-    private final QualityReviewRepository qualityReviewRepository;
+    private final QualityReviewHandler qualityReviewHandler;
+    private final ContextInjectionService contextInjectionService;
+    private final com.yupi.yuaiagent.message.PersistentMessageRepository messageRepository;
+    private final AccessDecisionService accessDecisionService;
+    private final Executor agentExecutor;
 
     /**
      * 构造函数 - 使用 ChatMemoryManager
@@ -103,11 +103,19 @@ public class OrchestratorAgent {
                              ChatMemoryAdapter chatMemoryAdapter,
                              QualityGuardAgent qualityGuardAgent,
                              QualityModeResolver qualityModeResolver,
-                             QualityReviewRepository qualityReviewRepository) {
-        this.intentClient = ChatClient.builder(chatModel)
-                .defaultAdvisors(new MyLoggerAdvisor())
-                .build();
-        
+                             QualityReviewRepository qualityReviewRepository,
+                             com.yupi.yuaiagent.message.PersistentMessageRepository messageRepository,
+                             NluPipeline nluPipeline,
+                             DataQueryRouter dataQueryRouter,
+                             WorkflowMatcher workflowMatcher,
+                             WorkflowRegistry workflowRegistry,
+                             ConversationContextBuilder contextBuilder,
+                             TaskExecutor taskExecutor,
+                             ResultAggregator resultAggregator,
+                             AccessDecisionService accessDecisionService,
+                             Executor agentExecutor,
+                             MemoryCoordinator memoryCoordinator) {
+
         // 创建各专业 Agent
         this.resumeAgent = new ResumeAgent(chatModel, vectorStore, queryRewriter, chatMemoryManager);
         this.negotiationAgent = new NegotiationAgent(chatModel, tools, queryRewriter, chatMemoryManager);
@@ -117,30 +125,32 @@ public class OrchestratorAgent {
         this.skillExecutor = skillExecutor;
         this.skillRegistry = skillRegistry;
         this.chatMemoryManager = chatMemoryManager;
-        this.userProfileService = userProfileService;
-        this.artifactShelf = artifactShelf;
+        this.memoryCoordinator = memoryCoordinator;
         this.traceRecorder = traceRecorder;
         this.traceRepository = traceRepository;
         this.chatMemoryAdapter = chatMemoryAdapter;
-        this.qualityGuardAgent = qualityGuardAgent;
-        this.qualityModeResolver = qualityModeResolver;
-        this.qualityReviewRepository = qualityReviewRepository;
-        
-        log.info("OrchestratorAgent 初始化完成，已创建 5 个专业 Agent，已加载 {} 个技能", skillRegistry.size());
-    }
+        this.qualityReviewHandler = new QualityReviewHandler(qualityGuardAgent, qualityModeResolver, qualityReviewRepository, traceRecorder);
+        this.contextInjectionService = new ContextInjectionService(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder);
+        this.messageRepository = messageRepository;
+        this.nluPipeline = nluPipeline;
+        this.dataQueryRouter = dataQueryRouter;
+        this.workflowMatcher = workflowMatcher;
+        this.workflowRegistry = workflowRegistry;
+        this.contextBuilder = contextBuilder;
+        this.taskExecutor = taskExecutor;
+        this.resultAggregator = resultAggregator;
+        this.accessDecisionService = accessDecisionService;
+        this.agentExecutor = agentExecutor;
 
-    /**
-     * 识别用户意图（使用枚举统一处理）
-     */
-    private AgentIntent detectIntent(String message) {
-        String rawIntent = intentClient.prompt()
-                .user(INTENT_PROMPT.replace("{message}", message))
-                .call()
-                .content();
-        
-        AgentIntent intent = AgentIntent.fromRawIntent(rawIntent);
-        log.info("意图识别结果：{}（原始输出：{}）", intent, rawIntent);
-        return intent;
+        // Register AgentRunner map on TaskExecutor
+        taskExecutor.setAgentRunners(java.util.Map.of(
+            "RESUME", new ResumeAgentRunner(this.resumeAgent),
+            "NEGOTIATION", new NegotiationAgentRunner(this.negotiationAgent),
+            "ESCAPE", new EscapeAgentRunner(this.escapeAgent),
+            "GENERAL", new GeneralCareerAgentRunner(this.generalCareerAgent)
+        ));
+
+        log.info("OrchestratorAgent 初始化完成，已创建 5 个专业 Agent，已加载 {} 个技能", skillRegistry.size());
     }
 
     /**
@@ -153,30 +163,20 @@ public class OrchestratorAgent {
             log.info("匹配到技能，使用技能回答");
             return skillResult;
         }
-        
-        // 2. 原有意图路由逻辑
-        AgentIntent intent = detectIntent(message);
+
+        // 2. NLU Pipeline 意图识别
+        NluPipeline.NluResult nluResult = nluPipeline.process(message, chatId);
+        if (nluResult.isNeedsClarification()) {
+            return nluResult.getClarification();
+        }
+        AgentIntent intent = nluResult.toAgentIntent();
         return switch (intent) {
-            case RESUME -> {
-                log.info("路由到 ResumeAgent");
-                yield resumeAgent.chat(message, chatId);
-            }
-            case NEGOTIATION -> {
-                log.info("路由到 NegotiationAgent");
-                yield negotiationAgent.chat(message, chatId);
-            }
-            case ESCAPE -> {
-                log.info("路由到 EscapeAgent");
-                yield escapeAgent.chat(message, chatId);
-            }
-            case CONSULTATION -> {
-                log.info("路由到 ConsultationAgent");
-                yield consultationAgent.chat(message, chatId);
-            }
-            default -> {
-                log.info("路由到 GeneralCareerAgent");
-                yield generalCareerAgent.chat(message, chatId);
-            }
+            case RESUME -> resumeAgent.chat(message, chatId);
+            case NEGOTIATION -> negotiationAgent.chat(message, chatId);
+            case ESCAPE -> escapeAgent.chat(message, chatId);
+            case CONSULTATION -> consultationAgent.chat(message, chatId);
+            case DATA_QUERY -> "数据查询功能正在建设中";
+            default -> generalCareerAgent.chat(message, chatId);
         };
     }
 
@@ -269,9 +269,23 @@ public class OrchestratorAgent {
                     emitter.completeWithError(ex);
                 }
             }
-        });
+        }, agentExecutor);
 
         return emitter;
+    }
+
+    // syncCrossAgentMemory → delegated to ContextInjectionService
+
+    /**
+     * Merge two injection strings (skip empty ones).
+     */
+    private String mergeInjection(String a, String b) {
+        boolean hasA = StringUtils.hasText(a);
+        boolean hasB = StringUtils.hasText(b);
+        if (hasA && hasB) return a + "\n" + b;
+        if (hasA) return a;
+        if (hasB) return b;
+        return "";
     }
 
     /**
@@ -279,285 +293,215 @@ public class OrchestratorAgent {
      */
     private void routeToAgent(String message, String chatId, String userId,
                               SseEmitter emitter, TraceContext traceCtx) throws IOException {
-        // INTENT_DETECTION span (Req 8.3)
-        TraceSpan intentSpan = traceRecorder.startSpan(traceCtx, TraceStepType.INTENT_DETECTION, "意图识别");
-        AgentIntent intent = detectIntent(message);
-        traceRecorder.putMetadata(intentSpan, "intent", intent.name());
-        traceRecorder.endSpan(traceCtx, intentSpan);
-        log.info("意图识别结果：{}，路由到：{}", intent, intent.getAgentName());
 
-        // ROUTING span (Req 8.3)
-        TraceSpan routingSpan = traceRecorder.startSpan(traceCtx, TraceStepType.ROUTING, "路由到" + intent.getAgentName());
-        emitter.send(SseEmitter.event()
-                .name("routing")
-                .data("[路由到" + intent.getAgentName() + "]"));
-        traceRecorder.putMetadata(routingSpan, "targetAgent", intent.name());
+        // Lock routing: if ConsultationAgent has an active session for this chat,
+        // skip intent detection and route directly to it.
+        if (consultationAgent.hasActiveConsultation(chatId)) {
+            log.info("会话 {} 有进行中的预约咨询，锁定路由到 ConsultationAgent", chatId);
+            TraceSpan routingSpan = traceRecorder.startSpan(traceCtx, TraceStepType.ROUTING, "路由到预约咨询（锁定）");
+            emitter.send(SseEmitter.event()
+                    .name("routing")
+                    .data("[路由到预约咨询（进行中）]"));
+            traceRecorder.putMetadata(routingSpan, "targetAgent", "CONSULTATION_LOCKED");
+            traceRecorder.endSpan(traceCtx, routingSpan);
+
+            TraceSpan subAgentSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION, "预约咨询执行");
+            Flux<String> tokenFlux = consultationAgent.chatStream(message, chatId, "");
+            // ... reuse the same streaming logic below
+            traceRecorder.endSpan(traceCtx, subAgentSpan);
+
+            tokenFlux.subscribe(
+                    chunk -> {
+                        try {
+                            emitter.send(SseEmitter.event().name("message").data(chunk));
+                        } catch (IOException e) {
+                            emitter.completeWithError(e);
+                        }
+                    },
+                    error -> {
+                        log.error("ConsultationAgent 流式输出出错", error);
+                        traceRecorder.failTrace(traceCtx);
+                        persistTrace(traceCtx);
+                        emitter.completeWithError(error);
+                    },
+                    () -> {
+                        try {
+                            emitter.send(SseEmitter.event().data("[DONE]"));
+                            emitter.complete();
+                            traceRecorder.endTrace(traceCtx);
+                            persistTrace(traceCtx);
+                        } catch (IOException e) {
+                            emitter.completeWithError(e);
+                        }
+                    }
+            );
+            return;
+        }
+
+        // Fast-path: short/simple messages skip NLU LLM call → go directly to GENERAL agent
+        // This avoids 3-8s DashScope latency for simple greetings or vague messages
+        boolean fastPath = !KeywordRouter.containsCareerKeyword(message);
+        List<AgentIntent> intents;
+        RouteHint routeHint;
+
+        if (fastPath) {
+            // Try rule-based keyword routing first (no LLM call)
+            AgentIntent keywordIntent = KeywordRouter.keywordRouteIntent(message);
+            if (keywordIntent != null) {
+                TraceSpan nluSpan = traceRecorder.startSpan(traceCtx, TraceStepType.NLU, "NLU 快速路径（规则匹配）");
+                traceRecorder.putMetadata(nluSpan, "intent", keywordIntent.name());
+                traceRecorder.putMetadata(nluSpan, "confidence", "1.00");
+                traceRecorder.putMetadata(nluSpan, "fastPath", "true");
+                traceRecorder.endSpan(traceCtx, nluSpan);
+                intents = List.of(keywordIntent);
+                routeHint = new RouteHint(keywordIntent.name(), null, 1.0, null, null, null);
+            } else {
+                // No keyword match — fall through to full NLU
+                fastPath = false;
+            }
+        }
+
+        if (!fastPath) {
+            // Complex query with career keywords — needs full NLU Pipeline (single LLM call)
+            // Send progress feedback immediately so user doesn't stare at blank screen
+            emitter.send(SseEmitter.event().name("routing").data("[正在分析你的问题...]"));
+
+            TraceSpan nluSpan = traceRecorder.startSpan(traceCtx, TraceStepType.NLU, "NLU 意图理解");
+            NluPipeline.NluResult nluResult = nluPipeline.process(message, chatId);
+            traceRecorder.putMetadata(nluSpan, "intent", nluResult.getRouteHint().intent());
+            traceRecorder.putMetadata(nluSpan, "confidence",
+                String.format("%.2f", nluResult.getRouteHint().confidence()));
+            traceRecorder.putMetadata(nluSpan, "entity", nluResult.getState().getEntity());
+            if (nluResult.getRouteHint().specificRoute() != null) {
+                traceRecorder.putMetadata(nluSpan, "routeHint", nluResult.getRouteHint().specificRoute());
+            }
+            traceRecorder.endSpan(traceCtx, nluSpan);
+
+            // Clarification
+            if (nluResult.isNeedsClarification()) {
+                emitter.send(SseEmitter.event().name("clarification").data(nluResult.getClarification()));
+                emitter.complete();
+                return;
+            }
+
+            // Resolve multi-intents from NLU Pipeline
+            intents = AgentIntent.fromMultiIntent(nluResult.getRerankedIntents());
+            routeHint = nluResult.getRouteHint();
+        }
+
+        // ROUTING span — list all target agents
+        String agentNames = intents.stream().map(AgentIntent::getAgentName).collect(java.util.stream.Collectors.joining(", "));
+        TraceSpan routingSpan = traceRecorder.startSpan(traceCtx, TraceStepType.ROUTING, "路由到" + agentNames);
+        emitter.send(SseEmitter.event().name("routing").data("[路由到" + agentNames + "]"));
+        traceRecorder.putMetadata(routingSpan, "targetAgents", intents.stream().map(Enum::name).collect(java.util.stream.Collectors.joining(",")));
         traceRecorder.endSpan(traceCtx, routingSpan);
 
-        // MEMORY_COMPRESSION span (Req 8.6)
-        TraceSpan memorySpan = traceRecorder.startSpan(traceCtx, TraceStepType.MEMORY_COMPRESSION, "记忆压缩检查");
-        String memoryType = memoryTypeOf(intent);
-        chatMemoryManager.autoCompressIfNeeded(memoryType, chatId, traceCtx, status -> {
+        // Pre-compute shared context (profile + artifacts + cross-agent history)
+        String combinedInjection = contextInjectionService.buildCombinedInjection(userId, chatId, traceCtx);
+
+        // L27: Assemble layered memory context (if MemoryCoordinator is enabled)
+        if (memoryCoordinator != null && StringUtils.hasText(userId)) {
             try {
-                emitter.send(SseEmitter.event().name("status").data(status));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
-        traceRecorder.endSpan(traceCtx, memorySpan);
-
-        // PROFILE_INJECTION span (Req 8.3)
-        TraceSpan profileSpan = traceRecorder.startSpan(traceCtx, TraceStepType.PROFILE_INJECTION, "画像注入");
-        String profileInjection = StringUtils.hasText(userId)
-                ? userProfileService.buildPromptInjection(userId)
-                : "";
-        boolean hasProfile = StringUtils.hasText(profileInjection);
-        traceRecorder.putMetadata(profileSpan, "hasProfile", String.valueOf(hasProfile));
-        traceRecorder.endSpan(traceCtx, profileSpan);
-
-        // ARTIFACT_QUERY span (Req 8.3)
-        TraceSpan artifactQuerySpan = traceRecorder.startSpan(traceCtx, TraceStepType.ARTIFACT_QUERY, "交付物查询");
-        List<Artifact> readyArtifacts = queryReadyArtifacts(userId, chatId);
-        String artifactContext = buildArtifactContext(readyArtifacts);
-        traceRecorder.putMetadata(artifactQuerySpan, "foundCount", String.valueOf(readyArtifacts.size()));
-        traceRecorder.endSpan(traceCtx, artifactQuerySpan);
-
-        // Merge injection
-        String combinedInjection = mergeInjection(profileInjection, artifactContext);
-
-        // SUB_AGENT_EXECUTION span (Req 8.3)
-        TraceSpan subAgentSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION,
-                intent.getAgentName() + "执行");
-        traceRecorder.putMetadata(subAgentSpan, "agentType", memoryType);
-
-        Flux<String> tokenFlux = switch (intent) {
-            case RESUME -> resumeAgent.chatStream(message, chatId, combinedInjection);
-            case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, combinedInjection);
-            case ESCAPE -> escapeAgent.chatStream(message, chatId, combinedInjection);
-            case CONSULTATION -> consultationAgent.chatStream(message, chatId, combinedInjection);
-            default -> generalCareerAgent.chatStream(message, chatId, combinedInjection);
-        };
-
-        // ARTIFACT_CONSUME span (Req 8.3)
-        TraceSpan consumeSpan = traceRecorder.startSpan(traceCtx, TraceStepType.ARTIFACT_CONSUME, "交付物消费");
-        markArtifactsConsumed(readyArtifacts);
-        traceRecorder.putMetadata(consumeSpan, "consumedCount", String.valueOf(readyArtifacts.size()));
-        traceRecorder.endSpan(traceCtx, consumeSpan);
-
-        // Collect full answer for quality review
-        StringBuilder answerCollector = new StringBuilder();
-
-        tokenFlux
-                .doOnNext(token -> {
-                    try {
-                        answerCollector.append(token);
-                        emitter.send(SseEmitter.event().name("message").data(token));
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                })
-                .doOnError(e -> {
-                    log.error("子 Agent 流式输出出错", e);
-                    traceRecorder.failSpan(traceCtx, subAgentSpan, e.getMessage());
-                    traceRecorder.failTrace(traceCtx);
-                    traceCtx.markSseClosed();
-                    persistTrace(traceCtx);
-                    try {
-                        emitter.send(SseEmitter.event().name("error").data("执行出错：" + e.getMessage()));
-                        emitter.complete();
-                    } catch (IOException ex) {
-                        emitter.completeWithError(ex);
-                    }
-                })
-                .doOnComplete(() -> {
-                    traceRecorder.endSpan(traceCtx, subAgentSpan);
-
-                    // Quality Guard review
-                    String fullAnswer = answerCollector.toString();
-                    runQualityReview(message, fullAnswer, chatId, intent, traceCtx, emitter);
-
-                    // Persist messages to PersistentMessageRepository (Source of Truth)
-                    try {
-                        chatMemoryAdapter.addUserMessage(chatId, message);
-                        chatMemoryAdapter.addAssistantMessage(chatId, fullAnswer);
-                    } catch (Exception e) {
-                        log.error("Failed to persist messages to PersistentMessageRepository", e);
-                    }
-
-                    traceRecorder.endTrace(traceCtx);
-                    traceCtx.markSseClosed();
-                    persistTrace(traceCtx);
-                    try {
-                        emitter.complete();
-                    } catch (Exception ex) {
-                        log.debug("Emitter already completed", ex);
-                    }
-                    // 对话结束：异步更新用户画像
-                    triggerProfileUpdate(userId, intent, chatId, traceCtx);
-                })
-                .subscribe();
-    }
-
-    /**
-     * 按 userId + chatId 查询货架中状态为 READY 的相关交付物。
-     */
-    private List<Artifact> queryReadyArtifacts(String userId, String chatId) {
-        if (!StringUtils.hasText(userId) && !StringUtils.hasText(chatId)) {
-            return List.of();
-        }
-        try {
-            return artifactShelf.query(ArtifactQuery.builder()
-                    .userId(StringUtils.hasText(userId) ? userId : null)
-                    .chatId(StringUtils.hasText(chatId) ? chatId : null)
-                    .status(ArtifactStatus.READY)
-                    .build());
-        } catch (Exception e) {
-            log.error("查询 READY 交付物失败，降级为不注入交付物，userId={}, chatId={}", userId, chatId, e);
-            return List.of();
-        }
-    }
-
-    /**
-     * 将查询到的 READY 交付物拼接为中文上下文文本。
-     */
-    private String buildArtifactContext(List<Artifact> readyArtifacts) {
-        if (readyArtifacts == null || readyArtifacts.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder("【参考交付物】以下是与本次对话相关的已就绪交付物，请在回答时参考：\n");
-        for (Artifact artifact : readyArtifacts) {
-            String title = StringUtils.hasText(artifact.getTitle()) ? artifact.getTitle() : "（无标题）";
-            String content = artifact.getContent() != null ? artifact.getContent() : "";
-            sb.append("- ").append(title).append("：").append(content).append("\n");
-        }
-        log.info("注入 {} 个 READY 交付物到子 Agent 上下文", readyArtifacts.size());
-        return sb.toString();
-    }
-
-    /**
-     * 将被注入（取用）的交付物逐个标记为 CONSUMED。
-     */
-    private void markArtifactsConsumed(List<Artifact> consumedArtifacts) {
-        if (consumedArtifacts == null || consumedArtifacts.isEmpty()) {
-            return;
-        }
-        for (Artifact artifact : consumedArtifacts) {
-            String artifactId = artifact.getArtifactId();
-            if (!StringUtils.hasText(artifactId)) {
-                continue;
-            }
-            try {
-                boolean marked = artifactShelf.markConsumed(artifactId);
-                if (marked) {
-                    log.info("交付物已标记为 CONSUMED，artifactId={}", artifactId);
-                } else {
-                    log.warn("标记交付物消费失败（可能已不存在），artifactId={}", artifactId);
+                String primaryAgentType = memoryTypeOf(intents.get(0));
+                org.springframework.ai.chat.messages.SystemMessage memoryContext =
+                        memoryCoordinator.assembleContext(userId, chatId, primaryAgentType);
+                if (memoryContext != null && StringUtils.hasText(memoryContext.getText())) {
+                    combinedInjection = mergeInjection(combinedInjection, memoryContext.getText());
+                    log.info("[MemoryCoordinator] injected L27 context for userId={}, agentType={}", userId, primaryAgentType);
                 }
             } catch (Exception e) {
-                log.error("标记交付物消费异常，artifactId={}", artifactId, e);
+                log.warn("[MemoryCoordinator] failed to assemble context, continuing without: {}", e.getMessage());
             }
         }
-    }
 
-    /**
-     * 合并画像注入片段与交付物上下文片段。
-     */
-    private String mergeInjection(String profileInjection, String artifactContext) {
-        boolean hasProfile = StringUtils.hasText(profileInjection);
-        boolean hasArtifact = StringUtils.hasText(artifactContext);
-        if (hasProfile && hasArtifact) {
-            return profileInjection + "\n" + artifactContext;
-        }
-        if (hasProfile) {
-            return profileInjection;
-        }
-        if (hasArtifact) {
-            return artifactContext;
-        }
-        return "";
-    }
+        // ─── Multi-intent serial execution (V1 群聊模式) ───
+        StringBuilder combinedAnswer = new StringBuilder();
 
-    /**
-     * Runs quality review after agent answer is complete.
-     * Sends quality-review SSE event. Blocks answer if CRITICAL risk.
-     */
-    private void runQualityReview(String userQuestion, String agentAnswer, String chatId,
-                                   AgentIntent intent, TraceContext traceCtx, SseEmitter emitter) {
-        if (agentAnswer == null || agentAnswer.isBlank()) {
-            return;
-        }
+        for (AgentIntent intent : intents) {
+            String memoryType = memoryTypeOf(intent);
+            contextInjectionService.syncCrossAgentMemory(chatId, memoryType, memoryTypeOf(intent));
 
-        // Resolve quality mode (AUTO)
-        QualityMode mode = qualityModeResolver.resolve(userQuestion, intent, QualityMode.AUTO);
-        if (mode == QualityMode.OFF) {
-            return;
-        }
+            // MEMORY_COMPRESSION
+            TraceSpan memorySpan = traceRecorder.startSpan(traceCtx, TraceStepType.MEMORY_COMPRESSION, "记忆压缩检查");
+            chatMemoryManager.autoCompressIfNeeded(memoryType, chatId, traceCtx, status -> {
+                try { emitter.send(SseEmitter.event().name("status").data(status)); }
+                catch (IOException e) { throw new RuntimeException(e); }
+            });
+            traceRecorder.endSpan(traceCtx, memorySpan);
 
-        TraceSpan reviewSpan = traceRecorder.startSpan(traceCtx, TraceStepType.QUALITY_REVIEW, "质量审查");
-        try {
-            QualityReview review;
-            if (mode == QualityMode.RED_TEAM) {
-                review = qualityGuardAgent.redTeamReview(userQuestion, agentAnswer, chatId);
-            } else {
-                review = qualityGuardAgent.review(userQuestion, agentAnswer, chatId);
-            }
+            // Agent turn event
+            emitter.send(SseEmitter.event().name("agent-turn").data(
+                "{\"agentType\":\"" + intent.name() + "\",\"agentName\":\"" + intent.getAgentName() + "\"}"));
 
-            // Record trace metadata
-            traceRecorder.putMetadata(reviewSpan, "overallScore", String.valueOf(review.getOverallScore()));
-            traceRecorder.putMetadata(reviewSpan, "riskLevel", review.getRiskLevel().name());
-            traceRecorder.putMetadata(reviewSpan, "mode", mode.name());
-            traceRecorder.endSpan(traceCtx, reviewSpan);
+            // SUB_AGENT_EXECUTION span
+            TraceSpan subAgentSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION,
+                intent.getAgentName() + "执行");
+            traceRecorder.putMetadata(subAgentSpan, "agentType", memoryType);
 
-            // Persist HIGH/CRITICAL reviews
-            qualityReviewRepository.saveIfHighRisk(review);
+            // Execute agent
+            Flux<String> tokenFlux = switch (intent) {
+                case RESUME -> resumeAgent.chatStream(message, chatId, combinedInjection);
+                case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, combinedInjection);
+                case ESCAPE -> escapeAgent.chatStream(message, chatId, combinedInjection);
+                case CONSULTATION -> consultationAgent.chatStream(message, chatId, combinedInjection);
+                case DATA_QUERY -> dataQueryRouter.chatStream(routeHint, message, chatId);
+                default -> generalCareerAgent.chatStream(message, chatId, combinedInjection);
+            };
 
-            // Send quality-review SSE event
+            // Collect answer (blocking per agent — serial execution)
+            StringBuilder agentAnswer = new StringBuilder();
             try {
-                emitter.send(SseEmitter.event().name("quality-review").data(review));
-            } catch (IOException e) {
-                log.debug("Failed to send quality-review SSE event", e);
+                tokenFlux.doOnNext(token -> {
+                    try {
+                        agentAnswer.append(token);
+                        emitter.send(SseEmitter.event().name("message").data(token));
+                    } catch (IOException e) { throw new RuntimeException(e); }
+                }).blockLast(); // Block until Flux completes (replaces anti-pattern toStream().count())
+                traceRecorder.endSpan(traceCtx, subAgentSpan);
+            } catch (Exception e) {
+                log.error("Agent {} 执行出错", intent.name(), e);
+                traceRecorder.failSpan(traceCtx, subAgentSpan, e.getMessage());
+                agentAnswer.append("（该专家暂时无法回答）");
             }
 
-            // Block if CRITICAL risk
-            if (review.getRiskLevel().isBlocking()) {
-                TraceSpan blockedSpan = traceRecorder.startSpan(traceCtx, TraceStepType.QUALITY_BLOCKED, "质量阻断");
-                traceRecorder.putMetadata(blockedSpan, "reason", review.getSummary());
-                traceRecorder.endSpan(traceCtx, blockedSpan);
+            // Persist agent answer with source tracking
+            combinedAnswer.append(agentAnswer);
+            chatMemoryAdapter.addAssistantMessage(chatId, agentAnswer.toString(),
+                MessageSource.AGENT, intent.name(), intent.getAgentName());
+        }
 
-                try {
-                    emitter.send(SseEmitter.event().name("quality-blocked").data(
-                            "⚠️ 该回答已被质量守卫阻断。风险原因：" + review.getSummary() + "。建议咨询相关领域的专业人士。"));
-                } catch (IOException e) {
-                    log.debug("Failed to send quality-blocked SSE event", e);
-                }
+        // Quality review on combined answer
+        String fullAnswer = combinedAnswer.toString();
+        AgentIntent primaryIntent = intents.get(0);
+        qualityReviewHandler.review(message, fullAnswer, chatId, primaryIntent, traceCtx, emitter);
+
+        // Persist user message
+        chatMemoryAdapter.addUserMessage(chatId, message, MessageSource.USER, null, null);
+
+        // Finalize trace
+        traceRecorder.endTrace(traceCtx);
+        traceCtx.markSseClosed();
+        persistTrace(traceCtx);
+        emitter.send(SseEmitter.event().data("[DONE]"));
+        emitter.complete();
+        contextInjectionService.triggerProfileUpdate(userId, memoryTypeOf(primaryIntent), chatId, traceCtx);
+
+        // L27: Trigger memory extraction pipeline (async, non-blocking)
+        if (memoryCoordinator != null && StringUtils.hasText(userId)) {
+            try {
+                memoryCoordinator.onTurnCompleted(userId, chatId, message, fullAnswer);
+            } catch (Exception e) {
+                log.warn("[MemoryCoordinator] extraction trigger failed: {}", e.getMessage());
             }
-
-            log.info("[QualityGuard] mode={}, overall={}, risk={}", mode, review.getOverallScore(), review.getRiskLevel());
-
-        } catch (Exception e) {
-            log.error("Quality review failed, continuing normally", e);
-            traceRecorder.failSpan(traceCtx, reviewSpan, e.getMessage());
         }
     }
 
-    /**
-     * 对话结束后异步触发画像更新（Req 8.4 — async tail step）。
-     */
-    private void triggerProfileUpdate(String userId, AgentIntent intent, String chatId, TraceContext traceCtx) {
-        if (!StringUtils.hasText(userId)) {
-            return;
-        }
-        TraceSpan profileUpdateSpan = traceRecorder.startSpan(traceCtx, TraceStepType.PROFILE_UPDATE, "画像异步更新");
-        try {
-            ChatMemory memory = chatMemoryManager.getMemory(memoryTypeOf(intent));
-            List<Message> conversation = memory.get(chatId);
-            userProfileService.updateAsync(userId, conversation);
-            traceRecorder.endSpan(traceCtx, profileUpdateSpan);
-        } catch (Exception e) {
-            log.error("对话结束触发画像更新失败，userId={}, chatId={}", userId, chatId, e);
-            traceRecorder.failSpan(traceCtx, profileUpdateSpan, e.getMessage());
-        }
-    }
+    // queryReadyArtifacts, buildArtifactContext, buildCrossAgentContext,
+    // markArtifactsConsumed, mergeInjection → delegated to ContextInjectionService
+
+    // runQualityReview → delegated to QualityReviewHandler
+
+    // triggerProfileUpdate → delegated to ContextInjectionService
 
     /**
      * 将路由意图映射为子 Agent 在 ChatMemoryManager 中使用的记忆类型 key。
@@ -568,6 +512,7 @@ public class OrchestratorAgent {
             case NEGOTIATION -> "negotiation";
             case ESCAPE -> "escape";
             case CONSULTATION -> "consultation";
+            case DATA_QUERY -> "data_query";
             default -> "general";
         };
     }
@@ -586,4 +531,6 @@ public class OrchestratorAgent {
             log.error("[trace] failed to persist trace", e);
         }
     }
+
+    // containsCareerKeyword, keywordRouteIntent → delegated to KeywordRouter
 }

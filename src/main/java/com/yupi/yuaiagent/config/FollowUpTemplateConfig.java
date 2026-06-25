@@ -51,22 +51,42 @@ public class FollowUpTemplateConfig implements InitializingBean {
     /**
      * 确认信息模板
      */
-    private String confirmation = "请确认以下预约信息：\n\n姓名：{name}\n联系方式：{contact}\n预约时间：{appointmentTime}\n{topicLine}\n{remarkLine}\n\n请回复\"确认\"创建预约，或回复\"修改\"重新填写信息。";
+    private String confirmation = """
+            ### 📋 预约信息确认
+            
+            {infoTable}
+            
+            ---
+            回复 **确认** 创建预约，或回复 **修改** 重新填写。
+            如有任何问题，也可以直接提问。""";
 
     /**
      * 预约成功模板
      */
-    private String success = "预约创建成功！\n\n预约编号：{appointmentId}\n预约人：{name}\n预约时间：{appointmentTime}\n\n我们会通过 {contact} 与您确认预约详情。\n如需修改或取消预约，请随时联系我。";
+    private String success = """
+            ### ✅ 预约创建成功！
+            
+            - **预约编号**：{appointmentId}
+            - **预约人**：{name}
+            - **预约时间**：{appointmentTime}
+            
+            我们会通过 **{contact}** 与您确认预约详情。
+            如需修改或取消预约，请随时联系我。""";
 
     /**
      * 预约失败模板
      */
-    private String failure = "抱歉，创建预约时出现错误。\n\n错误信息：{errorMessage}\n\n请稍后重试或联系人工客服。";
+    private String failure = """
+            ### ❌ 预约创建失败
+            
+            错误信息：{errorMessage}
+            
+            请稍后重试或联系人工客服。""";
 
     /**
      * 验证失败模板
      */
-    private String validationFailed = "输入信息格式不正确：\n\n{validationMessage}\n\n请重新输入。";
+    private String validationFailed = "⚠️ {validationMessage}\n\n请重新输入。";
 
     /**
      * 时间格式说明模板
@@ -186,15 +206,22 @@ public class FollowUpTemplateConfig implements InitializingBean {
      */
     public String renderConfirmation(String name, String contact, String appointmentTime,
                                      String topic, String remark) {
-        String topicLine = (topic != null && !topic.isEmpty()) ? "咨询主题：" + topic : "";
-        String remarkLine = (remark != null && !remark.isEmpty()) ? "备注：" + remark : "";
+        // Build table dynamically
+        StringBuilder table = new StringBuilder();
+        table.append("| 项目 | 内容 |\n");
+        table.append("|------|------|\n");
+        table.append("| **姓名** | ").append(name != null ? name : "未提供").append(" |\n");
+        table.append("| **联系方式** | ").append(contact != null ? contact : "未提供").append(" |\n");
+        table.append("| **预约时间** | ").append(appointmentTime != null ? appointmentTime : "未指定").append(" |\n");
+        if (topic != null && !topic.isEmpty()) {
+            table.append("| **咨询主题** | ").append(topic).append(" |\n");
+        }
+        if (remark != null && !remark.isEmpty()) {
+            table.append("| **备注** | ").append(remark).append(" |\n");
+        }
 
         Map<String, String> context = new LinkedHashMap<>();
-        context.put("name", name != null ? name : "未提供");
-        context.put("contact", contact != null ? contact : "未提供");
-        context.put("appointmentTime", appointmentTime != null ? appointmentTime : "未指定");
-        context.put("topicLine", topicLine);
-        context.put("remarkLine", remarkLine);
+        context.put("infoTable", table.toString());
 
         return applyPlaceholders(confirmation, context);
     }

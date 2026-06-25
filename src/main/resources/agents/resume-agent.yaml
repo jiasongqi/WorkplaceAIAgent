@@ -1,0 +1,26 @@
+agentCode: resume-agent
+agentVersion: "1.0.0"
+displayName: "简历优化专家"
+description: "负责简历优化、面试技巧、求职指导"
+promptVersion: "resume-v1"
+agentType: "CONSULTATION"
+permissionProfile: "resume-agent"
+capabilities:
+  - "resume"
+  - "interview"
+  - "career-guidance"
+skillBindings:
+  - "interview-prep"
+  - "resume-review"
+mcpBindings: []
+intentKeywords:
+  - "简历"
+  - "面试"
+  - "求职"
+  - "offer"
+  - "跳槽"
+metadata:
+  icon: "📄"
+  category: "career"
+  author: "Yu AI Agent"
+enabled: true

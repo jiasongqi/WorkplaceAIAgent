@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
  * 用户画像服务。
@@ -36,6 +37,10 @@ public class UserProfileService {
     @Resource
     private ProfilePromptBuilder promptBuilder;
 
+    @Resource
+    @org.springframework.beans.factory.annotation.Qualifier("profileExecutor")
+    private Executor profileExecutor;
+
     /**
      * 对话结束后异步触发画像更新：抽取 → 合并 → 持久化（merge 内部已持久化）。
      * <p>
@@ -57,7 +62,7 @@ public class UserProfileService {
                 // 抽取/合并失败：记录错误日志并保留原画像不变（Req 11.5）
                 log.error("用户 {} 画像更新失败，保留原画像不变", userId, e);
             }
-        });
+        }, profileExecutor);
     }
 
     /**

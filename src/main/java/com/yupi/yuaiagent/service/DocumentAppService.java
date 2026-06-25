@@ -31,6 +31,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DocumentAppService {
 
+    @org.springframework.beans.factory.annotation.Qualifier("aiChatVectorStore")
     private final VectorStore aiChatVectorStore;
     private final DocumentMetadataManager documentMetadataManager;
     private final UsageTracker usageTracker;

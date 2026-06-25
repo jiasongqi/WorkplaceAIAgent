@@ -34,4 +34,15 @@ public class PersistentChatMessage {
 
     /** Epoch millis when the message was created. */
     private long timestamp;
+
+    // === Multi-Agent source tracking (V1) ===
+
+    /** Source type: who produced this message (USER, AGENT, SYSTEM, TOOL, SYNTHESIZER). */
+    private MessageSource sourceType;
+
+    /** Source identifier: AGENT→"RESUME", TOOL→"web_search", USER→userId. */
+    private String sourceId;
+
+    /** Source display name for frontend: AGENT→"简历专家", TOOL→"Web 搜索". */
+    private String sourceName;
 }

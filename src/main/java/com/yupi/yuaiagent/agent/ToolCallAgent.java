@@ -1,5 +1,7 @@
 package com.yupi.yuaiagent.agent;
 
+import com.yupi.yuaiagent.guard.EmbeddingLoopDetector;
+import com.yupi.yuaiagent.guard.ToolResultClassifier;
 import com.yupi.yuaiagent.trace.model.TraceSpan;
 import com.yupi.yuaiagent.trace.model.TraceStepType;
 import cn.hutool.core.collection.CollUtil;
@@ -19,8 +21,13 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -46,9 +53,30 @@ public class ToolCallAgent extends ReActAgent {
     // 终止工具方法名常量，与 TerminateTool.doTerminate() 保持一致
     private static final String TERMINATE_TOOL_NAME = "doTerminate";
 
+    /** Tool execution timeout in seconds — prevents slow MCP/tools from blocking the agent. */
+    private static final long TOOL_TIMEOUT_SECONDS = 30;
+
+    /** Maximum number of automatic retries on timeout (direction is correct, just network issue). */
+    private static final int MAX_TIMEOUT_RETRIES = 2;
+
+    // Executor for async tool execution with timeout
+    private Executor toolExecutor;
+
+    // Guard components — optional, non-invasive integration (Req 4.1, 4.2, 4.8)
+    @Autowired(required = false)
+    private ToolResultClassifier toolResultClassifier;
+
+    @Autowired(required = false)
+    private EmbeddingLoopDetector embeddingLoopDetector;
+
     public ToolCallAgent(ToolCallback[] availableTools) {
+        this(availableTools, java.util.concurrent.ForkJoinPool.commonPool());
+    }
+
+    public ToolCallAgent(ToolCallback[] availableTools, Executor toolExecutor) {
         super();
         this.availableTools = availableTools;
+        this.toolExecutor = toolExecutor;
         this.toolCallingManager = ToolCallingManager.builder().build();
         // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文
         this.chatOptions = DashScopeChatOptions.builder()
@@ -57,16 +85,37 @@ public class ToolCallAgent extends ReActAgent {
     }
 
     /**
+     * 清理资源：清除 LoopDetector 会话状态，防止内存泄漏和跨会话误判
+     */
+    @Override
+    protected void cleanup() {
+        nextStepPromptAdded = false;
+        if (embeddingLoopDetector != null) {
+            try {
+                String sessionId = Thread.currentThread().getName();
+                embeddingLoopDetector.clearSession(sessionId);
+            } catch (Exception e) {
+                log.warn("[ToolCallAgent] clearSession failed: {}", e.getMessage());
+            }
+        }
+        super.cleanup();
+    }
+
+    // 标记 nextStepPrompt 是否已添加（防止每步重复追加）
+    private boolean nextStepPromptAdded = false;
+
+    /**
      * 处理当前状态并决定下一步行动
      *
      * @return 是否需要执行行动
      */
     @Override
     public boolean think() {
-        // 1、校验提示词，拼接用户提示词
-        if (StrUtil.isNotBlank(getNextStepPrompt())) {
+        // 1、校验提示词，拼接用户提示词（仅首次添加，防止重复追加污染上下文）
+        if (!nextStepPromptAdded && StrUtil.isNotBlank(getNextStepPrompt())) {
             UserMessage userMessage = new UserMessage(getNextStepPrompt());
             getMessageList().add(userMessage);
+            nextStepPromptAdded = true;
         }
         // 2、调用 AI 大模型，获取工具调用结果
         List<Message> messageList = getMessageList();
@@ -74,7 +123,7 @@ public class ToolCallAgent extends ReActAgent {
         try {
             ChatResponse chatResponse = getChatClient().prompt(prompt)
                     .system(getSystemPrompt())
-                    .tools(availableTools)
+                    .toolCallbacks(availableTools)
                     .call()
                     .chatResponse();
             // 记录响应，用于等下 Act
@@ -125,9 +174,70 @@ public class ToolCallAgent extends ReActAgent {
             toolCallSpan = getTraceRecorder().startSpan(getTraceContext(), TraceStepType.TOOL_CALL, "工具调用");
         }
 
-        // 调用工具
+        // --- Guard: EmbeddingLoopDetector — invoke BEFORE tool execution (Req 4.2) ---
+        if (embeddingLoopDetector != null) {
+            try {
+                String sessionId = Thread.currentThread().getName();
+                AssistantMessage assistantMsg = toolCallChatResponse.getResult().getOutput();
+                List<AssistantMessage.ToolCall> toolCalls = assistantMsg.getToolCalls();
+                if (!toolCalls.isEmpty()) {
+                    String toolName = toolCalls.get(0).name();
+                    String toolArgs = toolCalls.get(0).arguments();
+                    boolean loopDetected = embeddingLoopDetector.checkLoop(sessionId, toolName, toolArgs, getMessageList());
+                    if (loopDetected) {
+                        // 循环检测命中：终止 Agent 避免无限重复调用
+                        log.warn("[ToolCallAgent] loop detected, terminating agent to prevent repeated tool calls");
+                        setState(AgentState.FINISHED);
+                        return "检测到重复工具调用循环，已自动终止。请重新描述您的需求。";
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[ToolCallAgent] loop detection failed, skipping: {}", e.getMessage());
+            }
+        }
+
+        // 调用工具（with timeout protection + auto-retry for TIMEOUT）
+        boolean isTimeout = false;
         Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
-        ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
+        ToolExecutionResult toolExecutionResult;
+        int retryCount = 0;
+        while (true) {
+            try {
+                final Prompt toolPrompt = prompt;
+                toolExecutionResult = CompletableFuture
+                        .supplyAsync(() -> toolCallingManager.executeToolCalls(toolPrompt, toolCallChatResponse), toolExecutor)
+                        .orTimeout(TOOL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                        .join();
+                break; // 成功，退出重试循环
+            } catch (java.util.concurrent.CompletionException e) {
+                if (e.getCause() instanceof TimeoutException) {
+                    retryCount++;
+                    if (retryCount <= MAX_TIMEOUT_RETRIES) {
+                        // 自动重试：方向对，网络问题，不换关键词
+                        log.warn("[ToolCall] tool execution timed out (attempt {}/{}), retrying same call...",
+                                retryCount, MAX_TIMEOUT_RETRIES);
+                        continue;
+                    }
+                    // 重试用尽，走失败流程
+                    log.error("[ToolCall] tool execution timed out after {}s, {} retries exhausted",
+                            TOOL_TIMEOUT_SECONDS, MAX_TIMEOUT_RETRIES);
+                    if (toolCallSpan != null && getTraceRecorder() != null) {
+                        getTraceRecorder().failSpan(getTraceContext(), toolCallSpan,
+                                "Tool execution timed out after " + TOOL_TIMEOUT_SECONDS + "s (retries exhausted)");
+                    }
+                    // --- Guard: ToolResultClassifier — classify timeout result ---
+                    if (toolResultClassifier != null) {
+                        try {
+                            toolResultClassifier.classifyAndGuide(null, true, getMessageList());
+                        } catch (Exception ex) {
+                            log.warn("[ToolCallAgent] result classification failed, skipping: {}", ex.getMessage());
+                        }
+                    }
+                    return "工具执行超时（" + TOOL_TIMEOUT_SECONDS + "秒，已重试" + MAX_TIMEOUT_RETRIES + "次），请换个方式重试";
+                }
+                throw e;
+            }
+        }
         // 记录消息上下文，conversationHistory 已经包含了助手消息和工具调用返回的结果
         setMessageList(toolExecutionResult.conversationHistory());
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
@@ -142,6 +252,11 @@ public class ToolCallAgent extends ReActAgent {
                 .map(response -> "工具 " + response.name() + " 返回的结果：" + response.responseData())
                 .collect(Collectors.joining("\n"));
 
+        // --- Guard: TokenBudgetManager — truncate Observation to 3000 chars in Normal mode ---
+        if (getTokenBudgetManager() != null) {
+            results = getTokenBudgetManager().truncateForNormal(results);
+        }
+
         // Record tool names in trace metadata (Req 8.5)
         if (toolCallSpan != null && getTraceRecorder() != null) {
             String toolNames = toolResponseMessage.getResponses().stream()
@@ -149,6 +264,25 @@ public class ToolCallAgent extends ReActAgent {
                     .collect(Collectors.joining(","));
             getTraceRecorder().putMetadata(toolCallSpan, "toolNames", toolNames);
             getTraceRecorder().endSpan(getTraceContext(), toolCallSpan);
+        }
+
+        // --- Guard: ToolResultClassifier — classify normal result (Req 4.1) ---
+        if (toolResultClassifier != null) {
+            try {
+                ToolResultClassifier.ResultGrade grade = toolResultClassifier.classifyAndGuide(results, false, getMessageList());
+                // 如果结果非正常，回填失败原因给 LoopDetector
+                if (grade != ToolResultClassifier.ResultGrade.NORMAL && embeddingLoopDetector != null) {
+                    String sessionId = Thread.currentThread().getName();
+                    AssistantMessage assistantMsg = toolCallChatResponse.getResult().getOutput();
+                    List<AssistantMessage.ToolCall> toolCalls = assistantMsg.getToolCalls();
+                    if (!toolCalls.isEmpty()) {
+                        String sig = toolCalls.get(0).name() + ":" + toolCalls.get(0).arguments();
+                        embeddingLoopDetector.recordFailure(sessionId, sig, grade.name() + " - " + results);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[ToolCallAgent] result classification failed, skipping: {}", e.getMessage());
+            }
         }
 
         log.info(results);

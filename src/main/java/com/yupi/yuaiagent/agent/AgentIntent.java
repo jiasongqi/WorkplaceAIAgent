@@ -12,6 +12,7 @@ public enum AgentIntent {
     NEGOTIATION("薪资谈判专家", "薪资谈判、涨薪、薪酬分析"),
     ESCAPE("离职规划专家", "离职、辞职、劳动纠纷、工作交接"),
     CONSULTATION("预约咨询专家", "预约咨询、预约专家、咨询预约"),
+    DATA_QUERY("数据查询顾问", "数据查询、指标查看、报表、KPI"),
     GENERAL("职场通用顾问", "其他职场问题");
     
     private final String agentName;
@@ -69,7 +70,7 @@ public enum AgentIntent {
     
     /**
      * 判断文本是否包含任意一个关键词
-     * 
+     *
      * @param text     待检查文本
      * @param keywords 关键词列表
      * @return 包含任意关键词返回 true，否则返回 false
@@ -81,5 +82,38 @@ public enum AgentIntent {
             }
         }
         return false;
+    }
+
+    /**
+     * Convert NLU Pipeline reranked intents to a list of AgentIntent.
+     * Used by OrchestratorAgent for multi-intent serial execution (V1 群聊模式).
+     *
+     * <p>Filters out UNKNOWN and deduplicates. Returns at least 1 intent (GENERAL fallback).
+     *
+     * @param nluIntents list of (intentName, score) from NluPipeline
+     * @return ordered list of AgentIntent (highest score first)
+     */
+    public static java.util.List<AgentIntent> fromMultiIntent(
+            java.util.List<com.yupi.yuaiagent.nlu.UnifiedNluExtractor.IntentScore> nluIntents) {
+        java.util.List<AgentIntent> result = new java.util.ArrayList<>();
+        java.util.Set<AgentIntent> seen = new java.util.HashSet<>();
+
+        for (var score : nluIntents) {
+            try {
+                AgentIntent intent = com.yupi.yuaiagent.nlu.NluIntent.valueOf(score.intent()).toAgentIntent();
+                if (intent != GENERAL && seen.add(intent)) {
+                    result.add(intent);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // UNKNOWN or unmapped → skip
+            }
+        }
+
+        // At least one intent
+        if (result.isEmpty()) {
+            result.add(GENERAL);
+        }
+
+        return result;
     }
 }

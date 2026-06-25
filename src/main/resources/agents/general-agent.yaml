@@ -1,0 +1,22 @@
+agentCode: general-agent
+agentVersion: "1.0.0"
+displayName: "职场通用顾问"
+description: "通用职场问题咨询"
+promptVersion: "general-v1"
+agentType: "GENERAL"
+permissionProfile: "general-agent"
+capabilities:
+  - "career"
+  - "workplace"
+skillBindings: []
+mcpBindings: []
+intentKeywords:
+  - "职场"
+  - "人际"
+  - "压力"
+  - "职业规划"
+metadata:
+  icon: "🧑‍💼"
+  category: "career"
+  author: "Yu AI Agent"
+enabled: true

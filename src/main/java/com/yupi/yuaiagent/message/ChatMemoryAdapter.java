@@ -39,26 +39,44 @@ public class ChatMemoryAdapter {
      * Adds a user message. Persists to Truth first, then syncs to ChatMemory.
      */
     public PersistentChatMessage addUserMessage(String chatId, String content) {
-        return addMessage(chatId, "user", content);
+        return addMessage(chatId, "user", content, MessageSource.USER, null, null);
+    }
+
+    /**
+     * Adds a user message with source tracking.
+     */
+    public PersistentChatMessage addUserMessage(String chatId, String content,
+                                                 MessageSource sourceType, String sourceId, String sourceName) {
+        return addMessage(chatId, "user", content, sourceType, sourceId, sourceName);
     }
 
     /**
      * Adds an assistant message. Persists to Truth first, then syncs to ChatMemory.
      */
     public PersistentChatMessage addAssistantMessage(String chatId, String content) {
-        return addMessage(chatId, "assistant", content);
+        return addMessage(chatId, "assistant", content, MessageSource.AGENT, null, null);
+    }
+
+    /**
+     * Adds an assistant message with source tracking.
+     */
+    public PersistentChatMessage addAssistantMessage(String chatId, String content,
+                                                      MessageSource sourceType, String sourceId, String sourceName) {
+        return addMessage(chatId, "assistant", content, sourceType, sourceId, sourceName);
     }
 
     /**
      * Adds a system message. Persists to Truth first, then syncs to ChatMemory.
      */
     public PersistentChatMessage addSystemMessage(String chatId, String content) {
-        return addMessage(chatId, "system", content);
+        return addMessage(chatId, "system", content, MessageSource.SYSTEM, null, null);
     }
 
-    private PersistentChatMessage addMessage(String chatId, String role, String content) {
+    private PersistentChatMessage addMessage(String chatId, String role, String content,
+                                              MessageSource sourceType, String sourceId, String sourceName) {
         // 1. Persist to Truth (Source of Truth — must succeed)
-        PersistentChatMessage pm = persistentRepo.save(chatId, role, content);
+        PersistentChatMessage pm = persistentRepo.save(chatId, role, content,
+            sourceType, sourceId, sourceName);
 
         // 2. Sync to ChatMemory (best-effort — failure is tolerable)
         try {

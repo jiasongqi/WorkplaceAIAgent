@@ -121,6 +121,12 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 
 ### 🆕 新增技术栈
 
+- ⭐️ NLU 意图理解层（V4.2：1 次 LLM + 别名解析 + 槽位提取 + 意图分类 + 澄清）
+- ⭐️ 多 Agent 运行时（V1 群聊模式 + V2 Task Orchestrator 基础设施）
+- ⭐️ 工作流引擎（WorkflowMatcher + TaskExecutor + ResultAggregator）
+- ⭐️ Token 预算控制（TokenBudget + TokenUsageTracker）
+- ⭐️ 执行轨迹实时时间线（TraceTimelineView）
+- ⭐️ 消息来源追踪（MessageSource: USER/AGENT/SYSTEM/TOOL/SYNTHESIZER）
 - ⭐️ 飞书/钉钉日历 API 集成
 - ⭐️ 对话记忆压缩（Token/轮数策略）
 - ⭐️ 模板化追问机制
@@ -132,6 +138,9 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 - ⭐️ 对话搜索（加权评分 + 时间衰减）
 - ⭐️ 持久化消息（Source of Truth + 双索引）
 - ⭐️ 会话三态生命周期（ACTIVE/ARCHIVED/DELETED）
+- ⭐️ 跨 Agent 记忆注入（切换 Agent 不丢上下文）
+- ⭐️ 预约咨询智能提取（自然语言姓名/手机号/时间）
+- ⭐️ Markdown 结构化输出（表格确认、列表结果）
 
 ## 项目结构
 
@@ -145,6 +154,20 @@ src/main/java/com/yupi/yuaiagent/
 │   │   ├── CoreInfoType.java       # 核心信息类型枚举
 │   │   ├── FollowUpQuestion.java   # 追问问题实体
 │   │   └── CompressedMemory.java   # 压缩记忆模型
+│   ├── output/                     # Agent 输出模型（V2）
+│   │   ├── AgentOutput.java        # 类型化输出接口
+│   │   ├── TextOutput.java         # 通用文本输出
+│   │   ├── AgentOutputFormatter.java # Formatter 接口
+│   │   └── FormatterRegistry.java  # Formatter 注册表
+│   ├── task/                       # 任务模型（V2）
+│   │   ├── ExecutionResult.java    # 统一执行结果
+│   │   ├── TaskStatus.java         # 任务状态枚举
+│   │   └── FailurePolicy.java      # 失败策略枚举
+│   ├── runner/                     # AgentRunner 适配器（V2）
+│   │   ├── ResumeAgentRunner.java
+│   │   ├── NegotiationAgentRunner.java
+│   │   ├── EscapeAgentRunner.java
+│   │   └── GeneralCareerAgentRunner.java
 │   ├── data/                       # 数据员工 Agent 族
 │   │   ├── DataEmployeeAgent.java  # 数据员工基类（模板方法）
 │   │   ├── DataAnalystAgent.java   # 数据分析师
@@ -157,6 +180,10 @@ src/main/java/com/yupi/yuaiagent/
 │   │   ├── AnalysisReport.java     # 分析报告
 │   │   └── AnalysisSource.java     # 分析来源枚举
 │   ├── AgentIntent.java            # 意图枚举
+│   ├── AgentRunner.java          # Agent 执行接口（V2）
+│   ├── TaskExecutor.java         # 任务执行引擎（V2）
+│   ├── ResultAggregator.java     # 结果汇总器（V2）
+│   ├── DataQueryRouter.java      # 数据查询路由（零 LLM）
 │   ├── BaseAgent.java              # Agent 基类
 │   ├── ReActAgent.java             # ReAct 思考-行动循环
 │   ├── ToolCallAgent.java          # 工具调用 Agent
@@ -221,9 +248,42 @@ src/main/java/com/yupi/yuaiagent/
 ├── search/                         # 对话搜索
 │   └── ChatSearchService.java      # 加权搜索引擎
 ├── message/                        # 持久化消息（Source of Truth）
-│   ├── PersistentChatMessage.java  # 消息实体（ULID）
+│   ├── PersistentChatMessage.java  # 消息实体（ULID + sourceType/sourceId/sourceName）
 │   ├── PersistentMessageRepository.java # 双索引持久化
-│   └── ChatMemoryAdapter.java      # Truth ↔ ChatMemory 桥接
+│   ├── ChatMemoryAdapter.java      # Truth ↔ ChatMemory 桥接
+│   └── MessageSource.java          # 消息来源枚举（USER/AGENT/SYSTEM/TOOL/SYNTHESIZER）
+├── nlu/                            # NLU 意图理解层（V4.2）
+│   ├── NluPipeline.java            # NLU 串联管道
+│   ├── UnifiedNluExtractor.java    # 1 次 LLM：intent + slots + domain + action
+│   ├── AliasResolver.java          # 别名元数据提取（Word Boundary）
+│   ├── IntentReranker.java         # domain 信号 re-rank
+│   ├── IntentAmbiguityDetector.java # 同类意图检测
+│   ├── IntentRequirementRegistry.java # 双维度槽位需求
+│   ├── ClarificationHandler.java   # 模板追问（零 LLM）
+│   ├── ContextShiftDetector.java   # 3 态接口（FOLLOW_UP/ENTITY_SWITCH/NEW_QUERY）
+│   ├── RuleContextShiftDetector.java # 规则实现
+│   ├── ConversationState.java      # 多轮槽位状态 + smartMerge
+│   ├── ConversationStateStore.java # 存储接口
+│   ├── InMemoryConversationStateStore.java # 内存实现
+│   ├── NluContext.java             # state + aliases 分离
+│   ├── NluIntent.java              # 细粒度意图枚举（14 值）
+│   ├── RouteHint.java              # NLU → WorkflowMatcher 桥接
+│   └── RouteTemplate.java          # 点分记法路由
+├── context/                        # 上下文层（V2）
+│   ├── ConversationContext.java    # 不可变对话上下文
+│   ├── ConversationContextBuilder.java # 上下文构建器
+│   └── RuntimeContext.java         # 可变执行状态
+├── workflow/                       # 工作流层（V2）
+│   ├── WorkflowTemplate.java       # 工作流模板
+│   ├── WorkflowRegistry.java       # 工作流注册表
+│   ├── WorkflowMatcher.java        # Score-based 匹配器
+│   ├── WorkflowMatchResult.java    # 匹配结果
+│   ├── MatchType.java              # 匹配类型枚举
+│   └── PlanStep.java               # 工作流步骤
+├── budget/                         # 预算层（V2）
+│   ├── TokenBudget.java            # Token 预算
+│   ├── TokenUsage.java             # Token 使用记录
+│   └── TokenUsageTracker.java      # 使用量追踪
 ├── session/                        # 会话管理
 │   ├── SessionManager.java         # 三态会话（ACTIVE/ARCHIVED/DELETED）
 │   └── SessionStatus.java          # 会话状态枚举
@@ -363,8 +423,11 @@ GET /api/ai/orchestrator/chat?message={message}&chatId={chatId}
 - 简历相关 → ResumeAgent
 - 薪资谈判 → NegotiationAgent
 - 离职规划 → EscapeAgent
-- **预约咨询 → ConsultationAgent** 🆕
+- 数据查询 → DataQueryRouter（零 LLM）
+- 预约咨询 → ConsultationAgent
 - 其他职场问题 → GeneralCareerAgent
+
+SSE 事件：routing / agent-turn / message / clarification / trace / quality-review / error
 
 ### 会话管理接口
 

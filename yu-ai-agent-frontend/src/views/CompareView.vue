@@ -104,6 +104,7 @@ const createSSE = (onToken, onDone, onError) => {
   const url = `${API_BASE}/ai/orchestrator/chat?${params}`
   const es = new EventSource(url)
 
+  // 命名事件：message（后端 send(SseEmitter.event().name("message").data(...))）
   es.addEventListener('message', (e) => {
     if (e.data === '[DONE]') {
       onDone()
@@ -112,6 +113,16 @@ const createSSE = (onToken, onDone, onError) => {
     }
     onToken(e.data)
   })
+
+  // 默认事件（onmessage）：后端 send(SseEmitter.event().data(...)) 不带 name
+  es.onmessage = (e) => {
+    if (!e.data || e.data === '[DONE]') {
+      onDone()
+      es.close()
+      return
+    }
+    onToken(e.data)
+  }
 
   es.onerror = () => {
     onError()

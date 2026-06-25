@@ -1,2 +1,77 @@
-# 可以编写生产环境的配置，会覆盖 application.yml 配置
-# 注意提交时不要包含敏感信息（或者不要提交该文件）
+# ─── 生产环境配置 ───
+# 通过环境变量注入敏感信息，不要硬编码到代码仓库
+# 部署命令示例：java -jar app.jar --spring.profiles.active=prod
+
+# ─── 数据源（PgVector）───
+spring:
+  datasource:
+    url: ${PG_DATASOURCE_URL}
+    username: ${PG_USERNAME}
+    password: ${PG_PASSWORD}
+  ai:
+    # 生产环境启用 PgVector 向量存储
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        dimensions: 1536
+        distance-type: COSINE_DISTANCE
+        max-document-batch-size: 10000
+
+# ─── JWT 安全 ───
+jwt:
+  # 生产环境必须通过环境变量注入强密钥，无默认值（缺失时启动失败）
+  secret: ${JWT_SECRET}
+
+# ─── 沙箱安全 ───
+sandbox:
+  # 生产环境强制使用 Docker 沙箱，禁止本地进程沙箱
+  require-docker: true
+
+# ─── MCP 信任 ───
+mcp:
+  trust:
+    default-level: VERIFIED
+    enabled: true
+
+# ─── 日志级别（生产环境精简输出）───
+logging:
+  level:
+    root: WARN
+    com.yupi.yuaiagent: INFO
+    org.springframework.ai: WARN
+    org.springframework.web: WARN
+
+# ─── 记忆系统 ───
+memory:
+  coordinator:
+    timeout-ms: 3000
+    total-token-budget: 6000
+  layers:
+    experience:
+      storage-dir: ${MEMORY_EXPERIENCE_STORAGE_DIR:/data/memory/experience}
+    fact-store:
+      storage-dir: ${MEMORY_FACT_STORAGE_DIR:/data/memory/facts}
+    summary:
+      storage-dir: ${MEMORY_SUMMARY_STORAGE_DIR:/data/memory/summaries}
+
+# ─── 存储目录（生产环境持久路径）───
+artifact:
+  storage:
+    dir: ${ARTIFACT_STORAGE_DIR:/data/artifacts}
+appointment:
+  storage:
+    dir: ${APPOINTMENT_STORAGE_DIR:/data/appointments}
+session:
+  storage:
+    dir: ${SESSION_STORAGE_DIR:/data/sessions}
+user-profile:
+  storage:
+    dir: ${USER_PROFILE_STORAGE_DIR:/data/user-profiles}
+trace:
+  storage:
+    dir: ${TRACE_STORAGE_DIR:/data/traces}
+
+# ─── 质检配置 ───
+workpilot:
+  quality:
+    model: ${QUALITY_REVIEW_MODEL:qwen3.7-plus}

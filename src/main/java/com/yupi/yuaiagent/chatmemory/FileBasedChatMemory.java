@@ -26,6 +26,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * 
  * 线程安全加固：Kryo 不是线程安全的，改用 ThreadLocal 让每个线程持有独立实例，
  * 避免多用户并发时序列化状态互相污染。
+ *
+ * <p>Hard limit: when messages exceed MAX_MESSAGES, oldest messages are truncated
+ * as a last-resort OOM guard. Compression should handle normal cases.
  * 
  * @author jsq
  */
@@ -35,6 +38,19 @@ public class FileBasedChatMemory implements ChatMemory {
     private final String BASE_DIR;
     private final List<CompressionStrategy> compressionStrategies;
     private final MemoryCompressor memoryCompressor;
+
+    /**
+     * Hard limit on messages per conversation — last-resort OOM guard.
+     * When exceeded, oldest messages are dropped (keeping most recent).
+     * This should rarely trigger if compression is properly configured.
+     */
+    private static final int MAX_MESSAGES = 100;
+
+    /**
+     * Hard limit on estimated prompt tokens per conversation.
+     * Rough estimate: 1 token per Chinese char, 1 per 4 English chars.
+     */
+    private static final int MAX_PROMPT_TOKENS = 8000;
 
     // 压缩状态存储
     private final ConcurrentHashMap<String, CompressionState> compressionStates = new ConcurrentHashMap<>();
@@ -82,6 +98,9 @@ public class FileBasedChatMemory implements ChatMemory {
             if (shouldCompress(conversationId, conversationMessages)) {
                 compressConversation(conversationId, conversationMessages);
             }
+
+            // Hard limit enforcement — last-resort OOM guard
+            enforceHardLimit(conversationId, conversationMessages);
             
             saveConversation(conversationId, conversationMessages);
         } finally {
@@ -111,6 +130,51 @@ public class FileBasedChatMemory implements ChatMemory {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    /**
+     * Enforces hard limits on message count and estimated token size.
+     * This is the last-resort OOM guard — compression should handle normal cases.
+     *
+     * @param conversationId the conversation ID (for logging)
+     * @param messages       the message list (modified in-place)
+     */
+    private void enforceHardLimit(String conversationId, List<Message> messages) {
+        // 1. Message count limit
+        if (messages.size() > MAX_MESSAGES) {
+            int toRemove = messages.size() - MAX_MESSAGES;
+            messages.subList(0, toRemove).clear();
+            log.warn("[Memory] conversation {} exceeded MAX_MESSAGES ({}), truncated {} oldest messages",
+                    conversationId, MAX_MESSAGES, toRemove);
+        }
+
+        // 2. Estimated token limit
+        long estimatedTokens = estimateTotalTokens(messages);
+        if (estimatedTokens > MAX_PROMPT_TOKENS) {
+            // Drop oldest messages until under limit
+            while (messages.size() > 1 && estimateTotalTokens(messages) > MAX_PROMPT_TOKENS) {
+                messages.remove(0);
+            }
+            log.warn("[Memory] conversation {} exceeded MAX_PROMPT_TOKENS ({}), truncated to {} messages",
+                    conversationId, MAX_PROMPT_TOKENS, messages.size());
+        }
+    }
+
+    /**
+     * Rough token estimation: 1 token per Chinese char, 1 per 4 English chars.
+     */
+    private long estimateTotalTokens(List<Message> messages) {
+        long total = 0;
+        for (Message msg : messages) {
+            String text = msg.getText();
+            if (text != null) {
+                // Count Chinese chars (1 token each) and non-Chinese chars (0.25 token each)
+                long chineseChars = text.chars().filter(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN).count();
+                long otherChars = text.length() - chineseChars;
+                total += chineseChars + (otherChars / 4);
+            }
+        }
+        return total;
     }
 
     /**

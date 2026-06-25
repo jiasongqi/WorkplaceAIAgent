@@ -110,6 +110,7 @@ public class AiChatAgent {
     private Advisor aiChatRagCloudAdvisor;
 
     @Resource
+    @org.springframework.beans.factory.annotation.Qualifier("aiChatVectorStore")
     private VectorStore pgVectorVectorStore;
 
     @Resource

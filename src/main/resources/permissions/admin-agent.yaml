@@ -1,0 +1,11 @@
+agentCode: admin-agent
+displayName: "超级管理员"
+description: "系统管理员，拥有全部权限"
+version: "1.0"
+allowedToolPatterns:
+  - "*"
+minMcpTrustScore: 0
+maxToolCallsPerRequest: 100
+filesystemAccess: true
+networkAccess: true
+admin: true

@@ -1,0 +1,14 @@
+agentCode: escape-agent
+displayName: "离职规划专家"
+description: "负责离职规划、辞职指导、劳动纠纷咨询"
+version: "1.0"
+allowedToolPatterns:
+  - "escape.*"
+  - "web.search"
+  - "file.read"
+  - "rag.query"
+minMcpTrustScore: 30
+maxToolCallsPerRequest: 15
+filesystemAccess: true
+networkAccess: true
+admin: false

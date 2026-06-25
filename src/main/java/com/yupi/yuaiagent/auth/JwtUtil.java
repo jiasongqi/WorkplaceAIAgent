@@ -49,8 +49,12 @@ public class JwtUtil {
                 return null;
             }
             JWT jwt = JWTUtil.parseToken(token);
-            Long exp = (Long) jwt.getPayload("exp");
-            if (exp != null && exp < System.currentTimeMillis()) {
+            Object expObj = jwt.getPayload("exp");
+            long exp = 0;
+            if (expObj instanceof Number num) {
+                exp = num.longValue();
+            }
+            if (exp > 0 && exp < System.currentTimeMillis()) {
                 return null;
             }
             return (String) jwt.getPayload("userId");

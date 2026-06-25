@@ -115,19 +115,19 @@
     - 接入策略，在 Token / 轮数超阈值时自动触发压缩，并推送"正在整理对话记忆..."与"记忆整理完成"状态消息，保持对话连续性
     - _Requirements: 3.5, 4.1, 4.2, 4.3, 4.4, 4.5_
 
-  - [~]* 5.5 编写记忆保留属性测试
+  - [ ]* 5.5 编写记忆保留属性测试
     - **Property 6: Memory Compression Retention**
     - **Validates: Requirements 3.2**
 
-  - [~]* 5.6 编写 Token 阈值触发属性测试
+  - [ ]* 5.6 编写 Token 阈值触发属性测试
     - **Property 7: Compression Trigger by Token Threshold**
     - **Validates: Requirements 4.1**
 
-  - [~]* 5.7 编写对话轮数触发属性测试
+  - [ ]* 5.7 编写对话轮数触发属性测试
     - **Property 8: Compression Trigger by Round Threshold**
     - **Validates: Requirements 4.2**
 
-  - [~]* 5.8 编写压缩摘要内容完整性属性测试
+  - [ ]* 5.8 编写压缩摘要内容完整性属性测试
     - **Property 9: Compressed Memory Content Completeness**
     - **Validates: Requirements 4.6**
 
@@ -141,11 +141,11 @@
     - 提供确认页、校验失败、成功、失败等渲染方法
     - _Requirements: 6.1, 6.3, 6.4_
 
-  - [~]* 7.2 编写追问模板使用属性测试
+  - [ ]* 7.2 编写追问模板使用属性测试
     - **Property 11: Follow-Up Template Usage**
     - **Validates: Requirements 5.3, 6.3**
 
-  - [~]* 7.3 编写模板占位符替换属性测试
+  - [ ]* 7.3 编写模板占位符替换属性测试
     - **Property 14: Template Placeholder Substitution**
     - **Validates: Requirements 6.2**
 
@@ -165,15 +165,15 @@
     - 核心信息缺失时触发追问（使用模板），非核心信息由 AI 智能追问；信息完整后展示确认页；确认后调用 CalendarService 创建事件并持久化
     - _Requirements: 1.1, 5.1, 5.3, 5.4, 5.5, 5.7, 2.2_
 
-  - [~]* 9.2 编写缺失核心信息触发追问属性测试
+  - [ ]* 9.2 编写缺失核心信息触发追问属性测试
     - **Property 10: Follow-Up Trigger on Missing Core Info**
     - **Validates: Requirements 5.1**
 
-  - [~]* 9.3 编写核心信息完整后确认属性测试
+  - [ ]* 9.3 编写核心信息完整后确认属性测试
     - **Property 12: Confirmation After Core Info Complete**
     - **Validates: Requirements 5.5**
 
-  - [~]* 9.4 编写非法输入校验重试属性测试
+  - [ ]* 9.4 编写非法输入校验重试属性测试
     - **Property 13: Invalid Input Validation and Retry**
     - **Validates: Requirements 5.6**
 
@@ -183,7 +183,7 @@
     - 在同步 `chat` 与流式 `routeToAgent` 中将 CONSULTATION 路由到 ConsultationAgent
     - _Requirements: 1.1, 1.3, 1.4_
 
-  - [~]* 10.2 编写意图路由属性测试
+  - [ ]* 10.2 编写意图路由属性测试
     - **Property 1: Consultation Intent Routing**
     - **Validates: Requirements 1.1, 1.3, 1.4**
 

@@ -70,12 +70,31 @@ public class PersistentMessageRepository {
      * @return the persisted message with generated messageId and timestamp
      */
     public PersistentChatMessage save(String chatId, String role, String content) {
+        return save(chatId, role, content, null, null, null);
+    }
+
+    /**
+     * Persists a new message with multi-agent source tracking.
+     *
+     * @param chatId    the chat session ID
+     * @param role      "user", "assistant", or "system"
+     * @param content   the message content
+     * @param sourceType who produced this message (nullable — defaults to role-based inference)
+     * @param sourceId   source identifier (nullable)
+     * @param sourceName source display name (nullable)
+     * @return the persisted message with generated messageId and timestamp
+     */
+    public PersistentChatMessage save(String chatId, String role, String content,
+                                      MessageSource sourceType, String sourceId, String sourceName) {
         PersistentChatMessage msg = new PersistentChatMessage();
         msg.setMessageId(IdUtil.fastSimpleUUID());
         msg.setChatId(chatId);
         msg.setRole(role);
         msg.setContent(content);
         msg.setTimestamp(System.currentTimeMillis());
+        msg.setSourceType(sourceType);
+        msg.setSourceId(sourceId);
+        msg.setSourceName(sourceName);
 
         chatIndex.computeIfAbsent(chatId, k -> Collections.synchronizedList(new ArrayList<>()))
                 .add(msg);

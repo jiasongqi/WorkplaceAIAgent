@@ -1,65 +1,50 @@
 <template>
-  <div class="app-layout">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-logo">
-        <div class="logo-icon">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" stroke="white" stroke-width="1.2" fill="none"/>
-            <circle cx="8" cy="8" r="2" fill="white" opacity="0.8"/>
-          </svg>
+  <div class="app-shell">
+    <!-- Ambient background -->
+    <div class="ambient">
+      <div class="glow-top"></div>
+      <div class="glow-bot"></div>
+    </div>
+    <div class="noise"></div>
+
+    <!-- App content -->
+    <div class="app-content">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="logo-area" @click="$router.push('/')">
+          <div class="logo-orb"></div>
+          <span class="logo-text">WorkPilot</span>
         </div>
-        <span class="logo-name">WorkPilot</span>
-        <span class="logo-badge">BETA</span>
-      </div>
-
-      <nav class="nav-list">
-        <div class="nav-section-label">Main</div>
-        <router-link
-          v-for="item in mainNav"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: isActive(item.path) }"
-        >
-          <span class="nav-icon">{{ item.icon }}</span>
-          <span>{{ item.label }}</span>
-        </router-link>
-
-        <div class="nav-divider"></div>
-        <div class="nav-section-label">Data</div>
-
-        <router-link
-          v-for="item in dataNav"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: isActive(item.path) }"
-        >
-          <span class="nav-icon">{{ item.icon }}</span>
-          <span>{{ item.label }}</span>
-        </router-link>
-      </nav>
-
-      <div class="sidebar-footer">
-        <router-link to="/admin" class="nav-item admin-item">
-          <span class="nav-icon">⚙</span>
-          <span>管理后台</span>
-        </router-link>
-        <div class="user-row">
-          <div class="user-avatar">{{ userInitial }}</div>
-          <span class="user-name">{{ username }}</span>
+        <nav class="topbar-nav">
+          <router-link
+            v-for="item in navItems"
+            :key="item.path"
+            :to="item.path"
+            class="nav-link"
+            :class="{ active: isActive(item.path) }"
+          >
+            <span class="nav-icon">{{ item.icon }}</span>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </nav>
+        <div class="topbar-r">
+          <button class="tb-btn" @click="$router.push('/knowledge')" title="知识库"><BookOpen :size="16" /></button>
+          <button class="tb-btn" @click="$router.push('/artifacts')" title="交付物"><ClipboardList :size="16" /></button>
+          <button class="tb-btn" @click="$router.push('/favorites')" title="收藏"><Star :size="16" /></button>
+          <button class="tb-btn" @click="$router.push('/usage')" title="用量"><BarChart3 :size="16" /></button>
+          <button class="tb-btn" @click="$router.push('/admin')" title="管理"><Settings :size="16" /></button>
+          <div class="user-orb">{{ userInitial }}</div>
         </div>
-      </div>
-    </aside>
+      </header>
 
-    <!-- Main -->
-    <div class="main-area dot-bg">
-      <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
+      <!-- Main view -->
+      <div class="main-view">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </div>
     </div>
   </div>
 </template>
@@ -67,22 +52,16 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { BookOpen, ClipboardList, Star, BarChart3, Settings } from 'lucide-vue-next'
 
 const route = useRoute()
 const username = ref(localStorage.getItem('username') || '用户')
 const userInitial = computed(() => (username.value || 'U').charAt(0).toUpperCase())
 
-const mainNav = [
-  { path: '/', icon: '◈', label: '工作台' },
-  { path: '/chat/career', icon: '◇', label: '职场顾问' },
-  { path: '/chat/super', icon: '◆', label: '超级智能体' },
-  { path: '/knowledge', icon: '◻', label: '知识库' },
-]
-
-const dataNav = [
-  { path: '/artifacts', icon: '◼', label: '交付物' },
-  { path: '/favorites', icon: '★', label: '收藏' },
-  { path: '/usage', icon: '◎', label: '用量' },
+const navItems = [
+  { path: '/', icon: '◈', label: '首页' },
+  { path: '/chat/career', icon: '💬', label: '职场顾问' },
+  { path: '/chat/super', icon: '🤖', label: '超级智能体' },
 ]
 
 const isActive = (path) => {
@@ -92,88 +71,143 @@ const isActive = (path) => {
 </script>
 
 <style scoped>
-.app-layout {
-  display: flex;
+.app-shell {
+  position: relative;
+  width: 100%;
   height: 100vh;
-  background: var(--bg);
+  overflow: hidden;
 }
 
-/* ===== Sidebar ===== */
-.sidebar {
-  width: var(--sidebar-w);
-  background: var(--sidebar-bg);
+.app-content {
+  position: relative;
+  z-index: 2;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
-.sidebar-logo {
+/* Topbar */
+.topbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 16px 16px 12px;
-  border-bottom: 0.5px solid var(--sidebar-divider);
-}
-.logo-icon {
-  width: 26px; height: 26px; border-radius: 6px;
-  background: linear-gradient(135deg, #6366f1, #a78bfa);
-  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.logo-name { font-size: 13px; font-weight: 600; color: #fff; letter-spacing: 0.02em; }
-.logo-badge {
-  font-size: 9px; color: #6366f1;
-  background: rgba(99,102,241,0.15); border: 0.5px solid rgba(99,102,241,0.3);
-  padding: 1px 5px; border-radius: 4px; font-weight: 500;
+  justify-content: space-between;
+  padding: 12px 24px;
+  flex-shrink: 0;
+  background: rgba(10,12,22,0.7);
+  backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+  height: var(--topbar-h);
 }
 
-.nav-list { flex: 1; padding: 8px 8px 0; display: flex; flex-direction: column; }
-.nav-section-label {
-  font-size: 10px; color: rgba(255,255,255,0.25);
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 10px 10px 4px; font-weight: 500;
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
 }
-.nav-divider { height: 0.5px; background: var(--sidebar-divider); margin: 6px 0; }
-.nav-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border-radius: 7px;
-  color: var(--sidebar-text); font-size: 13px; font-weight: 500;
-  transition: background 0.15s, color 0.15s;
-  margin-bottom: 1px; text-decoration: none;
-}
-.nav-item:hover { background: var(--sidebar-hover); color: rgba(255,255,255,0.85); }
-.nav-item:active { transform: scale(0.98); }
-.nav-item.active {
-  background: var(--sidebar-active-bg);
-  color: var(--sidebar-active-text);
-  border-left: 2px solid var(--sidebar-active-text);
-  padding-left: 8px;
-}
-.nav-icon { width: 16px; text-align: center; font-size: 13px; opacity: 0.6; transition: opacity 0.15s; }
-.nav-item:hover .nav-icon, .nav-item.active .nav-icon { opacity: 1; }
 
-.sidebar-footer { padding: 8px; border-top: 0.5px solid var(--sidebar-divider); }
-.admin-item { color: rgba(255,255,255,0.35) !important; font-size: 12px; margin-bottom: 6px; }
-.admin-item:hover { color: rgba(255,255,255,0.6) !important; }
-.user-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
-.user-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #ec4899);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; color: #fff; font-weight: 600; flex-shrink: 0;
+.logo-orb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(245,158,11,0.85), rgba(217,119,6,0.4));
+  box-shadow: 0 0 14px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+  animation: orb-pulse 5s ease-in-out infinite;
 }
-.user-name { font-size: 12px; color: rgba(255,255,255,0.6); }
 
-/* ===== Main ===== */
-.main-area {
+.logo-text {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--t1);
+}
+
+/* Navigation */
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--r-sm);
+  color: var(--t3);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background: var(--glass-hover);
+  color: var(--t2);
+}
+
+.nav-link.active {
+  background: var(--gold-soft);
+  color: var(--gold-text);
+}
+
+.nav-icon {
+  font-size: 14px;
+}
+
+/* Right side */
+.topbar-r {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tb-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--t3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s var(--ease);
+}
+
+.tb-btn:hover {
+  background: var(--glass-hover);
+  color: var(--t2);
+}
+
+.user-orb {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(245,158,11,0.6), rgba(217,119,6,0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t1);
+  margin-left: 8px;
+}
+
+/* Main */
+.main-view {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   position: relative;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+@media (max-width: 768px) {
+  .topbar-nav { display: none; }
+  .topbar { padding: 12px 16px; }
+  .tb-btn:nth-child(n+3) { display: none; }
+}
 </style>

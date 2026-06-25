@@ -2,13 +2,21 @@ package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.memory.MemoryCoordinator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import reactor.core.publisher.Flux;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 职场通用顾问 Agent
@@ -45,11 +53,26 @@ public class GeneralCareerAgent {
             """;
 
     private final ChatClient chatClient;
+    private final MemoryCoordinator memoryCoordinator; // nullable if memory system is disabled
 
     /**
-     * 构造函数
+     * 构造函数（向后兼容 — 不使用 MemoryCoordinator）
      */
     public GeneralCareerAgent(ChatModel chatModel, ChatMemoryManager chatMemoryManager) {
+        this(chatModel, chatMemoryManager, null);
+    }
+
+    /**
+     * 构造函数（支持 MemoryCoordinator 注入）
+     *
+     * @param chatModel            LLM 模型
+     * @param chatMemoryManager    聊天记忆管理器
+     * @param memoryCoordinator    分层记忆协调器（可为 null，@ConditionalOnProperty 条件不满足时为 null）
+     */
+    public GeneralCareerAgent(ChatModel chatModel, ChatMemoryManager chatMemoryManager,
+                              MemoryCoordinator memoryCoordinator) {
+        this.memoryCoordinator = memoryCoordinator;
+
         // 使用 ChatMemoryManager 获取共享的 ChatMemory
         ChatMemory chatMemory = chatMemoryManager.getMemory("general");
         
@@ -61,14 +84,14 @@ public class GeneralCareerAgent {
                 )
                 .build();
         
-        log.info("GeneralCareerAgent 初始化完成");
+        log.info("GeneralCareerAgent 初始化完成, memoryCoordinator={}", memoryCoordinator != null ? "enabled" : "disabled");
     }
 
     /**
      * 同步对话
      */
     public String chat(String message, String chatId) {
-        return chat(message, chatId, null);
+        return chat(message, chatId, (String) null);
     }
 
     /**
@@ -77,20 +100,40 @@ public class GeneralCareerAgent {
      * @param profileInjection 可选的用户画像提示片段，非空时动态拼接到系统提示词
      */
     public String chat(String message, String chatId, String profileInjection) {
+        return chat(message, chatId, null, profileInjection);
+    }
+
+    /**
+     * 同步对话（支持 userId + 画像注入 + 分层记忆上下文）
+     *
+     * @param message           用户消息
+     * @param chatId            会话 ID
+     * @param userId            用户 ID（可为 null，为 null 时跳过分层记忆组装）
+     * @param profileInjection  可选的用户画像提示片段
+     */
+    public String chat(String message, String chatId, String userId, String profileInjection) {
+        String memoryContext = assembleMemoryContext(userId, chatId);
+
         ChatResponse response = chatClient.prompt()
-                .system(buildSystemPrompt(profileInjection))
+                .system(buildSystemPrompt(memoryContext, profileInjection))
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .call()
                 .chatResponse();
-        return response.getResult().getOutput().getText();
+
+        String responseText = response.getResult().getOutput().getText();
+
+        // Trigger async extraction after response
+        triggerPostTurnExtraction(userId, chatId, message, responseText);
+
+        return responseText;
     }
 
     /**
      * 流式对话
      */
     public Flux<String> chatStream(String message, String chatId) {
-        return chatStream(message, chatId, null);
+        return chatStream(message, chatId, (String) null);
     }
 
     /**
@@ -99,20 +142,96 @@ public class GeneralCareerAgent {
      * @param profileInjection 可选的用户画像提示片段，非空时动态拼接到系统提示词
      */
     public Flux<String> chatStream(String message, String chatId, String profileInjection) {
-        return chatClient.prompt()
-                .system(buildSystemPrompt(profileInjection))
-                .user(message)
-                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .stream()
-                .content();
+        return chatStream(message, chatId, null, profileInjection);
     }
 
     /**
-     * 构建有效系统提示词：基础提示词 + 可选画像注入片段。
-     * profileInjection 为空（null 或空白）时返回基础提示词，保持默认行为。
+     * 流式对话（支持 userId + 画像注入 + 分层记忆上下文）
+     *
+     * @param message           用户消息
+     * @param chatId            会话 ID
+     * @param userId            用户 ID（可为 null，为 null 时跳过分层记忆组装）
+     * @param profileInjection  可选的用户画像提示片段
      */
-    private static String buildSystemPrompt(String profileInjection) {
-        return SYSTEM_PROMPT
-                + (profileInjection != null && !profileInjection.isBlank() ? "\n\n" + profileInjection : "");
+    public Flux<String> chatStream(String message, String chatId, String userId, String profileInjection) {
+        String memoryContext = assembleMemoryContext(userId, chatId);
+
+        return chatClient.prompt()
+                .system(buildSystemPrompt(memoryContext, profileInjection))
+                .user(message)
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                .stream()
+                .content()
+                .doFinally(signal -> triggerPostTurnExtraction(userId, chatId, message, null));
+    }
+
+    /**
+     * 对话完成后异步触发记忆提取管道。
+     * 构造本轮消息列表并委托给 MemoryCoordinator.onTurnCompleted()。
+     * 此方法永不抛出异常，所有错误内部捕获并记录日志。
+     *
+     * @param userId            用户 ID（为 null 或空白时跳过）
+     * @param chatId            会话 ID
+     * @param userMessage       用户消息
+     * @param assistantResponse 助手回复（流式场景下可为 null）
+     */
+    private void triggerPostTurnExtraction(String userId, String chatId, String userMessage, String assistantResponse) {
+        if (memoryCoordinator == null || userId == null || userId.isBlank()) {
+            return;
+        }
+        try {
+            List<Message> messages = new ArrayList<>();
+            messages.add(new UserMessage(userMessage));
+            if (assistantResponse != null && !assistantResponse.isBlank()) {
+                messages.add(new AssistantMessage(assistantResponse));
+            }
+            memoryCoordinator.onTurnCompleted(userId, chatId, "general", messages);
+        } catch (Exception e) {
+            log.warn("Failed to trigger post-turn extraction: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 调用 MemoryCoordinator 组装分层记忆上下文。
+     * 当 memoryCoordinator 为 null 或 userId 为空时，返回空字符串（优雅降级）。
+     *
+     * @param userId 用户 ID
+     * @param chatId 会话 ID
+     * @return 组装后的记忆上下文文本，或空字符串
+     */
+    private String assembleMemoryContext(String userId, String chatId) {
+        if (memoryCoordinator == null || userId == null || userId.isBlank()) {
+            return "";
+        }
+        try {
+            SystemMessage contextMsg = memoryCoordinator.assembleContext(userId, chatId, "general");
+            return contextMsg.getText();
+        } catch (Exception e) {
+            log.warn("Memory context assembly failed, proceeding without memory: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * 构建有效系统提示词：基础提示词 + 分层记忆上下文 + 可选画像注入片段。
+     * 记忆上下文放在画像注入之前（提供更宽泛的上下文信息）。
+     *
+     * @param memoryContext    分层记忆组装的上下文（可为 null 或空白）
+     * @param profileInjection 用户画像注入片段（可为 null 或空白）
+     */
+    private static String buildSystemPrompt(String memoryContext, String profileInjection) {
+        StringBuilder sb = new StringBuilder(SYSTEM_PROMPT);
+
+        // 记忆上下文放在画像之前，提供更宽泛的历史信息
+        if (memoryContext != null && !memoryContext.isBlank()) {
+            sb.append("\n\n").append(memoryContext);
+        }
+
+        // 画像注入放在最后，距离 LLM 注意力窗口最近
+        if (profileInjection != null && !profileInjection.isBlank()) {
+            sb.append("\n\n").append(profileInjection);
+        }
+
+        return sb.toString();
     }
 }

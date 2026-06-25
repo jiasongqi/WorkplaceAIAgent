@@ -16,6 +16,56 @@ request.interceptors.request.use(config => {
   return config
 })
 
+// 响应拦截：401 时自动重新登录并重试
+let isRefreshing = false
+let refreshQueue = []
+
+request.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config
+    // 只处理 401，且不重试登录接口本身
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/session/login')) {
+      if (isRefreshing) {
+        // 排队等待刷新完成
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({ resolve, reject })
+        }).then(token => {
+          originalRequest.headers['Authorization'] = `Bearer ${token}`
+          return request(originalRequest)
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        // Clear invalid token and re-login, preserving userId for session ownership
+        const oldUserId = localStorage.getItem('userId')
+        localStorage.removeItem('token')
+        const res = await login('游客', oldUserId)
+        const newToken = res.data.data.token
+        localStorage.setItem('token', newToken)
+        localStorage.setItem('userId', res.data.data.userId)
+
+        // 重试排队的请求
+        refreshQueue.forEach(p => p.resolve(newToken))
+        refreshQueue = []
+
+        originalRequest.headers['Authorization'] = `Bearer ${newToken}`
+        return request(originalRequest)
+      } catch (e) {
+        refreshQueue.forEach(p => p.reject(e))
+        refreshQueue = []
+        return Promise.reject(e)
+      } finally {
+        isRefreshing = false
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
 // 封装 SSE 连接
 export const connectSSE = (url, params, headers = {}) => {
   const queryString = Object.keys(params)
@@ -25,9 +75,9 @@ export const connectSSE = (url, params, headers = {}) => {
   return new EventSource(fullUrl)
 }
 
-// 游客登录
-export const login = (username = '游客') =>
-  request.post('/session/login', null, { params: { username } })
+// 游客登录（支持复用 userId 以保持会话归属）
+export const login = (username = '游客', userId) =>
+  request.post('/session/login', null, { params: { username, ...(userId ? { userId } : {}) } })
 
 // 创建会话
 export const createSession = (title = '新对话') =>
@@ -126,8 +176,8 @@ export const searchSessions = (keyword) =>
 // ===== Favorite API =====
 
 // 添加收藏
-export const addFavorite = (chatId, messageId) =>
-  request.post('/favorite', { chatId, messageId })
+export const addFavorite = (chatId, messageId, content, role) =>
+  request.post('/favorite', { chatId, messageId, content, role })
 
 // 取消收藏
 export const removeFavorite = (favoriteId) =>

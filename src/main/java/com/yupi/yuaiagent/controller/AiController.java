@@ -96,7 +96,7 @@ public class AiController {
      * <p>鉴权说明：EventSource 不支持自定义请求头，因此 Token 通过 URL 参数 {@code token} 传递，
      * 同时兼容 Authorization 头。未携带有效 Token 将被拒绝。
      */
-    @GetMapping("/orchestrator/chat")
+    @GetMapping(value = "/orchestrator/chat", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter doChatWithOrchestrator(
             String message,
             @RequestParam(defaultValue = "default") String chatId,
@@ -111,7 +111,7 @@ public class AiController {
     /**
      * 流式调用 Manus 超级智能体
      */
-    @GetMapping("/manus/chat")
+    @GetMapping(value = "/manus/chat", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter doChatWithManus(String message) {
         YuManus yuManus = new YuManus(allTools, dashscopeChatModel);
         // Set up trace context for tool call recording (Req 8.5)

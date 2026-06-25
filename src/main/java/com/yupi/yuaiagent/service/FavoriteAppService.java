@@ -28,16 +28,23 @@ public class FavoriteAppService {
     private final SessionManager sessionManager;
 
     public Favorite add(String userId, AddFavoriteRequest request) {
-        // Fetch message for snapshot
-        PersistentChatMessage msg = messageRepository.findByMessageId(request.messageId());
+        // Try to fetch message by ID first, fall back to request content
+        PersistentChatMessage msg = request.messageId() != null && !request.messageId().isBlank()
+                ? messageRepository.findByMessageId(request.messageId())
+                : null;
         SessionManager.SessionInfo session = sessionManager.findByChatId(request.chatId());
+
+        String content = msg != null ? msg.getContent()
+                : (request.content() != null ? request.content() : "[无内容]");
+        String role = msg != null ? msg.getRole()
+                : (request.role() != null ? request.role() : "unknown");
 
         Favorite fav = new Favorite();
         fav.setUserId(userId);
         fav.setChatId(request.chatId());
         fav.setMessageId(request.messageId());
-        fav.setContentSnapshot(msg != null ? msg.getContent() : "[消息已删除]");
-        fav.setRole(msg != null ? msg.getRole() : "unknown");
+        fav.setContentSnapshot(content);
+        fav.setRole(role);
         fav.setSessionTitleSnapshot(session != null ? session.getTitle() : "[会话已删除]");
 
         return favoriteRepository.add(fav);

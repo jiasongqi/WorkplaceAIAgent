@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
  * 抽象基础代理类，用于管理代理状态和执行流程。
@@ -51,6 +52,13 @@ public abstract class BaseAgent {
     // Trace context for execution tracing (Req 8.5), nullable
     private TraceContext traceContext;
     private TraceRecorder traceRecorder;
+
+    // Custom executor for async operations (injected by subclass or setter)
+    private Executor executor = java.util.concurrent.ForkJoinPool.commonPool();
+
+    public void setExecutor(Executor executor) {
+        this.executor = executor;
+    }
 
     /**
      * 运行代理
@@ -149,7 +157,7 @@ public abstract class BaseAgent {
             } finally {
                 this.cleanup();
             }
-        });
+        }, executor);
     }
 
     /**
@@ -219,7 +227,7 @@ public abstract class BaseAgent {
                 // 3、清理资源
                 this.cleanup();
             }
-        });
+        }, executor);
 
         // 设置超时回调
         sseEmitter.onTimeout(() -> {

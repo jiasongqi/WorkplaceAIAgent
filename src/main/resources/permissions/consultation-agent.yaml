@@ -1,0 +1,13 @@
+agentCode: consultation-agent
+displayName: "预约咨询专家"
+description: "负责咨询预约、日历管理、信息收集"
+version: "1.0"
+allowedToolPatterns:
+  - "consultation.*"
+  - "calendar.*"
+  - "rag.query"
+minMcpTrustScore: 50
+maxToolCallsPerRequest: 20
+filesystemAccess: false
+networkAccess: true
+admin: false

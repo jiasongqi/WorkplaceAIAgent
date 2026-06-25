@@ -92,9 +92,12 @@ public class QualityGuardAgent {
 
     private final ChatModel chatModel;
     private final ObjectMapper objectMapper;
+    private final String reviewModelName;
 
-    public QualityGuardAgent(ChatModel chatModel) {
+    public QualityGuardAgent(ChatModel chatModel,
+                             @org.springframework.beans.factory.annotation.Value("${workpilot.quality.model:qwen3.7-plus}") String reviewModelName) {
         this.chatModel = chatModel;
+        this.reviewModelName = reviewModelName;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -125,10 +128,14 @@ public class QualityGuardAgent {
             """.formatted(userQuestion, agentAnswer);
 
         try {
+            // 质检使用独立模型（通过 options 覆盖），避免自我审查偏见
             ChatResponse response = chatModel.call(new Prompt(List.of(
                     new SystemMessage(systemPrompt),
                     new UserMessage(userPrompt)
-            )));
+            ), com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions.builder()
+                    .withModel(reviewModelName)
+                    .withTemperature(0.3)
+                    .build()));
 
             String raw = response.getResult().getOutput().getText();
             // Extract JSON from response (handle markdown code blocks)

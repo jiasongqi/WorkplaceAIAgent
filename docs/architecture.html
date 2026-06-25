@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkPilot Agent Platform — Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#020617;color:#e2e8f0;font-family:'JetBrains Mono',monospace;padding:32px;min-height:100vh}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.dot{width:10px;height:10px;border-radius:50%;background:#22d3ee;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+h1{font-size:20px;font-weight:700;color:#f1f5f9}
+.subtitle{font-size:11px;color:#64748b;margin-left:22px;margin-top:-20px}
+.card{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:24px;margin-bottom:24px;overflow-x:auto}
+.card-header{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.card-dot{width:8px;height:8px;border-radius:50%}
+.card-dot.cyan{background:#22d3ee}.card-dot.green{background:#34d399}.card-dot.violet{background:#a78bfa}.card-dot.amber{background:#fbbf24}.card-dot.rose{background:#fb7185}
+.card h3{font-size:13px;font-weight:600;color:#f1f5f9}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px}
+.cards .card{padding:16px}
+.cards ul{list-style:none;font-size:11px;color:#94a3b8;line-height:1.8}
+.cards ul span{color:#e2e8f0}
+.footer{text-align:center;font-size:10px;color:#334155;margin-top:24px}
+svg text{font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="dot"></div>
+  <h1>WorkPilot Agent Platform — System Architecture</h1>
+</div>
+<div class="subtitle">Spring Boot 3 + Spring AI + DashScope (Qwen) + Vue 3 — Multi-Agent Runtime V2 + NLU V4.2</div>
+
+<div class="card">
+<div class="card-header"><div class="card-dot cyan"></div><h3>Architecture Diagram</h3></div>
+<svg viewBox="0 0 1200 920" width="100%" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+  </pattern>
+  <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+  </marker>
+  <marker id="arrowCyan" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+  </marker>
+</defs>
+
+<!-- Background -->
+<rect width="1200" height="920" fill="#020617"/>
+<rect width="1200" height="920" fill="url(#grid)"/>
+
+<!-- ====== FRONTEND LAYER ====== -->
+<rect x="40" y="20" width="1120" height="70" rx="8" fill="#0f172a"/>
+<rect x="40" y="20" width="1120" height="70" rx="8" fill="rgba(8,51,68,0.3)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="60" y="45" fill="#22d3ee" font-size="11" font-weight="600">FRONTEND — Vue 3</text>
+<rect x="60" y="52" width="130" height="26" rx="4" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1"/>
+<text x="125" y="69" fill="#e2e8f0" font-size="10" text-anchor="middle">CareerAdvisor</text>
+<rect x="205" y="52" width="120" height="26" rx="4" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1"/>
+<text x="265" y="69" fill="#e2e8f0" font-size="10" text-anchor="middle">SuperAgent</text>
+<rect x="340" y="52" width="120" height="26" rx="4" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1"/>
+<text x="400" y="69" fill="#e2e8f0" font-size="10" text-anchor="middle">TraceTimeline</text>
+<rect x="475" y="52" width="110" height="26" rx="4" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1"/>
+<text x="530" y="69" fill="#e2e8f0" font-size="10" text-anchor="middle">LoveMaster</text>
+<rect x="600" y="52" width="120" height="26" rx="4" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1"/>
+<text x="660" y="69" fill="#e2e8f0" font-size="10" text-anchor="middle">ArtifactAdmin</text>
+<text x="900" y="60" fill="#475569" font-size="9">SSE Events: routing / agent-turn / message / clarification / trace / quality-review</text>
+
+<!-- Arrow: Frontend → Controller -->
+<line x1="600" y1="90" x2="600" y2="115" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="610" y="108" fill="#475569" font-size="8">HTTP / SSE</text>
+
+<!-- ====== CONTROLLER LAYER ====== -->
+<rect x="40" y="115" width="1120" height="55" rx="8" fill="#0f172a"/>
+<rect x="40" y="115" width="1120" height="55" rx="8" fill="rgba(6,78,59,0.2)" stroke="#34d399" stroke-width="1.5"/>
+<text x="60" y="138" fill="#34d399" font-size="11" font-weight="600">CONTROLLER LAYER</text>
+<rect x="60" y="145" width="100" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="110" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">AiController</text>
+<rect x="170" y="145" width="110" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="225" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">SessionController</text>
+<rect x="290" y="145" width="110" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="345" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">TraceController</text>
+<rect x="410" y="145" width="110" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="465" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">ProfileController</text>
+<rect x="530" y="145" width="110" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="585" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">ArtifactController</text>
+<rect x="650" y="145" width="120" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="710" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">FavoriteController</text>
+<rect x="780" y="145" width="110" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="835" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">ExportController</text>
+<rect x="900" y="145" width="110" height="18" rx="3" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="955" y="157" fill="#e2e8f0" font-size="8" text-anchor="middle">UsageController</text>
+
+<!-- Arrow: Controller → AppService -->
+<line x1="600" y1="170" x2="600" y2="195" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="610" y="188" fill="#475569" font-size="8">Result&lt;T&gt;</text>
+
+<!-- ====== APPSERVICE LAYER ====== -->
+<rect x="40" y="195" width="1120" height="50" rx="8" fill="#0f172a"/>
+<rect x="40" y="195" width="1120" height="50" rx="8" fill="rgba(6,78,59,0.15)" stroke="#34d399" stroke-width="1"/>
+<text x="60" y="218" fill="#34d399" font-size="11" font-weight="600">APPSERVICE LAYER — Business Orchestration</text>
+<rect x="60" y="225" width="150" height="14" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="135" y="235" fill="#94a3b8" font-size="8" text-anchor="middle">OrchestratorAppService</text>
+<rect x="220" y="225" width="130" height="14" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="285" y="235" fill="#94a3b8" font-size="8" text-anchor="middle">SessionAppService</text>
+<rect x="360" y="225" width="130" height="14" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="425" y="235" fill="#94a3b8" font-size="8" text-anchor="middle">FavoriteAppService</text>
+<rect x="500" y="225" width="130" height="14" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="565" y="235" fill="#94a3b8" font-size="8" text-anchor="middle">ExportAppService</text>
+<rect x="640" y="225" width="130" height="14" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="705" y="235" fill="#94a3b8" font-size="8" text-anchor="middle">DocumentAppService</text>
+
+<!-- Arrow: AppService → NLU + Agent -->
+<line x1="350" y1="245" x2="350" y2="275" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="850" y1="245" x2="850" y2="275" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- ====== NLU PIPELINE ====== -->
+<rect x="40" y="275" width="580" height="140" rx="8" fill="#0f172a"/>
+<rect x="40" y="275" width="580" height="140" rx="8" fill="rgba(120,53,15,0.2)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="60" y="298" fill="#fbbf24" font-size="11" font-weight="600">NLU PIPELINE — Intent Understanding (V4.2)</text>
+<text x="60" y="312" fill="#94a3b8" font-size="8">1 LLM call → intent ranking + slots + domain + action</text>
+
+<!-- NLU Components -->
+<rect x="55" y="320" width="100" height="32" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="105" y="333" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">AliasResolver</text>
+<text x="105" y="343" fill="#94a3b8" font-size="7" text-anchor="middle">Word Boundary</text>
+
+<rect x="165" y="320" width="120" height="32" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="225" y="333" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">UnifiedNluExtractor</text>
+<text x="225" y="343" fill="#94a3b8" font-size="7" text-anchor="middle">1× LLM Call</text>
+
+<rect x="295" y="320" width="100" height="32" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="345" y="333" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">IntentReranker</text>
+<text x="345" y="343" fill="#94a3b8" font-size="7" text-anchor="middle">Domain Signal</text>
+
+<rect x="405" y="320" width="100" height="32" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="455" y="333" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">AmbiguityDetect</text>
+<text x="455" y="343" fill="#94a3b8" font-size="7" text-anchor="middle">Same-Category</text>
+
+<rect x="515" y="320" width="95" height="32" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="562" y="333" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">Clarification</text>
+<text x="562" y="343" fill="#94a3b8" font-size="7" text-anchor="middle">Template, 0 LLM</text>
+
+<!-- NLU Row 2 -->
+<rect x="55" y="360" width="110" height="28" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="110" y="375" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">ContextShift</text>
+<text x="110" y="384" fill="#94a3b8" font-size="6" text-anchor="middle">FOLLOW_UP/ENTITY_SWITCH/NEW</text>
+
+<rect x="175" y="360" width="110" height="28" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="230" y="375" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">ConversationState</text>
+<text x="230" y="384" fill="#94a3b8" font-size="6" text-anchor="middle">smartMerge + version CAS</text>
+
+<rect x="295" y="360" width="100" height="28" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="345" y="375" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">RouteTemplate</text>
+<text x="345" y="384" fill="#94a3b8" font-size="6" text-anchor="middle">domain.action.metric</text>
+
+<rect x="405" y="360" width="110" height="28" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="0.8"/>
+<text x="460" y="375" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">RequirementRegistry</text>
+<text x="460" y="384" fill="#94a3b8" font-size="6" text-anchor="middle">intent + routeHint 双维度</text>
+
+<!-- NLU Output -->
+<rect x="525" y="360" width="85" height="28" rx="4" fill="rgba(120,53,15,0.4)" stroke="#fbbf24" stroke-width="1"/>
+<text x="567" y="375" fill="#fbbf24" font-size="8" text-anchor="middle" font-weight="600">NluResult</text>
+<text x="567" y="384" fill="#94a3b8" font-size="6" text-anchor="middle">→ RouteHint</text>
+
+<!-- ====== WORKFLOW ENGINE (V2) ====== -->
+<rect x="640" y="275" width="520" height="140" rx="8" fill="#0f172a"/>
+<rect x="640" y="275" width="520" height="140" rx="8" fill="rgba(76,29,149,0.2)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="660" y="298" fill="#a78bfa" font-size="11" font-weight="600">WORKFLOW ENGINE — Task Orchestrator (V2)</text>
+
+<!-- Workflow Components -->
+<rect x="655" y="310" width="120" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="715" y="323" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">WorkflowMatcher</text>
+<text x="715" y="333" fill="#94a3b8" font-size="7" text-anchor="middle">RouteHint Prefix</text>
+
+<rect x="785" y="310" width="120" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="845" y="323" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">WorkflowRegistry</text>
+<text x="845" y="333" fill="#94a3b8" font-size="7" text-anchor="middle">5 Templates</text>
+
+<rect x="915" y="310" width="110" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="970" y="323" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">TokenBudget</text>
+<text x="970" y="333" fill="#94a3b8" font-size="7" text-anchor="middle">Budget Control</text>
+
+<rect x="1035" y="310" width="110" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="1090" y="323" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">FailurePolicy</text>
+<text x="1090" y="333" fill="#94a3b8" font-size="7" text-anchor="middle">4 Strategies</text>
+
+<!-- Workflow Row 2 -->
+<rect x="655" y="350" width="120" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="715" y="363" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">TaskExecutor</text>
+<text x="715" y="373" fill="#94a3b8" font-size="7" text-anchor="middle">Step-by-Step</text>
+
+<rect x="785" y="350" width="120" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="845" y="363" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">ResultAggregator</text>
+<text x="845" y="373" fill="#94a3b8" font-size="7" text-anchor="middle">LLM Synthesis</text>
+
+<rect x="915" y="350" width="120" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="975" y="363" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">ConversationCtx</text>
+<text x="975" y="373" fill="#94a3b8" font-size="7" text-anchor="middle">Immutable</text>
+
+<rect x="1045" y="350" width="100" height="30" rx="4" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="0.8"/>
+<text x="1095" y="363" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="600">RuntimeCtx</text>
+<text x="1095" y="373" fill="#94a3b8" font-size="7" text-anchor="middle">Mutable State</text>
+
+<!-- Arrow: NLU → Workflow -->
+<line x1="620" y1="345" x2="640" y2="345" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="625" y="340" fill="#fbbf24" font-size="7">RouteHint</text>
+
+<!-- ====== AGENT LAYER ====== -->
+<rect x="40" y="440" width="1120" height="160" rx="8" fill="#0f172a"/>
+<rect x="40" y="440" width="1120" height="160" rx="8" fill="rgba(6,78,59,0.2)" stroke="#34d399" stroke-width="1.5"/>
+<text x="60" y="463" fill="#34d399" font-size="11" font-weight="600">AGENT LAYER — Multi-Agent Runtime</text>
+
+<!-- OrchestratorAgent -->
+<rect x="55" y="475" width="180" height="50" rx="6" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1"/>
+<text x="145" y="493" fill="#34d399" font-size="9" text-anchor="middle" font-weight="600">OrchestratorAgent</text>
+<text x="145" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">NLU → Multi-Intent → Serial Exec</text>
+<text x="145" y="515" fill="#94a3b8" font-size="7" text-anchor="middle">agent-turn SSE + source tracking</text>
+
+<!-- Sub-agents -->
+<rect x="260" y="475" width="100" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="310" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">ResumeAgent</text>
+<text x="310" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">📄 RAG + QueryRewrite</text>
+
+<rect x="370" y="475" width="110" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="425" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">NegotiationAgent</text>
+<text x="425" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">💰 Tools</text>
+
+<rect x="490" y="475" width="100" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="540" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">EscapeAgent</text>
+<text x="540" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">🚪 Tools</text>
+
+<rect x="600" y="475" width="110" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="655" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">ConsultationAgent</text>
+<text x="655" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">📅 Calendar Lock</text>
+
+<rect x="720" y="475" width="110" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="775" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">GeneralCareer</text>
+<text x="775" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">🤖 Fallback</text>
+
+<rect x="840" y="475" width="110" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="895" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">DataQueryRouter</text>
+<text x="895" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">📊 0 LLM</text>
+
+<rect x="960" y="475" width="90" height="40" rx="4" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="0.8"/>
+<text x="1005" y="493" fill="#e2e8f0" font-size="8" text-anchor="middle" font-weight="600">YuManus</text>
+<text x="1005" y="505" fill="#94a3b8" font-size="7" text-anchor="middle">🔧 ReAct</text>
+
+<!-- Data Employees -->
+<text x="60" y="540" fill="#94a3b8" font-size="9" font-weight="600">Data Employees:</text>
+<rect x="170" y="530" width="90" height="22" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="215" y="544" fill="#94a3b8" font-size="7" text-anchor="middle">DataAnalyst</text>
+<rect x="270" y="530" width="90" height="22" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="315" y="544" fill="#94a3b8" font-size="7" text-anchor="middle">CareerCoach</text>
+<rect x="370" y="530" width="90" height="22" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="415" y="544" fill="#94a3b8" font-size="7" text-anchor="middle">ProfileCurator</text>
+<rect x="470" y="530" width="100" height="22" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="520" y="544" fill="#94a3b8" font-size="7" text-anchor="middle">PromotionPlanner</text>
+<rect x="580" y="530" width="130" height="22" rx="3" fill="rgba(6,78,59,0.2)"/>
+<text x="645" y="544" fill="#94a3b8" font-size="7" text-anchor="middle">LearningResourceRecommender</text>
+
+<!-- AgentRunner -->
+<rect x="740" y="530" width="200" height="22" rx="3" fill="rgba(76,29,149,0.2)" stroke="#a78bfa" stroke-width="0.5"/>
+<text x="840" y="544" fill="#a78bfa" font-size="7" text-anchor="middle">AgentRunner Adapters (V2): RESUME/NEGOTIATION/ESCAPE/GENERAL</text>
+
+<!-- Quality Guard -->
+<rect x="970" y="530" width="170" height="22" rx="3" fill="rgba(136,19,55,0.2)" stroke="#fb7185" stroke-width="0.5"/>
+<text x="1055" y="544" fill="#fb7185" font-size="7" text-anchor="middle">QualityGuardAgent (Review/RedTeam)</text>
+
+<!-- Skill System -->
+<rect x="55" y="560" width="200" height="28" rx="4" fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="0.8"/>
+<text x="155" y="575" fill="#fb923c" font-size="8" text-anchor="middle" font-weight="600">SkillRegistry + SkillExecutor</text>
+<text x="155" y="584" fill="#94a3b8" font-size="6" text-anchor="middle">YAML skills/*.yaml hot-load</text>
+
+<!-- Trace -->
+<rect x="270" y="560" width="200" height="28" rx="4" fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="0.8"/>
+<text x="370" y="575" fill="#fb923c" font-size="8" text-anchor="middle" font-weight="600">TraceRecorder + TraceStreamPublisher</text>
+<text x="370" y="584" fill="#94a3b8" font-size="6" text-anchor="middle">15 step types + real-time SSE</text>
+
+<!-- ====== INFRASTRUCTURE LAYER ====== -->
+<rect x="40" y="620" width="1120" height="80" rx="8" fill="#0f172a"/>
+<rect x="40" y="620" width="1120" height="80" rx="8" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="1.5"/>
+<text x="60" y="643" fill="#94a3b8" font-size="11" font-weight="600">INFRASTRUCTURE LAYER</text>
+
+<rect x="55" y="655" width="110" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="110" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">ChatMemoryManager</text>
+<text x="110" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">Token/Turn Compression</text>
+
+<rect x="175" y="655" width="110" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="230" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">UserProfileService</text>
+<text x="230" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">LLM Extract + Inject</text>
+
+<rect x="295" y="655" width="100" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="345" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">ArtifactShelf</text>
+<text x="345" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">PENDING→READY→CONSUMED</text>
+
+<rect x="405" y="655" width="110" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="460" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">TraceRepository</text>
+<text x="460" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">File + Retention Policy</text>
+
+<rect x="525" y="655" width="110" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="580" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">SessionManager</text>
+<text x="580" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">ACTIVE/ARCHIVED/DELETED</text>
+
+<rect x="645" y="655" width="100" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="695" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">AuthService</text>
+<text x="695" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">JWT + URL Token</text>
+
+<rect x="755" y="655" width="110" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="810" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">CalendarService</text>
+<text x="810" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">飞书/钉钉</text>
+
+<rect x="875" y="655" width="110" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="930" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">UsageTracker</text>
+<text x="930" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">7 Event Types</text>
+
+<rect x="995" y="655" width="150" height="32" rx="4" fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="1070" y="669" fill="#e2e8f0" font-size="8" text-anchor="middle">PersistentMessageRepository</text>
+<text x="1070" y="679" fill="#94a3b8" font-size="6" text-anchor="middle">Source of Truth + Dual Index</text>
+
+<!-- ====== STORAGE LAYER ====== -->
+<rect x="40" y="720" width="1120" height="55" rx="8" fill="#0f172a"/>
+<rect x="40" y="720" width="1120" height="55" rx="8" fill="rgba(76,29,149,0.15)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="60" y="743" fill="#a78bfa" font-size="11" font-weight="600">STORAGE LAYER — File-based JSON + PgVector</text>
+
+<rect x="55" y="752" width="140" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="125" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">sessions/messages/*.json</text>
+<rect x="205" y="752" width="130" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="270" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">artifacts/favorites.json</text>
+<rect x="345" y="752" width="130" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="410" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">traces/*.json</text>
+<rect x="485" y="752" width="140" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="555" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">user-profiles/*.json</text>
+<rect x="635" y="752" width="150" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="710" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">quality-reviews.json</text>
+<rect x="795" y="752" width="140" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="865" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">usage-events.json</text>
+<rect x="945" y="752" width="200" height="16" rx="3" fill="rgba(76,29,149,0.2)"/>
+<text x="1045" y="763" fill="#94a3b8" font-size="7" text-anchor="middle">PgVector (RAG embeddings, optional)</text>
+
+<!-- ====== EXTERNAL SERVICES ====== -->
+<rect x="40" y="795" width="1120" height="50" rx="8" fill="#0f172a"/>
+<rect x="40" y="795" width="1120" height="50" rx="8" fill="rgba(30,41,59,0.3)" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+<text x="60" y="818" fill="#475569" font-size="11" font-weight="600">EXTERNAL SERVICES</text>
+<rect x="60" y="825" width="100" height="14" rx="3" fill="rgba(30,41,59,0.3)"/>
+<text x="110" y="835" fill="#64748b" font-size="7" text-anchor="middle">DashScope (Qwen)</text>
+<rect x="170" y="825" width="80" height="14" rx="3" fill="rgba(30,41,59,0.3)"/>
+<text x="210" y="835" fill="#64748b" font-size="7" text-anchor="middle">SearchAPI</text>
+<rect x="260" y="825" width="80" height="14" rx="3" fill="rgba(30,41,59,0.3)"/>
+<text x="300" y="835" fill="#64748b" font-size="7" text-anchor="middle">飞书日历</text>
+<rect x="350" y="825" width="80" height="14" rx="3" fill="rgba(30,41,59,0.3)"/>
+<text x="390" y="835" fill="#64748b" font-size="7" text-anchor="middle">钉钉日历</text>
+<rect x="440" y="825" width="80" height="14" rx="3" fill="rgba(30,41,59,0.3)"/>
+<text x="480" y="835" fill="#64748b" font-size="7" text-anchor="middle">MCP Servers</text>
+<rect x="530" y="825" width="80" height="14" rx="3" fill="rgba(30,41,59,0.3)"/>
+<text x="570" y="835" fill="#64748b" font-size="7" text-anchor="middle">Ollama</text>
+
+<!-- Arrows: Agent → Infrastructure -->
+<line x1="600" y1="600" x2="600" y2="620" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+<!-- Arrows: Infrastructure → Storage -->
+<line x1="600" y1="700" x2="600" y2="720" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+<!-- Arrows: Storage → External -->
+<line x1="600" y1="775" x2="600" y2="795" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+
+</svg>
+</div>
+
+<!-- Summary Cards -->
+<div class="cards">
+  <div class="card">
+    <div class="card-header"><div class="card-dot cyan"></div><h3>NLU Pipeline (V4.2)</h3></div>
+    <ul>
+      <li>• <span>1 LLM call</span> for intent + slots + domain + action</li>
+      <li>• <span>AliasResolver</span> word-boundary (不改原文)</li>
+      <li>• <span>IntentReranker</span> domain signal re-rank</li>
+      <li>• <span>RouteTemplate</span> dotted notation (advertiser.query.roi)</li>
+      <li>• <span>ContextShiftDetector</span> 3-state follow-up detection</li>
+      <li>• <span>ClarificationHandler</span> template (0 LLM)</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-dot violet"></div><h3>Workflow Engine (V2)</h3></div>
+    <ul>
+      <li>• <span>WorkflowMatcher</span> RouteHint prefix matching</li>
+      <li>• <span>TaskExecutor</span> budget + failure policy per step</li>
+      <li>• <span>ResultAggregator</span> FormatterRegistry + LLM synthesis</li>
+      <li>• <span>5 templates</span>: JOB_CHANGE / INTERVIEW / CONSULTATION / DATA / GENERIC</li>
+      <li>• <span>AgentRunner</span> adapters for 4 agents</li>
+      <li>• <span>TokenBudget</span> per-workflow cost control</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-dot green"></div><h3>Agent Runtime (V1)</h3></div>
+    <ul>
+      <li>• <span>Multi-intent</span> serial execution</li>
+      <li>• <span>agent-turn</span> SSE events per agent</li>
+      <li>• <span>MessageSource</span> tracking (USER/AGENT/TOOL/SYNTHESIZER)</li>
+      <li>• <span>7 agents</span>: Resume / Negotiation / Escape / Consultation / General / DataQuery / YuManus</li>
+      <li>• <span>5 data employees</span>: Analyst / Coach / Curator / Planner / Recommender</li>
+      <li>• <span>QualityGuard</span> Review + RedTeam</li>
+    </ul>
+  </div>
+</div>
+
+<div class="footer">WorkPilot Agent Platform · Java 21 + Spring Boot 3.4 + Spring AI 1.0 · Updated 2026-06-10</div>
+</body>
+</html>

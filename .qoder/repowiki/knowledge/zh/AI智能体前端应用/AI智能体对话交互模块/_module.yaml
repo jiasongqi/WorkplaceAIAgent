@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend/chat_agents
+title: AI智能体对话交互模块
+scope:
+    - yu-ai-agent-frontend/src/views/CareerAdvisor.vue
+    - yu-ai-agent-frontend/src/views/SuperAgent.vue
+    - yu-ai-agent-frontend/src/components/ChatRoom.vue
+source_files: []
+depends_on: []
+related_to:
+    - path: backend

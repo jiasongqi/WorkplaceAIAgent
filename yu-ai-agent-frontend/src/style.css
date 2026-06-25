@@ -1,44 +1,70 @@
-/* ===== WorkPilot Design Tokens (Clawith Style) ===== */
+/* ===== WorkPilot v5 — Dark Advisor Theme ===== */
 :root {
-  --bg: #f0f2f5;
-  --surface: #ffffff;
-  --surface-muted: #f5f6f8;
-  --border: #e8eaed;
-  --border-width: 0.5px;
-  --text: #0f1117;
-  --text-secondary: #374151;
-  --text-muted: #9ca3af;
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --primary-light: #ede9fe;
-  --primary-muted: rgba(99, 102, 241, 0.15);
-  --success: #10b981;
-  --success-light: #d1fae5;
-  --warning: #d97706;
-  --warning-light: #fef3c7;
-  --danger: #dc2626;
-  --danger-light: #fee2e2;
-  --radius: 10px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
-  --shadow-input: 0 1px 3px rgba(0,0,0,0.04);
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  --topbar-h: 48px;
-  --sidebar-w: 200px;
-  /* Sidebar dark */
-  --sidebar-bg: #0f1117;
-  --sidebar-text: rgba(255,255,255,0.55);
-  --sidebar-text-active: #a5b4fc;
-  --sidebar-hover: rgba(255,255,255,0.06);
-  --sidebar-active-bg: rgba(99,102,241,0.18);
-  --sidebar-divider: rgba(255,255,255,0.08);
-  /* Clawith extras */
-  --dot-size: 1px;
-  --dot-space: 24px;
-  --dot-color: rgba(0,0,0,0.06);
-  --glass-bg: rgba(255,255,255,0.72);
-  --glass-blur: 12px;
+  --abyss: #05060d;
+  --deep: #0a0c16;
+  --layer1: #0f111d;
+  --layer2: #161824;
+  --layer3: #1c1f2e;
+  --t1: #f2f2f8;
+  --t2: #a0a3b8;
+  --t3: #60637a;
+  --t4: #383b50;
+  --gold: #f59e0b;
+  --gold-glow: rgba(245,158,11,0.25);
+  --gold-soft: rgba(245,158,11,0.08);
+  --gold-dim: rgba(245,158,11,0.03);
+  --gold-text: #fbbf24;
+  --ok: #34d399;
+  --ok-bg: rgba(52,211,153,0.08);
+  --warn: #d97706;
+  --warn-bg: rgba(251,191,36,0.08);
+  --danger: #f87171;
+  --danger-bg: rgba(248,113,113,0.08);
+  --glass: rgba(255,255,255,0.025);
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-hover: rgba(255,255,255,0.05);
+  --glass-blur: 24px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --r-full: 9999px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace;
+
+  /* Legacy compat aliases */
+  --bg: var(--abyss);
+  --surface: var(--layer1);
+  --surface-muted: var(--layer2);
+  --border: var(--glass-border);
+  --text: var(--t1);
+  --text-secondary: var(--t2);
+  --text-muted: var(--t3);
+  --primary: var(--gold);
+  --primary-hover: #d97706;
+  --primary-light: var(--gold-soft);
+  --primary-muted: var(--gold-dim);
+  --success: var(--ok);
+  --success-light: var(--ok-bg);
+  --warning: var(--warn);
+  --warning-light: var(--warn-bg);
+  --danger-light: var(--danger-bg);
+  --radius: var(--r-md);
+  --radius-sm: var(--r-sm);
+  --radius-lg: var(--r-lg);
+  --shadow-input: 0 1px 3px rgba(0,0,0,0.2);
+  --font-mono: var(--mono);
+  --topbar-h: 52px;
+  --sidebar-w: 272px;
+  --sidebar-bg: var(--deep);
+  --sidebar-text: var(--t3);
+  --sidebar-text-active: var(--gold-text);
+  --sidebar-hover: var(--glass-hover);
+  --sidebar-active-bg: var(--gold-soft);
+  --sidebar-divider: var(--glass-border);
+  --glass-bg: rgba(15,17,29,0.7);
 }
 
 /* ===== Reset ===== */
@@ -47,13 +73,14 @@
 html, body {
   font-family: var(--font);
   font-size: 14px;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--t1);
+  background: var(--abyss);
   width: 100%;
   height: 100%;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
 }
 
 #app { width: 100%; height: 100%; }
@@ -63,27 +90,68 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 input, textarea, select { font-family: inherit; font-size: inherit; }
 
 /* ===== Scrollbar ===== */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
 
-/* ===== Dot Grid Background (Clawith) ===== */
-.dot-bg {
-  background-image: radial-gradient(circle, var(--dot-color) var(--dot-size), transparent var(--dot-size));
-  background-size: var(--dot-space) var(--dot-space);
+/* ===== Ambient Background ===== */
+.ambient {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+}
+.ambient .glow-top {
+  position: absolute; top: -35%; left: 5%; width: 65%; height: 85%;
+  background: radial-gradient(ellipse at center, rgba(245,158,11,0.04) 0%, transparent 70%);
+  animation: breathe-a 14s ease-in-out infinite;
+}
+.ambient .glow-bot {
+  position: absolute; bottom: -30%; right: -5%; width: 55%; height: 75%;
+  background: radial-gradient(ellipse at center, rgba(96,165,250,0.025) 0%, transparent 70%);
+  animation: breathe-b 18s ease-in-out infinite reverse;
+}
+@keyframes breathe-a {
+  0%,100% { opacity: 0.35; transform: translateY(0) scale(1); }
+  50% { opacity: 0.9; transform: translateY(-3%) scale(1.04); }
+}
+@keyframes breathe-b {
+  0%,100% { opacity: 0.25; transform: translateY(0) scale(1); }
+  50% { opacity: 0.8; transform: translateY(2%) scale(1.03); }
 }
 
-/* ===== Glass Effect (Clawith) ===== */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+.noise {
+  position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: 0.015;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* ===== Utility ===== */
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--mono); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ===== Animations ===== */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes orb-pulse {
+  0%,100% { box-shadow: 0 0 14px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,0.2); }
+  50% { box-shadow: 0 0 24px rgba(245,158,11,0.35), 0 0 44px rgba(245,158,11,0.05), inset 0 1px 0 rgba(255,255,255,0.2); }
+}
+@keyframes wiggle {
+  0%,100% { transform: rotate(0deg); }
+  15% { transform: rotate(12deg); }
+  35% { transform: rotate(-5deg); }
+  55% { transform: rotate(8deg); }
+  75% { transform: rotate(-2deg); }
+}
+@keyframes jump {
+  0%,60%,100% { opacity: 0.2; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-5px); }
+}
+@keyframes live {
+  0%,100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.6); }
+}
+
 /* ===== Transitions ===== */
-.transition-all { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s var(--ease); }
+.fade-enter-from, .fade-leave-to { opacity: 0; }

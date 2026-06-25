@@ -20,6 +20,11 @@ public enum TraceStepType {
     INTENT_DETECTION("意图识别"),
 
     /**
+     * NLU pipeline phase — alias resolution, slot extraction, intent classification, reranking.
+     */
+    NLU("NLU 意图理解"),
+
+    /**
      * Routing phase — orchestrator dispatches to a sub-agent.
      */
     ROUTING("路由分发"),
@@ -77,7 +82,27 @@ public enum TraceStepType {
     /**
      * Quality blocked — CRITICAL risk, answer was blocked.
      */
-    QUALITY_BLOCKED("质量阻断");
+    QUALITY_BLOCKED("质量阻断"),
+
+    /**
+     * Workflow matching phase — selects the workflow template.
+     */
+    WORKFLOW_MATCH("工作流匹配"),
+
+    /**
+     * Context building phase — constructs ConversationContext.
+     */
+    CONTEXT_BUILD("上下文构建"),
+
+    /**
+     * Task execution phase — runs all workflow steps.
+     */
+    TASK_EXECUTION("任务执行"),
+
+    /**
+     * Result aggregation phase — combines Agent outputs.
+     */
+    RESULT_AGGREGATION("结果汇总");
 
     private final String displayName;
 

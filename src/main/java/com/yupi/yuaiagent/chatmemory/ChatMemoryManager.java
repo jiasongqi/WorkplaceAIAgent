@@ -255,6 +255,21 @@ public class ChatMemoryManager {
     public List<String> getAgentTypes() {
         return List.copyOf(agentMemories.keySet());
     }
+
+    /**
+     * Returns the compressed summary for a chat session (if available).
+     * Used by ConversationContextBuilder to build shared context.
+     *
+     * <p>Currently returns empty string — summary is stored as a system message
+     * in PersistentMessageRepository, not in ChatMemoryManager.
+     * Future: extract from message repository.
+     *
+     * @param chatId the chat session ID
+     * @return compressed summary text, or empty string if none
+     */
+    public String getCompressedSummary(String chatId) {
+        return "";
+    }
     
     /**
      * 清除指定 Agent 类型的所有会话记忆

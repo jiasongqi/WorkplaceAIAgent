@@ -1,5 +1,7 @@
 package com.yupi.yuaiagent.trace.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,6 +29,28 @@ public class ExecutionTrace {
     private Instant endTime;
     private final List<TraceSpan> spans = new ArrayList<>();
 
+    @JsonCreator
+    public ExecutionTrace(
+            @JsonProperty("traceId") String traceId,
+            @JsonProperty("userId") String userId,
+            @JsonProperty("chatId") String chatId,
+            @JsonProperty("requestId") String requestId,
+            @JsonProperty("startTime") Instant startTime,
+            @JsonProperty("status") TraceStatus status,
+            @JsonProperty("endTime") Instant endTime,
+            @JsonProperty("spans") List<TraceSpan> spans) {
+        this.traceId = traceId;
+        this.userId = userId;
+        this.chatId = chatId;
+        this.requestId = requestId;
+        this.startTime = startTime;
+        this.status = status;
+        this.endTime = endTime;
+        if (spans != null) {
+            this.spans.addAll(spans);
+        }
+    }
+
     private ExecutionTrace(String userId, String chatId, String requestId) {
         this.traceId = UUID.randomUUID().toString().replace("-", "");
         this.userId = userId;
@@ -45,7 +69,8 @@ public class ExecutionTrace {
      * @return a new RUNNING trace
      */
     public static ExecutionTrace start(String userId, String chatId, String requestId) {
-        return new ExecutionTrace(userId, chatId, requestId);
+        ExecutionTrace trace = new ExecutionTrace(userId, chatId, requestId);
+        return trace;
     }
 
     /**

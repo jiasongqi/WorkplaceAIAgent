@@ -44,7 +44,7 @@ const routes = [
     meta: { title: '用量 - WorkPilot' }
   },
   {
-    path: '/admin/compare',
+    path: '/compare',
     name: 'AdminCompare',
     component: () => import('../views/CompareView.vue'),
     meta: { title: 'Agent 对比 - WorkPilot' }

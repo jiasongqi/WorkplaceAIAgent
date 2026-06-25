@@ -234,7 +234,7 @@
     - 在前端管理界面新增 API 调用与视图：列表调用 `GET /artifact/list` 展示摘要字段，点击查看详情调用 `GET /artifact/{artifactId}` 展示完整 content
     - _Requirements: 17.1, 17.2, 17.3_
 
-- [~] 18. Final Checkpoint — 全部完成
+- [ ] 18. Final Checkpoint — 全部完成
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

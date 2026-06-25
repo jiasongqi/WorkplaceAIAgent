@@ -40,7 +40,11 @@ public class ConsultationAgent {
             2. 收集必要的预约信息（姓名、联系方式、预约时间）
             3. 确认预约信息并创建预约
             
-            请以友好、专业的态度引导用户完成预约流程。
+            回答要求：
+            - 使用 Markdown 格式，善用标题、列表、粗体
+            - 信息分点列出，层次清晰
+            - 关键信息（时间、联系方式）用 **粗体** 标注
+            - 回复简洁专业，避免冗长
             """;
 
     // 意图识别提示词
@@ -137,6 +141,15 @@ public class ConsultationAgent {
     }
 
     /**
+     * Check if the given chat has an active (in-progress) consultation.
+     * Used by OrchestratorAgent to lock routing during multi-turn collection.
+     */
+    public boolean hasActiveConsultation(String chatId) {
+        ConsultationState state = sessionStates.get(chatId);
+        return state != null && state != ConsultationState.COMPLETED;
+    }
+
+    /**
      * 检测是否为预约咨询意图
      */
     public boolean detectConsultationIntent(String message) {
@@ -181,6 +194,45 @@ public class ConsultationAgent {
             }
             state = ConsultationState.COLLECTING_INFO;
             sessionStates.put(chatId, state);
+            // 从整个对话历史中提取已有信息（不只是当前消息）
+            extractInfoFromHistory(chatId, info);
+            // 从当前消息也提取
+            extractInfoFromMessage(message, info);
+
+            String missingHint = firstMissingCoreField(info);
+
+            // 用 LLM 生成自然的首条回复（回答用户问题 + 引导提供缺失信息）
+            try {
+                String missingDesc = missingHint != null
+                        ? "接下来需要收集预约信息。请自然地回答用户的问题（如有），然后引导用户提供" + renderFieldName(missingHint) + "。"
+                        : "核心预约信息已完整。请简短回答用户的问题（如有），然后请用户确认预约信息。回复要简洁。";
+                String aiGreeting = chatClient.prompt()
+                        .system("你是一位专业的预约咨询助手。用户想预约咨询服务。" + missingDesc)
+                        .user(message)
+                        .call()
+                        .content();
+                // 如果还有缺失字段，设置当前追问字段
+                if (missingHint != null) {
+                    currentQuestionFields.put(chatId, missingHint);
+                } else {
+                    // 核心信息完整，进入确认阶段
+                    sessionStates.put(chatId, ConsultationState.CONFIRMING);
+                }
+                // 追加确认信息（如果有）
+                if (missingHint == null) {
+                    return aiGreeting + "\n\n" + renderConfirmation(info);
+                }
+                return aiGreeting;
+            } catch (Exception e) {
+                log.warn("LLM 首条回复失败，使用模板", e);
+                if (missingHint != null) {
+                    currentQuestionFields.put(chatId, missingHint);
+                    return renderCoreQuestion(missingHint);
+                } else {
+                    sessionStates.put(chatId, ConsultationState.CONFIRMING);
+                    return renderConfirmation(info);
+                }
+            }
         }
         
         // 根据状态处理
@@ -275,6 +327,14 @@ public class ConsultationAgent {
     }
 
     /**
+     * Render field name to Chinese display name
+     */
+    private String renderFieldName(String fieldName) {
+        CoreInfoType type = CoreInfoType.fromFieldName(fieldName);
+        return type != null ? type.getDisplayName() : fieldName;
+    }
+
+    /**
      * 判断用户是否表达了「跳过」非核心追问的意图
      */
     private boolean isSkipResponse(String message) {
@@ -359,14 +419,16 @@ public class ConsultationAgent {
     }
 
     /**
-     * 验证答案
+     * 验证答案 — 先提取再验证
      */
     private String validateAnswer(String fieldName, String answer) {
         InfoValidator.ValidationResult result;
         
         switch (fieldName) {
             case "name":
-                result = infoValidator.validateName(answer);
+                // 先尝试从自然语言中提取姓名
+                String extractedName = infoValidator.extractName(answer);
+                result = infoValidator.validateName(extractedName);
                 break;
             case "contact":
                 result = infoValidator.validateContact(answer);
@@ -393,13 +455,13 @@ public class ConsultationAgent {
     private void saveAnswer(String fieldName, String answer, CoreInformation info) {
         switch (fieldName) {
             case "name":
-                info.setName(answer.trim());
+                info.setName(infoValidator.extractName(answer));
                 break;
             case "contact":
-                info.setContact(answer.trim());
+                info.setContact(infoValidator.extractContact(answer));
                 break;
             case "appointmentTime":
-                LocalDateTime time = infoValidator.parseDateTime(answer.trim());
+                LocalDateTime time = infoValidator.extractDateTime(answer.trim());
                 if (time != null) {
                     info.setAppointmentTime(time);
                 }
@@ -427,24 +489,53 @@ public class ConsultationAgent {
     }
 
     /**
-     * 处理确认阶段
+     * 处理确认阶段 — 支持回答用户问题后再引导确认
      */
     private String handleConfirming(String message, String chatId, CoreInformation info) {
         String trimmed = message.trim();
         
         if (trimmed.contains("确认") || trimmed.contains("确定") || trimmed.contains("是") || trimmed.contains("yes")) {
-            // 用户确认，创建预约
             sessionStates.put(chatId, ConsultationState.CREATING_APPOINTMENT);
             return handleCreatingAppointment("confirmed", chatId, info);
         } else if (trimmed.contains("修改") || trimmed.contains("重新") || trimmed.contains("不") || trimmed.contains("no")) {
-            // 用户要修改，重置已收集信息并重新收集
             sessionStates.put(chatId, ConsultationState.COLLECTING_INFO);
             sessionInfos.put(chatId, new CoreInformation());
             optionalAskedFields.remove(chatId);
             currentQuestionFields.remove(chatId);
             return "好的，请重新提供您的预约信息。请先告诉我您的姓名。";
         } else {
-            return "请回复「确认」创建预约，或回复「修改」重新填写信息。";
+            // 用户问了其他问题，用 LLM 回答后引导确认
+            try {
+                // Build context with conversation history + current appointment info
+                String contextInfo = String.format("已收集预约信息：姓名=%s, 联系方式=%s, 时间=%s, 主题=%s",
+                        info.getName(), info.getContact(),
+                        infoValidator.formatDateTime(info.getAppointmentTime()),
+                        info.getTopic());
+                // Get recent conversation history from ChatMemory
+                String historyContext = "";
+                try {
+                    var history = chatMemory.get(chatId);
+                    if (history != null && !history.isEmpty()) {
+                        StringBuilder sb = new StringBuilder("\n\n近期对话：\n");
+                        int from = Math.max(0, history.size() - 6);
+                        for (int i = from; i < history.size(); i++) {
+                            var msg = history.get(i);
+                            String role = "user".equals(msg.getMessageType().getValue()) ? "用户" : "AI";
+                            sb.append(role).append("：").append(msg.getText()).append("\n");
+                        }
+                        historyContext = sb.toString();
+                    }
+                } catch (Exception ignored) {}
+
+                String aiAnswer = chatClient.prompt()
+                        .system("你是一位专业的预约咨询助手。用户正在确认预约。" + contextInfo + historyContext + "\n请根据上下文简短回答用户的问题，然后引导用户回复「确认」或「修改」。回复要简洁。")
+                        .user(message)
+                        .call()
+                        .content();
+                return aiAnswer + "\n\n如无其他问题，请回复「确认」创建预约，或回复「修改」重新填写。";
+            } catch (Exception e) {
+                return "请回复「确认」创建预约，或回复「修改」重新填写信息。";
+            }
         }
     }
 
@@ -522,6 +613,41 @@ public class ConsultationAgent {
             parseExtractedInfo(result, info);
         } catch (Exception e) {
             log.warn("信息提取失败", e);
+        }
+    }
+
+    /**
+     * 从对话历史中提取已有的预约信息
+     * 遍历 ChatMemory 中的所有消息，提取姓名、联系方式等
+     */
+    private void extractInfoFromHistory(String chatId, CoreInformation info) {
+        try {
+            var messages = chatMemory.get(chatId);
+            if (messages == null || messages.isEmpty()) return;
+
+            // 拼接所有用户消息为一段文本
+            StringBuilder historyText = new StringBuilder();
+            for (var msg : messages) {
+                if ("user".equals(msg.getMessageType().getValue())) {
+                    historyText.append(msg.getText()).append("\n");
+                }
+            }
+            if (historyText.isEmpty()) return;
+
+            // 用 LLM 从历史中提取
+            String context = String.format("当前已收集：姓名=%s, 联系方式=%s, 时间=%s",
+                    info.getName(), info.getContact(), info.getAppointmentTime());
+            String result = chatClient.prompt()
+                    .user(INFO_EXTRACTION_PROMPT
+                            .replace("{message}", historyText.toString())
+                            .replace("{context}", context))
+                    .call()
+                    .content();
+            parseExtractedInfo(result, info);
+            log.info("从对话历史提取到：name={}, contact={}, time={}",
+                    info.getName(), info.getContact(), info.getAppointmentTime());
+        } catch (Exception e) {
+            log.warn("从对话历史提取信息失败", e);
         }
     }
 

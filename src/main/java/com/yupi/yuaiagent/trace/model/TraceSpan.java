@@ -1,5 +1,7 @@
 package com.yupi.yuaiagent.trace.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,6 +34,28 @@ public class TraceSpan {
      * @param stepType the category of this step
      * @param label    human-readable label for this step
      */
+    @JsonCreator
+    public TraceSpan(
+            @JsonProperty("sequence") int sequence,
+            @JsonProperty("stepType") TraceStepType stepType,
+            @JsonProperty("label") String label,
+            @JsonProperty("startTime") Instant startTime,
+            @JsonProperty("status") TraceStepStatus status,
+            @JsonProperty("endTime") Instant endTime,
+            @JsonProperty("errorMessage") String errorMessage,
+            @JsonProperty("metadata") Map<String, String> metadata) {
+        this.sequence = sequence;
+        this.stepType = stepType;
+        this.label = label;
+        this.startTime = startTime;
+        this.status = status;
+        this.endTime = endTime;
+        this.errorMessage = errorMessage;
+        if (metadata != null) {
+            this.metadata.putAll(metadata);
+        }
+    }
+
     public TraceSpan(int sequence, TraceStepType stepType, String label) {
         this.sequence = sequence;
         this.stepType = stepType;

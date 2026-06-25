@@ -4,6 +4,7 @@
 > 适用于：个人学习复盘、作品集讲解、面试技术亮点串讲。
 >
 > 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0（Alibaba DashScope）+ Ollama + PgVector。
+> 品牌名：WorkPilot
 
 ---
 
@@ -26,6 +27,18 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L13 导入导出  ZIP 全量备份/恢复
                        └─ L14 对话搜索  加权评分 + 时间衰减
                        └─ L15 持久化消息  Source of Truth + 双索引
+                       └─ L16 NLU 意图理解层  1次LLM + 别名解析 + 槽位提取 + 意图分类 + 澄清
+                       └─ L17 多 Agent 运行时  群聊模式 + Task Orchestrator + 工作流引擎
+                       └─ L18 工作流引擎  6种节点 + 实例状态 + 持久化
+                       └─ L19 沙箱执行  Docker/本地进程隔离 + 5层防护
+                       └─ L20 访问控制与治理  投票式决策 + Agent权限 + MCP信任 + Quota配额
+                       └─ L21 Agent 注册中心  YAML声明式 + Marketplace就绪
+                       └─ L22 评测中心  回归测试 + 发版评估
+                       └─ L23 Prompt 版本管理  多版本 + 灰度发布 + A/B测试
+                       └─ L24 交付物生命周期  DRAFT→REVIEWING→APPROVED→PUBLISHED
+                       └─ L25 事件总线  异步治理事件 + 审计日志
+                       └─ L26 安全防护  循环检测 + 工具结果分级 + Token预算
+                       └─ L27 分层记忆系统  四层记忆 + 异步提取 + Token预算分配
 横切关注点：JWT 鉴权 · 会话三态生命周期 · 归档/回收站 · AppService 业务编排层 · 全局异常处理 · 结构化输出
 ```
 
@@ -120,6 +133,10 @@ BaseAgent  →  ReActAgent（思考-行动循环）  →  ToolCallAgent（工具
  简历优化    薪资谈判    离职规划    预约咨询    通用顾问
 ```
 
+**跨 Agent 记忆**: 用户在同一会话切换 Agent 时，Orchestrator 从 PersistentMessageRepository 取最近 10 条消息注入给子 Agent，避免上下文丢失。
+
+**会话级路由锁定**: ConsultationAgent 多轮信息收集期间锁定路由，完成/取消后解锁。
+
 | 意图 | 子 Agent | 关键词示例 |
 |------|----------|-----------|
 | `RESUME` | `ResumeAgent` | 简历、面试、offer、跳槽 |
@@ -134,7 +151,7 @@ BaseAgent  →  ReActAgent（思考-行动循环）  →  ToolCallAgent（工具
 
 ## L6 · 预约咨询（状态机 + 企业日历）
 
-`ConsultationAgent` 通过追问状态机收集信息并对接企业日历。
+`ConsultationAgent` 通过追问状态机收集信息并对接企业日历。支持从对话历史提取已有信息，确认阶段可自由提问。
 
 ```
 INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETED
@@ -142,13 +159,15 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 
 | 组件 | 职责 |
 |------|------|
-| `FollowUpTemplateConfig` | 追问模板（姓名/联系方式/时间），支持热更新 |
-| `InfoValidator` | 信息格式校验 |
+| `FollowUpTemplateConfig` | 追问模板（姓名/联系方式/时间），支持热更新，Markdown 结构化输出 |
+| `InfoValidator` | 自然语言提取（"我叫小琪"→小琪，"我的手机号是18104620109"→18104620109） |
 | `CalendarService` + `CalendarServiceFactory` | 日历服务抽象 |
 | `FeishuCalendarService` / `DingTalkCalendarService` | 飞书 / 钉钉日历实现 |
 | `AppointmentRepository` | 预约记录持久化 |
 
-**核心信息**（必填，模板化追问）：姓名、联系方式、预约时间。**非核心信息**（AI 智能追问）：咨询主题、备注。
+**智能提取**：姓名（"我叫X"→X）、联系方式（从自然语言搜索手机号/邮箱）、时间（中文数字"三点"→15:00，忽略无关文字）。
+
+**确认阶段灵活性**：用户在确认阶段提问时，LLM 回答问题后再引导确认/修改。
 
 ---
 
@@ -182,7 +201,7 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 
 - `ArtifactShelf`：放货 `put` / 读取 `get` / 查询 `query` / 消费标记 `markConsumed`
 - **作用域隔离**：`USER_PROFILE`（按 userId 跨会话累积）/ `TASK`（按 chatId 会话级）
-- **状态机**：`PENDING → READY → CONSUMED`
+- **状态机**：`DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED`
 
 ### 数据员工 Agent（`agent/data/`）
 
@@ -309,13 +328,327 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 
 | 组件 | 职责 |
 |------|------|
-| `PersistentChatMessage` | 消息实体（ULID messageId + chatId + role + content + timestamp） |
+| `PersistentChatMessage` | 消息实体（ULID messageId + chatId + role + content + timestamp + source） |
 | `PersistentMessageRepository` | 双索引持久化（chatIndex + messageIdIndex） |
 | `ChatMemoryAdapter` | Truth ↔ ChatMemory 桥接（写入先持久化再同步缓存，读取先检查一致性） |
 
 **存储**：`{session.storage.dir}/messages/{chatId}.json`，每个会话一个文件。
 
 **压缩支持**：`replaceWithSummary(chatId, summary, keepRecent)` — 压缩时替换旧消息为摘要 + 最近 N 条。
+
+**消息来源**：`MessageSource` 枚举（USER/AGENT/SYSTEM/TOOL/SYNTHESIZER），支持多 Agent 群聊模式下消息溯源。
+
+---
+
+## L16 · NLU 意图理解层（V4.2）
+
+替代原 `detectIntent()` 单次 LLM 分类，升级为结构化 NLU 管道。
+
+```
+用户消息 → AliasResolver（别名元数据提取，不改原文）
+         → UnifiedNluExtractor（1次LLM：intent排名 + slots + domain + action）
+         → IntentReranker（alias domain 信号 re-rank）
+         → IntentAmbiguityDetector（同类意图检测）
+         → RouteTemplate（点分记法路由：advertiser.query.roi）
+         → ContextShiftDetector（3态：FOLLOW_UP / ENTITY_SWITCH / NEW_QUERY）
+         → ConversationState.smartMerge（followUp感知，追问继承/reset）
+         → IntentRequirementRegistry（required/optional 槽位可配置）
+         → ClarificationHandler（模板追问，零LLM）
+         → NluResult
+```
+
+| 组件 | 职责 |
+|------|------|
+| `UnifiedNluExtractor` | 单次 LLM 调用，输出 intent 排名 + 结构化槽位 + domain + action |
+| `AliasResolver` | 别名元数据提取（中文后边界 `(?!\\p{IsHan})`，英文 `\\b`），不改原文 |
+| `IntentReranker` | alias domain 信号 re-rank（ADVERTISER → QUERY_DATA +0.15） |
+| `IntentAmbiguityDetector` | Top1/Top2 同类检测（替代 confidence < 0.2） |
+| `RouteTemplate` | 点分记法路由生成（`domain.action.metric`） |
+| `ContextShiftDetector` | 3 态：FOLLOW_UP / ENTITY_SWITCH / NEW_QUERY（接口，Phase 2 换 Embedding） |
+| `ConversationState` | 多轮槽位状态 + 3 态 smartMerge + version CAS |
+| `IntentRequirementRegistry` | intent + routeHint 双维度槽位需求（可配置） |
+| `ClarificationHandler` | 模板化追问（零 LLM 调用） |
+| `NluPipeline` | 串联管道，1 次 LLM 调用完成全部意图理解 |
+| `DataQueryRouter` | DATA_QUERY 意图透传 slots（不调 LLM） |
+| `RouteHint` | NLU → WorkflowMatcher 桥接（Phase 2 直接消费） |
+
+**关键设计决策**：
+- 1 次 LLM 调用（非 2-3 次），延迟减半
+- 别名不改原文（只输出 AliasMatch 元数据）
+- Confidence = Top1-Top2 差值（非模型自报）
+- 澄清用模板（零 LLM 调用）
+- RouteHint Phase 1 即输出，Phase 2 WorkflowMatcher 零重构
+
+---
+
+## L17 · 多 Agent 运行时（V1 群聊 + V2 Task Orchestrator）
+
+### V1 群聊模式
+
+用户提问 → NLU 多意图识别 → 多 Agent 串行执行 → 每个 Agent 独立回答。
+
+```
+用户: "我要跳槽，简历和薪资怎么准备"
+  → NLU: [RESUME, NEGOTIATION]
+  → agent-turn SSE 事件（前端知道谁在说话）
+  → ResumeAgent → "简历建议..." → SSE 推送
+  → NegotiationAgent → "薪资建议..." → SSE 推送
+  → 持久化（每个 Agent 回答带 MessageSource 追踪）
+```
+
+| 组件 | 职责 |
+|------|------|
+| `MessageSource` | 消息来源枚举（USER/AGENT/SYSTEM/TOOL/SYNTHESIZER） |
+| `PersistentChatMessage` | +sourceType/sourceId/sourceName 三字段 |
+| `AgentIntent.fromMultiIntent()` | NLU reranked intents → AgentIntent 列表 |
+| `OrchestratorAgent` | 多意图串行执行 + agent-turn SSE 事件 + source 追踪持久化 |
+
+### V2 Task Orchestrator 基础设施
+
+| 层 | 组件 | 职责 |
+|----|------|------|
+| 模型层 | `AgentOutput` / `TextOutput` / `FormatterRegistry` | 类型化 Agent 输出 + 格式化 |
+| 模型层 | `ExecutionResult` / `TaskStatus` / `FailurePolicy` | 统一执行结果 + 状态 + 失败策略 |
+| 预算层 | `TokenBudget` / `TokenUsage` / `TokenUsageTracker` | Token 预算控制 |
+| 上下文层 | `ConversationContext` / `RuntimeContext` / `ConversationContextBuilder` | 不可变对话上下文 + 可变执行状态 |
+| 工作流层 | `WorkflowTemplate` / `WorkflowRegistry` / `WorkflowMatcher` | 工作流定义 + 注册 + Score-based 匹配 |
+| 执行层 | `AgentRunner` / `TaskExecutor` / `ResultAggregator` | Agent 执行接口 + 任务引擎 + 结果汇总 |
+
+**内置工作流模板**：JOB_CHANGE / INTERVIEW / CONSULTATION / GENERIC_CAREER / DATA_QUERY
+
+**V1 → V2 升级路径**：V1 的 for 循环可随时切换为 WorkflowMatcher + TaskExecutor + ResultAggregator，基础设施已就绪。
+
+---
+
+## L18 · 工作流引擎（Workflow Runtime）
+
+独立于 Agent 的工作流执行引擎，支持 6 种节点类型，用于复杂任务编排。
+
+| 节点类型 | 类 | 说明 |
+|----------|-----|------|
+| AgentNode | `AgentNode` | 委托给 Agent 执行 |
+| ToolNode | `ToolNode` | 直接调用 Tool |
+| ConditionNode | `ConditionNode` | 条件分支（SpEL 表达式） |
+| ParallelNode | `ParallelNode` | 并行执行多个子节点 |
+| LoopNode | `LoopNode` | 循环执行（最大迭代次数限制） |
+| ApprovalNode | `ApprovalNode` | 人工审批（暂停工作流） |
+
+**工作流状态**：PENDING → RUNNING → PAUSED（等待审批）/ COMPLETED / FAILED / CANCELLED
+
+**执行流程**：
+```
+WorkflowRuntime.startWorkflow(workflowId, nodes, initialContext, userId, chatId)
+  → 创建 WorkflowInstance (status=RUNNING)
+  → 遍历 nodes，按顺序执行
+    ├─ AgentNode → 委托给指定 Agent
+    ├─ ToolNode → 直接调用 Tool
+    ├─ ConditionNode → 评估条件，选择分支
+    ├─ ParallelNode → 并行执行子节点
+    ├─ LoopNode → 循环执行（最大迭代次数限制）
+    └─ ApprovalNode → 暂停，等待人工审批
+  → 记录 StepRecord（节点ID、状态、结果、耗时）
+  → 更新 WorkflowInstance 状态
+  → 持久化到 WorkflowRepository
+```
+
+**关键类**：`WorkflowRuntime`（运行时引擎）、`WorkflowInstance`（实例状态）、`WorkflowRepository`（持久化）、`WorkflowNode`（节点基类，Jackson 多态序列化）
+
+---
+
+## L19 · 沙箱执行（Sandbox）
+
+Tool 执行的隔离环境，防止恶意命令影响宿主系统。
+
+| 沙箱策略 | 说明 | 场景 |
+|----------|------|------|
+| UNSANDBOXED | 不使用沙箱 | 纯计算型安全 Tool（PDF 生成、字符串处理） |
+| PROCESS_SANDBOX | 本地进程沙箱 | Docker 不可用时的降级方案 |
+| DOCKER_SANDBOX | Docker 容器隔离 | 生产环境强制要求 |
+
+**本地进程沙箱 5 层防护**：命令白名单、工作目录隔离、超时控制、输出限制、环境变量隔离。
+
+**Docker 沙箱资源限制**：CPU 核心数、内存上限、执行超时、网络访问、根文件系统只读。
+
+**SandboxFactory 决策逻辑**：Docker 可用 → DockerSandbox；Docker 不可用 + 非生产 → LocalProcessSandbox（降级）；Docker 不可用 + 生产 → 启动失败。
+
+**关键类**：`SandboxFactory`（工厂）、`ToolSandbox`（接口）、`DockerSandbox`（Docker 实现）、`LocalProcessSandbox`（本地进程实现）
+
+---
+
+## L20 · 访问控制与治理（Access Control & Governance）
+
+统一的访问决策服务，聚合多个安全维度的投票结果。
+
+**决策策略**：一票否决（any DENY → reject），全部弃权 → reject（默认安全）。
+
+| 投票器 | 职责 |
+|--------|------|
+| AgentPolicyVoter | 检查 Agent 权限画像（PermissionProfile） |
+| McpPolicyVoter | 检查 MCP Server 信任等级（McpTrustLevel） |
+| QuotaPolicyVoter | 检查调用配额（单请求最大 Tool 调用次数） |
+
+**PermissionProfile（权限画像）**：
+- `allowedToolPatterns` — 允许的 Tool 命名空间模式（支持通配符）
+- `minMcpTrustScore` — MCP 信任分下限
+- `maxToolCallsPerRequest` — 单请求最大 Tool 调用次数
+- `filesystemAccess` / `networkAccess` — 文件系统/网络访问权限
+- `admin` — 超级管理员（跳过所有检查）
+
+**McpTrustLevel（信任等级）**：
+- VERIFIED(100) — 官方认证，全部权限
+- PARTNER(70) — 合作伙伴，受限权限
+- COMMUNITY(30) — 社区上传，仅公开 Tool
+- PRIVATE(0) — 私有/未审核，禁止访问敏感 Tool
+
+**事件总线**：`EventBusAdapter` 异步发布治理事件（`AccessDeniedEvent`、`SandboxExecEvent`），不阻塞主流程。
+
+**关键类**：`AccessDecisionService`（投票式决策）、`AgentPermissionService`（权限校验）、`McpTrustService`（MCP 信任管理）、`EventBusAdapter`（事件总线）
+
+---
+
+## L21 · Agent 注册中心（Agent Registry）
+
+YAML 声明式 Agent 描述符，支持 Agent Marketplace 场景。
+
+**AgentDescriptor 字段**：agentCode、agentVersion、displayName、description、promptVersion、capabilities、skillBindings、mcpBindings、permissionProfile、intentKeywords、metadata
+
+**加载方式**：从 `resources/agents/*.yaml` 加载，启动时自动注册。
+
+**查询能力**：按编码获取、按能力标签查找、按意图关键词匹配。
+
+**关键类**：`AgentRegistry`（接口）、`InMemoryAgentRegistry`（内存实现）、`AgentDescriptor`（描述符）
+
+---
+
+## L22 · 评测中心（Eval Center）
+
+Agent 质量评测框架。当前实现：评测报告模型 + 路由准确率集成测试。
+
+**评测报告**：`EvalReport`（reportId、overallScore、passRate、regression、caseResults）
+
+**路由评测测试**：
+- `AgentRoutingEvalTest` — 路由准确率 + 快速路径覆盖率 + 响应时间
+- `FastPathRoutingTest` — 快速路径规则匹配验证
+
+**待实现**：`EvalCenter` 服务（用例加载 → Agent 调用 → 评分 → 回归检测），当前由集成测试覆盖。
+
+---
+
+## L23 · Prompt 版本管理（Prompt Registry）
+
+管理 Prompt 版本，支持灰度发布和 A/B 测试流量分配。
+
+**流量分配逻辑**：只有 1 个 ACTIVE → 直接返回；多个 ACTIVE → 按 trafficPercent 加权随机选择；无 ACTIVE → 返回最新版本（降级）。
+
+**版本限制**：每个 promptKey 最多保留 50 个版本（MAX_VERSIONS_PER_KEY），超出自动清理最旧版本。
+
+**关键类**：`PromptRegistry`（注册中心）、`PromptVersion`（版本）
+
+---
+
+## L24 · 交付物生命周期（Artifact Lifecycle）
+
+控制交付物状态流转的合法性并记录审计事件。
+
+**合法流转**：
+```
+DRAFT → REVIEWING（提交审核）
+REVIEWING → APPROVED（审核通过）
+REVIEWING → DRAFT（审核拒绝，含原因）
+APPROVED → PUBLISHED（发布）
+任意 → ARCHIVED（归档）
+```
+
+**关键类**：`ArtifactLifecycleManager`（生命周期管理器）、`ArtifactLifecycleEvent`（生命周期事件）
+
+---
+
+## L25 · 事件总线（Event Bus）
+
+异步治理事件发布，监听器执行（审计日志、指标、通知）不阻塞主流程。
+
+| 事件 | 说明 | 触发场景 |
+|------|------|----------|
+| GovernanceEvent | 治理事件基类 | 所有治理操作 |
+| AccessDeniedEvent | 权限拒绝 | Agent/Tool 权限校验失败 |
+| SandboxExecEvent | 沙箱执行 | Tool 在沙箱中执行 |
+
+**关键类**：`EventBusAdapter`（事件总线适配器）、`GovernanceEventListener`（事件监听器）
+
+---
+
+## L26 · 安全防护（Safety Guards）
+
+多层安全防护机制，防止 Agent 陷入死循环、工具返回垃圾数据、Token 成本失控。
+
+### EmbeddingLoopDetector（循环检测）
+
+- 基于 Embedding 余弦相似度的循环检测器
+- 滑动窗口 5 条，相似度阈值 0.88
+- 检测到循环后注入带有"上次失败原因"的针对性引导消息
+- 连续循环阈值 2 次触发干预
+
+### ToolResultClassifier（工具结果分级）
+
+| 等级 | 说明 | 策略 |
+|------|------|------|
+| TIMEOUT | 超时 | 建议直接重试（方向对，网络问题） |
+| EMPTY | 空结果 | 建议换策略（不是重试能解决的） |
+| GARBAGE | 垃圾内容 | 过滤后建议换关键词（登录墙/付费墙/堆栈跟踪） |
+| NORMAL | 正常 | 不干预 |
+
+### TokenBudgetManager（Token 预算分级）
+
+| 模式 | 触发条件 | 策略 |
+|------|----------|------|
+| Normal | < 65% | 搜索结果保留 3000 字符，无截断 |
+| Compact | 65% ~ 85% | 搜索结果截断至 1500 字符 |
+| Compress | > 85% | 用 LLM 压缩历史 Observation，摘要化 |
+
+**关键取舍**：Think（AssistantMessage）绝对不动，只压缩 Observation（ToolResponseMessage）。因为"思考轨迹"比"原始搜索结果"对推理更有价值。
+
+---
+
+## L27 · 分层记忆系统（MemoryCoordinator）
+
+替代原单一 `ChatMemoryManager`，升级为四层记忆架构，支持长期知识积累和语义检索。
+
+```
+用户消息
+  │
+  ▼
+MemoryCoordinator.assembleContext(userId, chatId, agentType)
+  │
+  ├─ CompletableFuture 并行查询四层（超时 2000ms）
+  │     ├─ L1 SlidingWindowLayer — 当前会话最近 N 条完整消息
+  │     ├─ L2 FactStoreLayer — 结构化事实（身份/偏好/目标，键值对）
+  │     ├─ L3 SummaryLayer — 近期对话要点清单（话题/决策/待办）
+  │     └─ L4 ExperienceStoreLayer — 历史经验案例（向量化语义检索）
+  │
+  ├─ TokenBudgetAllocator — 按优先级分配预算（L1 > L2 > L3 > L4）
+  │
+  └─ 组合为 SystemMessage 注入对话
+```
+
+| 组件 | 职责 |
+|------|------|
+| `MemoryCoordinator` | 统一入口，并行查询 + 超时回退 + last-known-good 缓存 |
+| `SlidingWindowLayer` (L1) | 当前会话滑动窗口，保持连贯性 |
+| `FactStoreLayer` (L2) | 结构化用户事实，精确匹配（含 v1→v2 迁移兼容） |
+| `SummaryLayer` (L3) | 对话摘要要点清单（FIFO 淘汰 + checklist） |
+| `ExperienceStoreLayer` (L4) | 历史经验向量化存储（PgVector），语义模糊匹配 |
+| `TokenBudgetAllocator` | 四层预算分配（优先级裁剪：L1 最优先） |
+| `ExtractionPipeline` | 对话完成后异步提取事实/摘要/经验（单次 LLM，永不阻塞） |
+| `MemoryLayer` | 层级枚举（SLIDING_WINDOW / FACT_STORE / SUMMARY / EXPERIENCE） |
+| `ContextWindow` | 上下文窗口记录 |
+
+**提取管道（ExtractionPipeline）**：对话完成后异步运行，单次 LLM 调用同时提取事实、摘要和经验，写入对应层。使用独立线程池 `memoryExtractionExecutor`，永不阻塞调用者，所有异常内部捕获。
+
+**容错设计**：每层查询超时独立（默认 2000ms），失败时使用 `layerCache` 中的 last-known-good 数据。总预算 6000 tokens，按 L1→L4 优先级递减分配。
+
+**FactStore 迁移**：`FactStoreMigrationTest` 验证 v1→v2 字段映射的幂等性和向后兼容。
+
+**关键类**：`MemoryCoordinator`（协调器）、`SlidingWindowLayer`（L1）、`FactStoreLayer`（L2）、`SummaryLayer`（L3）、`ExperienceStoreLayer`（L4）、`TokenBudgetAllocator`（预算分配）、`ExtractionPipeline`（提取管道）
 
 ---
 
@@ -341,22 +674,32 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | 逻辑"表" | 存储位置（默认） | 负责组件 | 关键字段 |
 |----------|-----------------|----------|----------|
 | 会话 sessions | `./tmp/sessions/sessions.json` | `SessionManager` | chatId、userId、title、status、createdAt、lastActiveAt、archivedAt、deletedAt；`chatOwner` 反向索引 |
-| 消息 messages | `./tmp/sessions/messages/{chatId}.json` | `PersistentMessageRepository` | messageId(ULID)、chatId、role、content、timestamp；双索引 chatIndex + messageIdIndex |
+| 消息 messages | `./tmp/sessions/messages/{chatId}.json` | `PersistentMessageRepository` | messageId(ULID)、chatId、role、content、timestamp、sourceType、sourceId、sourceName；双索引 chatIndex + messageIdIndex |
 | 预约 appointments | `./tmp/appointments/` | `AppointmentRepository` | name、contact、appointmentTime、calendarEventId、calendarUrl、provider、status、chatId、createdAt |
-| 交付物 artifacts | `./tmp/artifacts/artifacts.json` | `ArtifactRepository` | artifactId、userId、chatId、type、producer、title、content、status、scope、createdAt、updatedAt |
+| 交付物 artifacts | `./tmp/artifacts/artifacts.json` | `ArtifactRepository` | artifactId、userId、chatId、type、producer、title、content、status(DRAFT/REVIEWING/APPROVED/PUBLISHED/ARCHIVED)、scope、createdAt、updatedAt |
 | 用户画像 user-profiles | `./tmp/user-profiles/` | `UserProfileRepository` | userId、communicationPreference、tonePreference、focusAreas[]、knownBackground、historicalDemands[]、createdAt、updatedAt |
 | 收藏 favorites | `./tmp/artifacts/favorites.json` | `FavoriteRepository` | favoriteId、userId、chatId、messageId、contentSnapshot、sessionTitleSnapshot、role、orphaned |
 | 质量审查 quality-reviews | `./tmp/artifacts/quality-reviews.json` | `QualityReviewRepository` | reviewId、chatId、mode、5 维评分、riskLevel、issues[]、suggestions[]（仅 HIGH/CRITICAL） |
 | 用量事件 usage-events | `./tmp/artifacts/usage-events.json` | `UsageTracker` | eventId、userId、type、agentType、durationMs、timestamp（append-only） |
 | 对话记忆 chat-memory | 文件（Kryo） | `FileBasedChatMemory` | chatId → List<Message>（按 agent 类型隔离） |
+| 工作流实例 | 内存 | `WorkflowRepository` | instanceId、workflowId、status、nodes、context、history |
+| Agent 描述符 | `classpath:agents/*.yaml` | `AgentRegistry` | agentCode、capabilities、intentKeywords、permissionProfile |
+| 权限画像 | `classpath:permissions/*.yaml` | `PermissionProfileRegistry` | agentCode、allowedToolPatterns、minMcpTrustScore、admin |
+| 评测用例 | `classpath:eval/*.yaml` | `EvalCenter` | caseId、input、expectedIntent、expectedAgent、assertions |
 | 向量库 | PgVector / 内存 | `*VectorStoreConfig` | 文档 embedding + 元数据（filename、status） |
 
 ### 枚举类型
 
 | 枚举 | 取值 |
 |------|------|
-| `AgentIntent` | RESUME、NEGOTIATION、ESCAPE、CONSULTATION、GENERAL |
-| `ArtifactStatus` | PENDING、READY、CONSUMED |
+| `AgentIntent` | RESUME、NEGOTIATION、ESCAPE、CONSULTATION、DATA_QUERY、GENERAL |
+| `NluIntent` | RESUME_OPTIMIZE、INTERVIEW_PREP、JOB_CHANGE、SALARY_ANALYZE、SALARY_NEGOTIATION、LEAVE_PLAN、CONSULTATION、QUERY_DATA、CAREER_GENERAL、UNKNOWN 等 14 值 |
+| `MessageSource` | USER、AGENT、SYSTEM、TOOL、SYNTHESIZER |
+| `TaskStatus` | PENDING、RUNNING、SUCCESS、FAILED、RETRYING、SKIPPED、SKIPPED_BY_BUDGET、SKIPPED_BY_POLICY |
+| `FailurePolicy` | FAIL_FAST、RETRY_THEN_SKIP、RETRY_THEN_FAIL、SKIP |
+| `MatchType` | RULE、LLM、FALLBACK |
+| `ShiftType` | FOLLOW_UP、ENTITY_SWITCH、NEW_QUERY |
+| `ArtifactStatus` | DRAFT、REVIEWING、APPROVED、PUBLISHED、ARCHIVED |
 | `ArtifactScope` | USER_PROFILE、TASK |
 | `CommunicationPreference` | CONCISE、DETAILED |
 | `AnalysisSource` | CONVERSATION、UPLOADED_DOCUMENT |
@@ -366,6 +709,9 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | `QualityMode` | OFF、AUTO、REVIEW、RED_TEAM |
 | `RiskLevel` | LOW、MEDIUM、HIGH、CRITICAL |
 | `UsageEventType` | CHAT、RAG、TOOL_CALL、DOCUMENT_UPLOAD、EXPORT、COMPARE、QUALITY_REVIEW |
+| `WorkflowStatus` | PENDING、RUNNING、PAUSED、COMPLETED、FAILED、CANCELLED |
+| `SandboxPolicy` | UNSANDBOXED、PROCESS_SANDBOX、DOCKER_SANDBOX |
+| `McpTrustLevel` | VERIFIED、PARTNER、COMMUNITY、PRIVATE |
 
 ---
 
@@ -384,6 +730,7 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | `artifact.storage.dir` | `./tmp/artifacts` | 交付物目录 |
 | `user-profile.storage.dir` | `./tmp/user-profiles` | 画像目录 |
 | `profile.injection.max-chars` | `1000` | 画像注入字符上限 |
+| `sandbox.require-docker` | `false` | 生产环境是否强制要求 Docker |
 
 ---
 
@@ -401,9 +748,9 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | 文档入库 | POST | `/api/document/upload` · `/api/document/add` |
 | 用户画像 | GET/DELETE | `/api/profile/me`（JWT） |
 | 交付物 | GET | `/api/artifact/list` · `/api/artifact/{id}`（管理员） |
-|| 会话 | - | `SessionController`（增删查/归档/搜索/消息历史） |
-|| 收藏 | POST/DELETE/GET | `/api/favorite` · `/api/favorite/{id}` · `/api/favorite/list`（JWT） |
-|| 用量 | GET | `/api/usage/stats`（JWT） |
-|| 导入导出 | GET/POST | `/api/export/all` · `/api/export/import`（JWT） |
-|| API 文档 | - | `/api/swagger-ui.html`（Knife4j） |
-```
+| 会话 | - | `SessionController`（增删查/归档/搜索/消息历史） |
+| 收藏 | POST/DELETE/GET | `/api/favorite` · `/api/favorite/{id}` · `/api/favorite/list`（JWT） |
+| 用量 | GET | `/api/usage/stats`（JWT） |
+| 导入导出 | GET/POST | `/api/export/all` · `/api/export/import`（JWT） |
+| 轨迹 | GET | `/api/trace/{id}` · `/api/trace/chat/{chatId}` · `/api/trace/user/{userId}` |
+| 健康 | GET | `/api/health` |

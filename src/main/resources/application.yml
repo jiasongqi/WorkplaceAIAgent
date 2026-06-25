@@ -14,10 +14,7 @@ spring:
       api-key: ${DASHSCOPE_API_KEY:}
       chat:
         options:
-          # qwen3.5-plus 是多模态模型，需要启用多模态模式
-          model: qwen3.5-plus-2026-04-20
-          # 启用多模态模式（重要！）
-          multi-model: true
+          model: deepseek-v4-flash
     ollama:
       base-url: http://localhost:11434
       chat:
@@ -127,7 +124,90 @@ chat:
       turn-threshold: ${CHAT_TURN_THRESHOLD:20}
       # 保留最近 N 轮对话的完整内容
       recent-turns: ${CHAT_RECENT_TURNS:5}
+# ─── 治理层配置（Governance） ───
+# 沙箱配置
+sandbox:
+  base-dir: ${SANDBOX_BASE_DIR:./tmp/sandbox}
+  default-timeout: ${SANDBOX_TIMEOUT:30}
+  max-output-size: ${SANDBOX_MAX_OUTPUT:10485760}    # 10MB
+  require-docker: ${SANDBOX_REQUIRE_DOCKER:false}     # 生产环境建议设为 true
+  docker:
+    image: ${SANDBOX_DOCKER_IMAGE:python:3.12-slim}
+    default-timeout: ${SANDBOX_DOCKER_TIMEOUT:30}
+# MCP 信任配置
+mcp:
+  trust:
+    # 默认信任等级：VERIFIED / PARTNER / COMMUNITY / PRIVATE
+    default-level: ${MCP_DEFAULT_TRUST:PRIVATE}
+    # 是否启用信任校验
+    enabled: ${MCP_TRUST_ENABLED:true}
+  client:
+    # MCP tool execution timeout (seconds)
+    timeout:
+      connect: 10
+      read: 30
+
+# Agent Runtime governance
+agent:
+  runtime:
+    # Tool execution timeout in seconds (applied via CompletableFuture.orTimeout)
+    tool-timeout-seconds: 30
+    # ChatMemory hard limits
+    memory:
+      max-messages: 100
+      max-prompt-tokens: 8000
+  # ─── Guard 防护组件配置 ───
+  guard:
+    token-budget:
+      # 模型上下文窗口总 Token 预算（与 memory.max-prompt-tokens 一致）
+      max-tokens: ${GUARD_BUDGET_MAX_TOKENS:8000}
+      # Observation 正常模式保留字符数
+      observation-max-normal: 3000
+      # Observation Compact 模式截断字符数
+      observation-max-compact: 1500
+    loop-detector:
+      # 滑动窗口大小（保留最近 N 条工具调用 embedding）
+      window-size: ${GUARD_LOOP_WINDOW_SIZE:5}
+      # 余弦相似度阈值，超过此值判定为重复调用（0.88 更敏感）
+      similarity-threshold: ${GUARD_LOOP_SIMILARITY_THRESHOLD:0.88}
+      # 连续重复次数阈值，达到后注入引导消息
+      consecutive-threshold: ${GUARD_LOOP_CONSECUTIVE_THRESHOLD:2}
+
 # 修改日志级别，查看 Spring AI 更多调用细节
 logging:
   level:
     org.springframework.ai: DEBUG
+    com.yupi.yuaiagent.permission: INFO
+    com.yupi.yuaiagent.access: INFO
+    com.yupi.yuaiagent.sandbox: INFO
+    com.yupi.yuaiagent.mcp: INFO
+
+# ─── WorkPilot 质检配置 ───
+workpilot:
+  quality:
+    # 质检审查模型（红蓝对抗用，与主对话模型不同以避免自我审查偏见）
+    model: ${QUALITY_REVIEW_MODEL:qwen3.7-plus}
+
+# ─── 分层记忆配置 ───
+memory:
+  coordinator:
+    enabled: ${MEMORY_COORDINATOR_ENABLED:true}
+    timeout-ms: ${MEMORY_COORDINATOR_TIMEOUT:2000}
+    total-token-budget: ${MEMORY_TOKEN_BUDGET:6000}
+  layers:
+    sliding-window:
+      max-messages: ${MEMORY_SLIDING_MAX_MESSAGES:20}
+      token-budget-percent: 60
+    fact-store:
+      storage-dir: ${MEMORY_FACT_STORAGE_DIR:./tmp/memory/facts}
+      token-budget-percent: 15
+    summary:
+      storage-dir: ${MEMORY_SUMMARY_STORAGE_DIR:./tmp/memory/summaries}
+      max-checklists: ${MEMORY_SUMMARY_MAX_CHECKLISTS:5}
+      trigger-threshold: ${MEMORY_SUMMARY_TRIGGER_THRESHOLD:10}
+      token-budget-percent: 10
+    experience:
+      storage-dir: ${MEMORY_EXPERIENCE_STORAGE_DIR:./tmp/memory/experience}
+      token-budget-percent: 15
+      top-k: ${MEMORY_EXPERIENCE_TOP_K:3}
+      similarity-threshold: ${MEMORY_EXPERIENCE_THRESHOLD:0.7}

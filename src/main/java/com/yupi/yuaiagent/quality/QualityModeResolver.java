@@ -28,8 +28,14 @@ import java.util.Set;
 @Service
 public class QualityModeResolver {
 
-    private static final Set<AgentIntent> REVIEW_INTENTS = Set.of(
+    /** High-risk intents that always trigger quality review. */
+    private static final Set<AgentIntent> HIGH_RISK_INTENTS = Set.of(
             AgentIntent.RESUME, AgentIntent.NEGOTIATION, AgentIntent.ESCAPE
+    );
+
+    /** Low-risk intents that skip quality review entirely (no LLM call). */
+    private static final Set<AgentIntent> LOW_RISK_INTENTS = Set.of(
+            AgentIntent.GENERAL, AgentIntent.CONSULTATION, AgentIntent.DATA_QUERY
     );
 
     private static final String RISK_CLASSIFIER_PROMPT = """
@@ -62,12 +68,18 @@ public class QualityModeResolver {
             return requested;
         }
 
-        // Career decision intents → REVIEW
-        if (REVIEW_INTENTS.contains(intent)) {
+        // High-risk intents → always REVIEW (no LLM call needed)
+        if (HIGH_RISK_INTENTS.contains(intent)) {
             return QualityMode.REVIEW;
         }
 
-        // LLM-based risk classification
+        // Low-risk intents → OFF (skip LLM classification, saves 1 LLM call per request)
+        if (LOW_RISK_INTENTS.contains(intent)) {
+            log.debug("[QualityMode] low-risk intent={}, skipping review", intent);
+            return QualityMode.OFF;
+        }
+
+        // Ambiguous intents → LLM-based risk classification
         try {
             RiskAssessment risk = classifyRisk(userMessage);
             return switch (risk.level()) {

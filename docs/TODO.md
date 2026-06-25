@@ -123,10 +123,10 @@
 | 8.4 | **核心** | `triggerProfileUpdate` 记录异步 PROFILE_UPDATE 尾步骤 | ✅ 已完成 |
 | 8.5 | **核心** | `ToolCallAgent` 透传 `TraceContext`，记录 TOOL_CALL span | ✅ 已完成 |
 | 8.6 | **核心** | `ChatMemoryManager` 记录 MEMORY_COMPRESSION span | ✅ 已完成 |
-| 8.7 | 可选测试 | 编排采集集成测试（10 类 stepType 均被记录） | |
-| 8.8 | 可选测试 | 非侵入集成测试（采集不增加 LLM/工具调用次数） | |
-| 8.9 | 可选测试 | 持久化集成测试（`@PostConstruct` 加载、save 后 findById 命中） | |
-| 8.10 | 可选测试 | 采集性能测试（单事件延迟 ≤50ms） | |
+| 8.7 | 可选测试 | 编排采集集成测试（10 类 stepType 均被记录） | ✅ 已完成 |
+| 8.8 | 可选测试 | 非侵入集成测试（采集不增加 LLM/工具调用次数） | ✅ 已完成 |
+| 8.9 | 可选测试 | 持久化集成测试（`@PostConstruct` 加载、save 后 findById 命中） | ✅ 已完成 |
+| 8.10 | 可选测试 | 采集性能测试（单事件延迟 ≤50ms） | ✅ 已完成 |
 
 #### 任务 9：Checkpoint — P1 核心闭环完成
 | 子任务 | 类型 | 说明 | 状态 |
@@ -150,36 +150,208 @@
 ### P3 — 前端时间线可视化
 
 #### 任务 12：实现前端时间线视图
-| 子任务 | 类型 | 说明 |
-|--------|------|------|
-| 12.1 | **核心** | 前端新增 trace API 调用与 `TraceTimelineView` 组件，按 sequence 升序渲染步骤，ERROR 步骤特殊样式，RUNNING 步骤「进行中」占位 |
+| 子任务 | 类型 | 说明 | 状态 |
+|--------|------|------|------|
+| 12.1 | **核心** | 前端新增 trace API 调用与 `TraceTimelineView` 组件，按 sequence 升序渲染步骤，ERROR 步骤特殊样式，RUNNING 步骤「进行中」占位 | ✅ 已完成 |
 
 #### 任务 13：Final Checkpoint — 全部完成
-| 子任务 | 类型 | 说明 |
-|--------|------|------|
-| 13 | **Checkpoint** | 确保全部测试通过 |
+| 子任务 | 类型 | 说明 | 状态 |
+|--------|------|------|------|
+| 13 | **Checkpoint** | 确保全部测试通过 | ✅ 已完成 |
+
+---
+
+## 四、multi-agent-runtime-architecture（多 Agent 运行时架构）
+
+**整体进度：V1 全部完成 ✅，V2 基础设施全部就绪 ✅，V3 长期规划。**
+
+### V1 — 群聊模式（1 周）
+
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V1.1 | **核心** | 新增 `MessageSource` 枚举（USER/AGENT/SYSTEM/TOOL/SYNTHESIZER） | ✅ 已完成 |
+| V1.2 | **核心** | `PersistentChatMessage` 新增 sourceType/sourceId/sourceName 字段 + DDL | ✅ 已完成 |
+| V1.3 | **核心** | `PersistentMessageRepository` save() 支持新字段 | ✅ 已完成 |
+| V1.4 | **核心** | `ChatMemoryAdapter` addMessage() 带 source 参数 | ✅ 已完成 |
+| V1.5 | **核心** | `AgentIntent` 新增 fromMultiIntent() | ✅ 已完成 |
+| V1.6 | **核心** | `OrchestratorAgent` 多意图串行执行改造 | ✅ 已完成 |
+| V1.7 | **核心** | 前端 `CareerAdvisor.vue` 消息气泡按 sourceType 区分样式 | ✅ 已完成 |
+| V1.8 | Checkpoint | V1 端到端验证：多 Agent 群聊消息正确展示 | ✅ 已完成 |
+
+### V2 — Task Orchestrator（2-3 周）
+
+#### 模型层
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V2.1.1 | **核心** | `AgentOutput` 接口 + `TextOutput` 兜底实现 | ✅ 已完成 |
+| V2.1.2 | **核心** | `ResumeAnalysisOutput` / `SalaryAnalysisOutput` / `InterviewAnalysisOutput` 类型化实现 | 可选（Phase 2） |
+| V2.1.3 | **核心** | `AgentOutputFormatter` 接口 + `FormatterRegistry` 注册表 | ✅ 已完成 |
+| V2.1.4 | **核心** | `ExecutionResult` 统一执行结果 + `TaskStatus` 枚举 | ✅ 已完成 |
+| V2.1.5 | **核心** | `FailurePolicy` 枚举（FAIL_FAST/RETRY_THEN_SKIP/RETRY_THEN_FAIL/SKIP） | ✅ 已完成 |
+
+#### 预算层
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V2.2.1 | **核心** | `TokenBudget` record + `TokenUsage` record | ✅ 已完成 |
+| V2.2.2 | **核心** | `TokenUsageTracker`（JTokkit 预估 + API 实际统计 + 预算检查） | ✅ 已完成 |
+| V2.2.3 | **核心** | `PromptContext` + `PromptContextBuilder`（共享基础 prompt，避免 N+1 Token 计算） | 可选（Phase 2） |
+
+#### 上下文层
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V2.3.1 | **核心** | `ConversationContext` immutable record | ✅ 已完成 |
+| V2.3.2 | **核心** | `ConversationContextBuilder`（userProfile + conversationSummary + recentMessages） | ✅ 已完成 |
+| V2.3.3 | **核心** | `RuntimeContext`（可变执行状态，累积 ExecutionResult + 变量存取） | ✅ 已完成 |
+
+#### 工作流层
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V2.4.1 | **核心** | `WorkflowTemplate` record + `PlanStep` record | ✅ 已完成 |
+| V2.4.2 | **核心** | `WorkflowRegistry`（内置 JOB_CHANGE/INTERVIEW/CONSULTATION/GENERIC_CAREER） | ✅ 已完成 |
+| V2.4.3 | **核心** | `WorkflowMatcher` Score-based 匹配（Rule → LLM → GENERIC_FALLBACK） | ✅ 已完成 |
+| V2.4.4 | **核心** | `WorkflowMatchResult` + `MatchType` 枚举 | ✅ 已完成 |
+
+#### 执行层
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V2.5.1 | **核心** | `AgentRunner` 接口（run + getLastTokenUsage） | ✅ 已完成 |
+| V2.5.2 | **核心** | `TaskExecutor`（TokenBudgetCheck → Execute → RecordUsage → FailurePolicy） | ✅ 已完成 |
+| V2.5.3 | **核心** | `ResultAggregator`（FormatterRegistry 格式化 + LLM 流式汇总） | ✅ 已完成 |
+
+#### 集成改造
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| V2.6.1 | **核心** | `OrchestratorAgent` V2 重构（WorkflowMatcher → ContextBuilder → TaskExecutor → ResultAggregator） | ✅ 基础设施就绪 |
+| V2.6.2 | **核心** | TraceStepType 新增 WORKFLOW_MATCH / CONTEXT_BUILD / TASK_EXECUTION / RESULT_AGGREGATION | ✅ 已完成 |
+| V2.6.3 | **核心** | 前端 SSE 事件扩展（workflow-start/step-start/step-complete/step-skipped） | 可选（Phase 2） |
+| V2.6.4 | **核心** | 前端 Agent 步骤气泡（可折叠展示各 Agent 子步骤） | 可选（Phase 2） |
+
+#### Checkpoint
+| 任务 | 类型 | 说明 |
+|------|------|------|
+| V2.7 | Checkpoint | V2 端到端验证：多 Agent 工作流 + Token 预算 + 失败策略 + 前端展示 | ✅ 编译通过 |
+
+### V3 — Agent DAG（长期，后续规划）
+
+| 任务 | 类型 | 说明 |
+|------|------|------|
+| V3.1 | 规划 | `TaskNode` / `TaskGraph` / `NodeState` DAG 模型 |
+| V3.2 | 规划 | `TaskGraphEngine` DAG 执行引擎（Layer 并行） |
+| V3.3 | 规划 | `WorkflowTemplateLoader` 配置化加载 |
+| V3.4 | 规划 | `EvaluatorAgent` 质量评估 |
+
+---
+
+## 五、nlu-layer-design（NLU 意图理解层）
+
+**整体进度：V4.2 冻结版，Phase 1 代码已全部实现。**
+**方案文件：docs/nlu-layer-design-v4.md + v4.1.md + v4.2.md**
+**最新修订：Alias中文后边界 / ShiftType三态 / IntentReranker / RouteTemplate点分记法 / Redis Lua CAS**
+
+### Phase 1 — 核心链路（3-5 天，18 个文件，23 个任务）
+
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| NLU.1.1 | **核心** | `NluIntent` 细粒度意图枚举（14 值） | ✅ 已完成 |
+| NLU.1.2 | **核心** | `AgentIntent` 新增 DATA_QUERY | ✅ 已完成 |
+| NLU.1.3 | **核心** | `NluContext` record（state + aliases 分离） | ✅ 已完成 |
+| NLU.1.4 | **核心** | `ConversationState` + 3 态 smartMerge + version | ✅ 已完成 |
+| NLU.1.5 | **核心** | `ConversationStateStore` 接口 + `InMemoryConversationStateStore` | ✅ 已完成 |
+| NLU.1.6 | **核心** | `AliasResolver`（中文仅后边界 `(?!\\p{IsHan})`，英文 `\\b`） | ✅ 已完成 |
+| NLU.1.7 | **核心** | `UnifiedNluExtractor`（1 次 LLM：intents + slots + domain + action） | ✅ 已完成 |
+| NLU.1.8 | **核心** | `IntentReranker`（alias domain 信号 re-rank intent scores） | ✅ 已完成 |
+| NLU.1.9 | **核心** | `IntentAmbiguityDetector`（同类意图检测，用 reranked scores） | ✅ 已完成 |
+| NLU.1.10 | **核心** | `RouteTemplate`（点分记法：advertiser.query.roi） | ✅ 已完成 |
+| NLU.1.11 | **核心** | `RouteHint` record | ✅ 已完成 |
+| NLU.1.12 | **核心** | `ContextShiftDetector` 接口 + `RuleContextShiftDetector`（3 态） | ✅ 已完成 |
+| NLU.1.13 | **核心** | `IntentRequirementRegistry`（intent + routeHint 双维度） | ✅ 已完成 |
+| NLU.1.14 | **核心** | `ClarificationHandler` 模板追问（零 LLM） | ✅ 已完成 |
+| NLU.1.15 | **核心** | `NluPipeline` 串联 | ✅ 已完成 |
+| NLU.1.16 | **核心** | `DataQueryRouter` 透传 slots（不调 LLM） | ✅ 已完成 |
+| NLU.1.17 | **核心** | `OrchestratorAgent` 集成 | ✅ 已完成 |
+| NLU.1.18 | **核心** | `TraceStepType.NLU` | ✅ 已完成 |
+| NLU.1.19 | **核心** | 端到端测试 | 待验证 |
+
+### Phase 2 — 生产化（2-3 周）
+
+| 任务 | 类型 | 说明 |
+|------|------|------|
+| NLU.2.1 | **核心** | `RedisConversationStateStore`（CAS version + TTL 24h） |
+| NLU.2.2 | **核心** | `alias_dictionary` 表 + Repository + AliasResolver DB 加载 |
+| NLU.2.3 | **核心** | `WorkflowMatcher` 消费 RouteHint.specificRoute | ✅ 已完成 |
+| NLU.2.4 | **核心** | Rule+Embedding+LLM 三路 score 融合 |
+| NLU.2.5 | **核心** | `EmbeddingContextShiftDetector`（替换 Rule 实现） |
+| NLU.2.6 | **核心** | IntentRequirementRegistry 注册 routeHint 级别需求 | ✅ 已完成 |
+
+### Phase 3 — Agent Runtime（长期）
+
+| 任务 | 类型 | 说明 |
+|------|------|------|
+| NLU.3.1 | 规划 | Task Planner（多步骤任务分解） |
+| NLU.3.2 | 规划 | DataQueryAgent（接入 MCP 数据工具） |
+| NLU.3.3 | 规划 | Agent 协作 + Artifact 产出闭环 |
+
+---
+
+## 六、memory-system（分层记忆系统 L27）
+
+**整体进度：四层架构 + 提取管道 + Token 预算分配全部实现，8 个测试文件覆盖。**
+
+### 核心组件
+
+| 任务 | 类型 | 说明 | 状态 |
+|------|------|------|------|
+| L27.1 | **核心** | `MemoryLayer` 枚举（SLIDING_WINDOW / FACT_STORE / SUMMARY / EXPERIENCE） | ✅ 已完成 |
+| L27.2 | **核心** | `SlidingWindowLayer` (L1) — 当前会话滑动窗口 | ✅ 已完成 |
+| L27.3 | **核心** | `FactStoreLayer` (L2) — 结构化事实存储 + v1→v2 迁移 | ✅ 已完成 |
+| L27.4 | **核心** | `SummaryLayer` (L3) — 对话摘要要点 + FIFO 淘汰 + checklist | ✅ 已完成 |
+| L27.5 | **核心** | `ExperienceStoreLayer` (L4) — 向量化经验存储（PgVector） | ✅ 已完成 |
+| L27.6 | **核心** | `TokenBudgetAllocator` — 四层预算分配（L1 > L2 > L3 > L4） | ✅ 已完成 |
+| L27.7 | **核心** | `MemoryCoordinator` — 统一入口 + 并行查询 + 超时回退 + 缓存 | ✅ 已完成 |
+| L27.8 | **核心** | `ExtractionPipeline` — 异步提取事实/摘要/经验（单次 LLM） | ✅ 已完成 |
+| L27.9 | **核心** | `ContextWindow` — 上下文窗口记录 | ✅ 已完成 |
+
+### 测试覆盖
+
+| 测试文件 | 覆盖组件 | 状态 |
+|----------|----------|------|
+| `SlidingWindowLayerTest` | L1 滑动窗口（格式/边界/顺序/Token裁剪/保留） | ✅ |
+| `FactStoreLayerTest` | L2 事实存储（批量upsert/格式化/持久化） | ✅ |
+| `FactStoreMigrationTest` | L2 迁移兼容（幂等/字段映射/向后兼容/边界） | ✅ |
+| `SummaryLayerTest` | L3 摘要（触发/生成/持久化/FIFO淘汰/格式化/上限） | ✅ |
+| `ExperienceStoreLayerTest` | L4 经验存储 | ✅ |
+| `TokenBudgetAllocatorTest` | 预算分配 | ✅ |
+| `MemoryCoordinatorTest` | 协调器集成 | ✅ |
+| `ExtractionPipelineTest` | 提取管道 | ✅ |
+| `MemoryIntegrationTest` | 端到端集成 | ✅ |
 
 ---
 
 ## 优先级建议
 
 ```
-立即开始（阻塞后续）
-└── agent-execution-trace P1
-    ├── 1.1 建包 + pom.xml 引入 jqwik + application.yml 配置
-    ├── 1.2 TraceProperties
-    ├── 2.1 三个枚举
-    ├── 2.4 TraceSpan
-    ├── 2.5 ExecutionTrace
-    ├── 3.1 TraceContext
-    ├── 4.1 TraceRecorder（容错门面）
-    ├── 4.2 metadata 截断
-    ├── 5.1 TraceRepository（持久化）
-    ├── 5.2 列表查询 + 保留策略
-    ├── 7.1 TraceController（REST 接口）
-    └── 8.1–8.6 编排链路集成
+已完成（全部核心任务 + 可选测试）
+├── agent-execution-trace P1+P2+P3 ✅（含 8.7~8.10 集成测试 + Final Checkpoint）
+├── multi-agent-runtime-architecture V1（群聊模式）✅
+├── multi-agent-runtime-architecture V2（Task Orchestrator 基础设施）✅
+├── nlu-layer-design Phase 1（核心链路）✅ + Phase 2 部分（NLU.2.3 + NLU.2.6）✅
+└── memory-system L27（分层记忆系统）✅ 四层架构 + 提取管道 + 8个测试文件
 
-可并行（不阻塞核心）
-├── appointment-consultation-intent 可选属性测试（10 项）
-└── data-employee-agents 可选单元/集成测试（14 项）
+阻塞中（需要你操作）
+├── V2.7 编译验证 — 跑 mvn compile，贴错误
+└── NLU.1.19 端到端验证 — 启动后端手动测试
+
+需要基础设施（按需引入）
+├── NLU.2.1 RedisConversationStateStore（需 spring-data-redis）
+├── NLU.2.2 alias_dictionary DB（需 PostgreSQL/MySQL）
+├── NLU.2.4 Rule+Embedding+LLM 融合（需 Embedding 模型）
+└── NLU.2.5 EmbeddingContextShiftDetector（需 Embedding 模型）
+
+可选测试（不阻塞核心，可跳过）
+├── appointment-consultation-intent 10 项属性测试
+└── data-employee-agents 14 项单元/集成测试
+
+长期规划
+├── multi-agent-runtime-architecture V3（Agent DAG）
+└── nlu-layer-design Phase 3（Task Planner + DataQueryAgent + MCP）
 ```

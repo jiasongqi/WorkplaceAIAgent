@@ -1,0 +1,22 @@
+agentCode: negotiation-agent
+agentVersion: "1.0.0"
+displayName: "薪资谈判专家"
+description: "薪资谈判、涨薪分析、薪酬对标"
+promptVersion: "negotiation-v1"
+agentType: "TOOL_CALL"
+permissionProfile: "negotiation-agent"
+capabilities:
+  - "negotiation"
+  - "salary-analysis"
+skillBindings: []
+mcpBindings: []
+intentKeywords:
+  - "薪资"
+  - "涨薪"
+  - "谈判"
+  - "薪酬"
+metadata:
+  icon: "💰"
+  category: "career"
+  author: "Yu AI Agent"
+enabled: true

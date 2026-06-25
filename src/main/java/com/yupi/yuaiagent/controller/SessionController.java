@@ -38,8 +38,10 @@ public class SessionController {
 
     @PostMapping("/login")
     public Response<Map<String, String>> login(
-            @RequestParam(value = "username", defaultValue = "游客") String username) {
-        String userId = UUID.randomUUID().toString();
+            @RequestParam(value = "username", defaultValue = "游客") String username,
+            @RequestParam(value = "userId", required = false) String existingUserId) {
+        // Reuse existing userId if provided (for token refresh), otherwise generate new
+        String userId = (existingUserId != null && !existingUserId.isBlank()) ? existingUserId : UUID.randomUUID().toString();
         String token = jwtUtil.generateToken(userId, username);
         return Response.success(Map.of("token", token, "userId", userId, "username", username));
     }

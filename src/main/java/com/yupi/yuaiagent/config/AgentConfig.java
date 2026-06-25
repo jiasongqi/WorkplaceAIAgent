@@ -1,6 +1,10 @@
 package com.yupi.yuaiagent.config;
 
+import com.yupi.yuaiagent.access.AccessDecisionService;
+import com.yupi.yuaiagent.agent.DataQueryRouter;
 import com.yupi.yuaiagent.agent.OrchestratorAgent;
+import com.yupi.yuaiagent.agent.ResultAggregator;
+import com.yupi.yuaiagent.agent.TaskExecutor;
 import com.yupi.yuaiagent.agent.data.CareerCoachAgent;
 import com.yupi.yuaiagent.agent.data.DataAnalystAgent;
 import com.yupi.yuaiagent.agent.data.LearningResourceRecommenderAgent;
@@ -9,7 +13,10 @@ import com.yupi.yuaiagent.agent.data.PromotionPlannerAgent;
 import com.yupi.yuaiagent.artifact.ArtifactShelf;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.context.ConversationContextBuilder;
 import com.yupi.yuaiagent.message.ChatMemoryAdapter;
+import com.yupi.yuaiagent.memory.MemoryCoordinator;
+import com.yupi.yuaiagent.nlu.*;
 import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.quality.*;
 import com.yupi.yuaiagent.rag.QueryRewriter;
@@ -19,6 +26,8 @@ import com.yupi.yuaiagent.skill.SkillRegistry;
 import com.yupi.yuaiagent.trace.TraceRecorder;
 import com.yupi.yuaiagent.trace.TraceRepository;
 import com.yupi.yuaiagent.validation.InfoValidator;
+import com.yupi.yuaiagent.workflow.WorkflowMatcher;
+import com.yupi.yuaiagent.workflow.WorkflowRegistry;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -26,22 +35,10 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.Executor;
+
 /**
- * Agent 相关 Bean 配置
- *
- * <p>将 OrchestratorAgent 注册为单例 Bean，避免每次请求都重建全部子 Agent、
- * ChatClient 与 RAG Advisor。OrchestratorAgent 本身无请求级可变状态
- * （会话状态按 chatId 存于 ChatMemory），因此单例是线程安全的。
- *
- * <p>通过 {@link EnableConfigurationProperties} 装配日历与记忆压缩两类配置：
- * <ul>
- *   <li>{@link CalendarConfig}：绑定 {@code calendar.*}，集中管理提供商与飞书/钉钉凭证
- *       （Requirements 2.1）；</li>
- *   <li>{@link CompressionConfig}：绑定 {@code chat.memory.compression.*}，集中管理
- *       Token / 轮数阈值与保留轮数（Requirements 3.3 / 4.1 / 4.2）。</li>
- * </ul>
- * 追问模板配置 {@link FollowUpTemplateConfig} 自身为 {@code @Component + @ConfigurationProperties}，
- * 由组件扫描装配并支持热更新（Requirements 6.4），随构造参数注入到下游 Agent。
+ * Agent related Bean configuration.
  *
  * @author jsq
  */
@@ -49,10 +46,45 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties({CalendarConfig.class, CompressionConfig.class})
 public class AgentConfig {
 
+    /**
+     * Conversation state store — in-memory default for dev/test.
+     * For production, create a RedisConversationStateStore bean instead.
+     */
+    @Bean
+    public ConversationStateStore conversationStateStore() {
+        return new InMemoryConversationStateStore();
+    }
+
+    /**
+     * NLU Pipeline — single LLM call for intent extraction, routing, and clarification.
+     */
+    @Bean
+    public NluPipeline nluPipeline(
+            ConversationStateStore stateStore,
+            AliasResolver aliasResolver,
+            UnifiedNluExtractor extractor,
+            IntentReranker intentReranker,
+            IntentAmbiguityDetector ambiguityDetector,
+            RouteTemplate routeTemplate,
+            @org.springframework.beans.factory.annotation.Qualifier("ruleContextShiftDetector") ContextShiftDetector shiftDetector,
+            IntentRequirementRegistry requirementRegistry,
+            ClarificationHandler clarificationHandler) {
+        return new NluPipeline(stateStore, aliasResolver, extractor, intentReranker,
+                ambiguityDetector, routeTemplate, shiftDetector, requirementRegistry, clarificationHandler);
+    }
+
+    /**
+     * Data query router bean — handles QUERY_DATA intent without LLM call.
+     */
+    @Bean
+    public DataQueryRouter dataQueryRouter() {
+        return new DataQueryRouter();
+    }
+
     @Bean
     public OrchestratorAgent orchestratorAgent(
             ChatModel dashscopeChatModel,
-            VectorStore aiChatVectorStore,
+            @org.springframework.beans.factory.annotation.Qualifier("aiChatVectorStore") VectorStore aiChatVectorStore,
             ToolCallback[] allTools,
             QueryRewriter queryRewriter,
             ChatMemoryManager chatMemoryManager,
@@ -69,21 +101,29 @@ public class AgentConfig {
             ChatMemoryAdapter chatMemoryAdapter,
             QualityGuardAgent qualityGuardAgent,
             QualityModeResolver qualityModeResolver,
-            QualityReviewRepository qualityReviewRepository) {
+            QualityReviewRepository qualityReviewRepository,
+            com.yupi.yuaiagent.message.PersistentMessageRepository messageRepository,
+            NluPipeline nluPipeline,
+            DataQueryRouter dataQueryRouter,
+            WorkflowMatcher workflowMatcher,
+            WorkflowRegistry workflowRegistry,
+            ConversationContextBuilder contextBuilder,
+            TaskExecutor taskExecutor,
+            ResultAggregator resultAggregator,
+            AccessDecisionService accessDecisionService,
+            @org.springframework.beans.factory.annotation.Qualifier("agentExecutor") Executor agentExecutor,
+            @org.springframework.lang.Nullable MemoryCoordinator memoryCoordinator) {
         return new OrchestratorAgent(
                 dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager,
                 followUpTemplateConfig, infoValidator, calendarServiceFactory, appointmentRepository,
                 skillExecutor, skillRegistry, userProfileService, artifactShelf,
                 traceRecorder, traceRepository, chatMemoryAdapter,
-                qualityGuardAgent, qualityModeResolver, qualityReviewRepository);
+                qualityGuardAgent, qualityModeResolver, qualityReviewRepository, messageRepository,
+                nluPipeline, dataQueryRouter,
+                workflowMatcher, workflowRegistry, contextBuilder, taskExecutor, resultAggregator,
+                accessDecisionService, agentExecutor, memoryCoordinator);
     }
 
-    /**
-     * 数据分析师 Agent Bean。
-     *
-     * <p>作为第一期落地的数据员工，依赖大模型、对话记忆管理器与共享交付物货架，
-     * 产出结构化数据分析报告并放入货架。与其它 Agent 一致注册为单例。
-     */
     @Bean
     public DataAnalystAgent dataAnalystAgent(
             ChatModel dashscopeChatModel,
@@ -92,10 +132,6 @@ public class AgentConfig {
         return new DataAnalystAgent(dashscopeChatModel, chatMemoryManager, artifactShelf);
     }
 
-    /**
-     * 岗位辅导数据员工 Bean（P2 扩展数据员工）。
-     * 基于对话历史或上传文档产出岗位辅导建议交付物并放入货架。
-     */
     @Bean
     public CareerCoachAgent careerCoachAgent(
             ChatModel dashscopeChatModel,
@@ -104,10 +140,6 @@ public class AgentConfig {
         return new CareerCoachAgent(dashscopeChatModel, chatMemoryManager, artifactShelf);
     }
 
-    /**
-     * 用户画像整理数据员工 Bean（P2 扩展数据员工）。
-     * 将分散画像线索整理为 USER_PROFILE 作用域的结构化画像交付物。
-     */
     @Bean
     public ProfileCuratorAgent profileCuratorAgent(
             ChatModel dashscopeChatModel,
@@ -116,10 +148,6 @@ public class AgentConfig {
         return new ProfileCuratorAgent(dashscopeChatModel, chatMemoryManager, artifactShelf);
     }
 
-    /**
-     * 晋升路径规划数据员工 Bean（P2 扩展数据员工）。
-     * 基于对话历史或上传文档产出晋升路径规划交付物并放入货架。
-     */
     @Bean
     public PromotionPlannerAgent promotionPlannerAgent(
             ChatModel dashscopeChatModel,
@@ -128,10 +156,6 @@ public class AgentConfig {
         return new PromotionPlannerAgent(dashscopeChatModel, chatMemoryManager, artifactShelf);
     }
 
-    /**
-     * 学习资源推荐员 Bean（P3 数据员工）。
-     * 依据用户画像关注领域推荐学习资源，关注领域为空时回退到对话上下文。
-     */
     @Bean
     public LearningResourceRecommenderAgent learningResourceRecommenderAgent(
             ChatModel dashscopeChatModel,

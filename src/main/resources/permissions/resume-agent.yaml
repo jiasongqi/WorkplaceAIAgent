@@ -1,0 +1,14 @@
+agentCode: resume-agent
+displayName: "简历优化专家"
+description: "负责简历优化、面试技巧、求职指导"
+version: "1.0"
+allowedToolPatterns:
+  - "resume.*"
+  - "rag.query"
+  - "file.read"
+  - "profile.read"
+minMcpTrustScore: 30
+maxToolCallsPerRequest: 15
+filesystemAccess: true
+networkAccess: false
+admin: false

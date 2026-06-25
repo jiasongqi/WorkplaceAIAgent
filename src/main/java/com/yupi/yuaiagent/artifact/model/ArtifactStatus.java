@@ -7,19 +7,16 @@ package com.yupi.yuaiagent.artifact.model;
  */
 public enum ArtifactStatus {
 
-    /**
-     * 生产中
-     */
+    // ─── 生命周期状态（新增） ───
+    DRAFT("草稿"),
+    REVIEWING("审核中"),
+    APPROVED("已批准"),
+    PUBLISHED("已发布"),
+    ARCHIVED("已归档"),
+
+    // ─── 兼容旧状态 ───
     PENDING("生产中"),
-
-    /**
-     * 可被消费
-     */
     READY("可被消费"),
-
-    /**
-     * 已被消费
-     */
     CONSUMED("已被消费");
 
     private final String description;
