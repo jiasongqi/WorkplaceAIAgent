@@ -19,10 +19,27 @@ import java.util.stream.Collectors;
 @Component
 public class ContextRelevanceScorer {
 
-    // Stop words to filter out
+    // Stop words to filter out (expanded for better coverage)
     private static final Set<String> STOP_WORDS = Set.of(
-        "的", "了", "是", "在", "我", "你", "他", "她", "它",
-        "the", "a", "an", "is", "are", "was", "were", "i", "you", "he", "she", "it"
+        // Chinese stop words
+        "的", "了", "是", "在", "我", "你", "他", "她", "它", "这", "那", "有",
+        "和", "与", "或", "但", "而", "也", "都", "就", "才", "只", "被", "把",
+        "给", "让", "向", "从", "到", "对", "为", "以", "所", "如", "如果",
+        "因为", "所以", "虽然", "但是", "然后", "可以", "已经", "正在", "会",
+        // English stop words
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "shall", "can", "need", "must", "ought",
+        "i", "you", "he", "she", "it", "we", "they", "me", "him", "her",
+        "us", "them", "my", "your", "his", "its", "our", "their", "mine",
+        "yours", "hers", "ours", "theirs", "this", "that", "these", "those",
+        "what", "which", "who", "whom", "whose", "where", "when", "why", "how",
+        "all", "each", "every", "both", "few", "more", "most", "other", "some",
+        "such", "no", "nor", "not", "only", "own", "same", "so", "than",
+        "too", "very", "just", "because", "as", "until", "while", "of", "at",
+        "by", "for", "with", "about", "against", "between", "through", "during",
+        "before", "after", "above", "below", "to", "from", "up", "down", "in",
+        "out", "on", "off", "over", "under", "again", "further", "then", "once"
     );
 
     /**

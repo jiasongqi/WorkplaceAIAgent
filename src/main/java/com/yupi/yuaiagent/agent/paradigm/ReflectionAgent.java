@@ -341,23 +341,43 @@ public class ReflectionAgent extends BaseParadigmAgent {
     // ─── Helper Methods ────────────────────────────────────────────────
 
     /**
-     * Check if evaluation score is acceptable.
+     * Check if evaluation score is acceptable using regex for robust extraction.
      */
     private boolean isScoreAcceptable(String evaluation) {
         try {
-            // Simple score extraction - in production, use structured output
-            if (evaluation.contains("\"overall_score\"")) {
-                int start = evaluation.indexOf("\"overall_score\":") + 15;
-                int end = evaluation.indexOf(",", start);
-                if (end == -1) end = evaluation.indexOf("}", start);
-                String scoreStr = evaluation.substring(start, end).trim();
-                double score = Double.parseDouble(scoreStr);
+            Double score = extractScore(evaluation);
+            if (score != null) {
                 return score >= ACCEPTABLE_SCORE;
             }
         } catch (Exception e) {
             log.debug("[ReflectionAgent] Score parsing failed: {}", e.getMessage());
         }
         return false; // Assume not acceptable if parsing fails
+    }
+
+    /**
+     * Extract overall_score from evaluation using regex.
+     * Handles various formats: "overall_score": 8.5, "overall_score":8, etc.
+     */
+    private Double extractScore(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        
+        // Pattern matches: "overall_score": 8.5 or "overall_score":8 or "overall_score" : 8.5
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "\"overall_score\"\\s*:\\s*(\\d+\\.?\\d*)"
+        );
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+        
+        if (matcher.find()) {
+            try {
+                return Double.parseDouble(matcher.group(1));
+            } catch (NumberFormatException e) {
+                log.debug("[ReflectionAgent] Failed to parse score: {}", matcher.group(1));
+            }
+        }
+        return null;
     }
 
     /**
@@ -385,17 +405,13 @@ public class ReflectionAgent extends BaseParadigmAgent {
     }
 
     /**
-     * Extract score summary from evaluation.
+     * Extract score summary from evaluation using regex.
      */
     private String extractScoreSummary(String evaluation) {
-        // Simple extraction - in production, use structured output
         try {
-            if (evaluation.contains("\"overall_score\"")) {
-                int start = evaluation.indexOf("\"overall_score\":") + 15;
-                int end = evaluation.indexOf(",", start);
-                if (end == -1) end = evaluation.indexOf("}", start);
-                String scoreStr = evaluation.substring(start, end).trim();
-                return "综合评分: " + scoreStr + "/10";
+            Double score = extractScore(evaluation);
+            if (score != null) {
+                return String.format("综合评分: %.1f/10", score);
             }
         } catch (Exception e) {
             log.debug("[ReflectionAgent] Score extraction failed: {}", e.getMessage());

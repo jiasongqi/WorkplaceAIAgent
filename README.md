@@ -13,6 +13,8 @@
 
 ## ✨ Features / 功能亮点
 
+### 核心能力 (L0-L27)
+
 | Feature / 功能 | Description / 说明 | Agent |
 |----------------|-------------------|-------|
 | 🎯 Multi-Agent Routing / 多Agent智能路由 | NLU intent recognition → 5 professional sub-agents / 意图识别 → 5个专业子Agent | OrchestratorAgent |
@@ -28,33 +30,62 @@
 | 🎓 Eval Center / 评测中心 | YAML test suites + regression detection / YAML评测套件 + 回归检测 | EvalCenter |
 | 💾 Blackboard Pattern / 黑板模式 | Data employees produce artifacts on shelf / 数据员工通过货架协作 | ArtifactShelf |
 
+### Hello-Agents 优化 (L28-L33)
+
+| Feature / 功能 | Description / 说明 | Component |
+|----------------|-------------------|-----------|
+| 📈 Performance Metrics / 性能指标 | Actuator + Micrometer + Prometheus / 指标监控 | AgentMetrics |
+| 🔄 Classic Paradigms / 经典范式 | ReAct / Plan-and-Solve / Reflection / 三种推理范式 | ParadigmService |
+| 🎯 Context Engineering / 上下文工程 | Relevance scoring + Dynamic budget / 相关性评分+动态预算 | ContextEngineer |
+| 📦 Tool Registry / 工具注册 | Dynamic registration + Capability discovery / 动态注册+能力发现 | ToolRegistryService |
+| 🧠 Reflexion Memory / 失败记忆 | Learn from failures / 从失败中学习 | ReflexionMemory |
+| 🔀 RAG Rerank / 重排序 | Keyword overlap + Document quality / 关键词重叠+文档质量 | RerankService |
+| 🔌 Circuit Breaker / 断路器 | Auto timeout protection / 超时自动降级 | AgentCircuitBreaker |
+| 🔍 Diagnostics / 诊断 | Per-agent metrics + Health assessment / Agent指标+健康评估 | AgentDiagnosticsEndpoint |
+
 ---
 
 ## 🏗️ Architecture / 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (Vue 3)                         │
-│  Home · CareerAdvisor · SuperAgent · Knowledge · Artifacts       │
-│  Favorites · Usage · TraceDetail · CompareView · LoveMaster      │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ SSE / REST (JWT Auth)
-┌───────────────────────────────┼─────────────────────────────────┐
-│  API Layer: AiController · SessionController · DocumentController│
-├───────────────────────────────┼─────────────────────────────────┤
-│  AppService: OrchestratorAppService · SessionAppService · ...    │
-├───────────────────────────────┼─────────────────────────────────┤
-│  Agent Core:                                                    │
-│    OrchestratorAgent ─┬─ KeywordRouter (fast path)              │
-│                       ├─ NluPipeline (1 LLM call)               │
-│                       ├─ SkillExecutor (YAML skills)            │
-│                       ├─ ContextInjectionService                │
-│                       ├─ QualityReviewHandler                    │
-│                       └─ 5 Sub-Agents + Data Employees          │
-├─────────────────────────────────────────────────────────────────┤
-│  Infrastructure: ChatMemory · VectorStore · Trace · Sandbox      │
-│  AccessControl · Artifact · UserProfile · EventBus · MemoryCoord │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Frontend (Vue 3)                                  │
+│  Home · CareerAdvisor · SuperAgent · Knowledge · Artifacts                  │
+│  Favorites · Usage · TraceDetail · CompareView · LoveMaster                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │ SSE / REST (JWT Auth)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           API Layer                                         │
+│  AiController · SessionController · DocumentController · FeedbackController │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           AppService Layer                                  │
+│  OrchestratorAppService · SessionAppService · FavoriteAppService            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           Agent Core                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  OrchestratorAgent (主控)                                            │   │
+│  │    ├─ KeywordRouter        — Fast path (0 LLM)                      │   │
+│  │    ├─ NluPipeline          — Intent understanding (1 LLM)           │   │
+│  │    ├─ ParadigmSelector     — Paradigm selection (ReAct/PaS/Reflect) │   │
+│  │    ├─ ContextEngineer      — Context optimization                   │   │
+│  │    ├─ ReflexionService     — Failure learning                       │   │
+│  │    ├─ ContextInjectionService — Context injection                   │   │
+│  │    ├─ QualityReviewHandler — Quality review                         │   │
+│  │    └─ 5 Sub-Agents + Data Employees                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Paradigm Agents: ReAct · PlanAndSolve · Reflection                 │   │
+│  │  Tool System: ToolRegistry · ToolDiscovery · RerankService          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           Infrastructure                                    │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐      │
+│  │  Memory      │ │  Monitoring  │ │  Security    │ │  Workflow    │      │
+│  │  Coordinator │ │  AgentMetrics│ │  Access      │ │  Runtime     │      │
+│  │  4-Layer     │ │  CircuitBrkr │ │  Sandbox     │ │  6 Nodes     │      │
+│  │  Rerank      │ │  Diagnostics │ │  Injection   │ │  Persistence │      │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tech Stack / 技术栈
@@ -68,6 +99,7 @@
 | Frontend / 前端 | Vue 3, Vite, Vue Router, Axios, marked.js |
 | Serialization / 序列化 | Jackson (JSON), Kryo (ChatMemory) |
 | Security / 安全 | JWT, Voting Access Control, MCP Trust Levels |
+| Monitoring / 监控 | Actuator, Micrometer, Prometheus |
 
 ---
 
@@ -108,6 +140,19 @@ npm run dev
 # Frontend at http://localhost:3000
 ```
 
+### Monitoring / 监控
+
+```bash
+# Health check / 健康检查
+curl http://localhost:8123/api/actuator/health
+
+# Agent diagnostics / Agent诊断
+curl http://localhost:8123/api/actuator/agent-diagnostics
+
+# Prometheus metrics / Prometheus指标
+curl http://localhost:8123/api/actuator/prometheus
+```
+
 ---
 
 ## 📦 Project Structure / 项目结构
@@ -119,22 +164,41 @@ agent_product/
 │   │   ├── OrchestratorAgent.java    # Main orchestrator / 主控编排
 │   │   ├── ReActAgent.java           # ReAct pattern / ReAct模式
 │   │   ├── ToolCallAgent.java        # Tool calling / 工具调用
-│   │   ├── YuManus.java              # Super agent / 超级智能体
+│   │   ├── paradigm/                 # Classic paradigms / 经典范式
+│   │   │   ├── PlanAndSolveAgent.java    # Plan-and-Solve / 规划执行
+│   │   │   ├── ReflectionAgent.java      # Reflection / 反思修正
+│   │   │   └── ParadigmService.java      # Paradigm service / 范式服务
+│   │   ├── reflexion/                # Reflexion memory / 失败记忆
+│   │   │   ├── ReflexionMemory.java      # Failure storage / 失败存储
+│   │   │   └── ReflexionService.java     # Reflexion service / Reflexion服务
 │   │   ├── runner/                   # V2 AgentRunner adapters / V2适配层
 │   │   ├── data/                     # Data employee agents / 数据员工
 │   │   └── output/                   # Agent output types / 输出类型
 │   ├── nlu/                      # NLU Pipeline / 意图理解管道
-│   │   ├── NluPipeline.java          # Pipeline orchestrator / 管道编排
-│   │   ├── UnifiedNluExtractor.java  # Single LLM extraction / 单次LLM提取
-│   │   ├── KeywordRouter.java        # Fast path routing / 快速路径
-│   │   └── ...                       # AliasResolver, IntentReranker, etc.
 │   ├── memory/                   # 4-Layer Memory / 四层记忆系统
 │   │   ├── MemoryCoordinator.java    # Unified entry / 统一入口
+│   │   ├── context/                  # Context engineering / 上下文工程
+│   │   │   ├── ContextEngineer.java      # Context optimizer / 上下文优化
+│   │   │   ├── DynamicBudgetAllocator.java # Dynamic budget / 动态预算
+│   │   │   └── ContextRelevanceScorer.java # Relevance scoring / 相关性评分
 │   │   ├── sliding/                  # L1: Sliding window / 滑动窗口
 │   │   ├── fact/                     # L2: Fact store / 事实存储
 │   │   ├── summary/                  # L3: Summary / 摘要
 │   │   ├── experience/               # L4: Vector experience / 向量经验
 │   │   └── extraction/               # Extraction pipeline / 提取管道
+│   ├── metrics/                  # Monitoring / 监控指标
+│   │   ├── AgentMetrics.java         # Custom metrics / 自定义指标
+│   │   ├── AgentExecutionMetrics.java # Per-agent metrics / Agent指标
+│   │   ├── AgentCircuitBreaker.java  # Circuit breaker / 断路器
+│   │   ├── AgentMetricsEndpoint.java # Metrics endpoint / 指标端点
+│   │   └── AgentDiagnosticsEndpoint.java # Diagnostics / 诊断端点
+│   ├── tools/                    # Tool system / 工具系统
+│   │   └── registry/                 # Tool registry / 工具注册
+│   │       ├── ToolRegistry.java         # Dynamic registry / 动态注册表
+│   │       ├── ToolDiscovery.java        # Auto discovery / 自动发现
+│   │       └── ToolRegistryService.java  # Registry service / 注册服务
+│   ├── rag/                      # RAG system / RAG系统
+│   │   └── rerank/                   # Rerank service / 重排序服务
 │   ├── workflow/                 # Workflow Engine / 工作流引擎
 │   ├── sandbox/                  # Sandbox Execution / 沙箱执行
 │   ├── access/                   # Access Control / 访问控制
@@ -154,17 +218,9 @@ agent_product/
 │   └── application.yml           # Configuration / 配置文件
 ├── src/test/                     # 41 test files / 41个测试文件
 ├── yu-ai-agent-frontend/         # Vue 3 Frontend / 前端
-│   └── src/
-│       ├── views/                # 11 pages / 11个页面
-│       ├── components/           # Shared components / 共享组件
-│       ├── api/                  # API calls / 接口调用
-│       └── router/               # Vue Router / 路由配置
+├── stress-test.js                # k6 stress test / k6压测脚本
+├── stress-test.sh                # Shell stress test / Shell压测脚本
 └── docs/                         # Documentation / 文档
-    ├── WIKI.md                       # Project wiki / 项目Wiki
-    ├── FEATURES.md                   # Feature layers / 功能分层文档
-    ├── ARCHITECTURE.md               # Architecture / 架构文档
-    ├── INTERVIEW_QA_SKILL.md         # Interview prep / 面试准备
-    └── CODE_REVIEW_REPORT_2026-06-25.md  # Code review / 代码审查
 ```
 
 ---
@@ -186,6 +242,11 @@ User Message / 用户消息
   │     ├─ Needs clarification → Ask / 需要澄清 → 追问
   │     └─ Clear intent → Route / 明确意图 → 路由
   │
+  ├─→ ParadigmSelector / 范式选择
+  │     ├─ REACT → ToolCallAgent (default / 默认)
+  │     ├─ PLAN_AND_SOLVE → PlanAndSolveAgent (complex tasks / 复杂任务)
+  │     └─ REFLECTION → ReflectionAgent (high quality / 高质量)
+  │
   └─→ Sub-Agent Execution / 子Agent执行
         ├─ ResumeAgent      (Job seeking / 求职)
         ├─ NegotiationAgent (Salary negotiation / 薪资谈判)
@@ -194,15 +255,13 @@ User Message / 用户消息
         └─ GeneralCareerAgent(Career advice / 通用职场)
 ```
 
-### Data Employees / 数据员工
+### Classic Paradigms / 经典范式
 
-| Agent / Agent | Output / 产出 |
-|---------------|---------------|
-| DataAnalystAgent | Analysis report / 数据分析报告 |
-| CareerCoachAgent | Coaching plan / 岗位辅导方案 |
-| ProfileCuratorAgent | User profile / 用户画像整理 |
-| PromotionPlannerAgent | Promotion path / 晋升路径规划 |
-| LearningResourceRecommenderAgent | Resources / 学习资源推荐 |
+| Paradigm / 范式 | Use Case / 适用场景 | Flow / 流程 |
+|-----------------|---------------------|-------------|
+| REACT | Interactive tasks, tool calling / 交互式任务 | Think → Act → Observe → Loop |
+| PLAN_AND_SOLVE | Complex multi-step tasks / 复杂多步骤任务 | Plan → Execute → Verify |
+| REFLECTION | High quality output / 高质量输出 | Generate → Evaluate → Reflect → Revise |
 
 ---
 
@@ -219,11 +278,61 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
   Token Budget: 6000 tokens, priority L1 > L2 > L3 > L4
   Query: CompletableFuture parallel, 2000ms timeout per layer
   Extraction: Async post-conversation (single LLM call)
+  
+  Context Engineering / 上下文工程:
+  - Relevance scoring: Keyword overlap + Density / 相关性评分
+  - Dynamic budget: By query type (CONVERSATIONAL/FACTUAL/ANALYTICAL)
+  - Key info extraction: Entities + Topics + Intent
 ```
 
 ---
 
+## 📡 Monitoring / 监控
+
+### Endpoints / 端点
+
+| Endpoint / 端点 | Description / 说明 |
+|-----------------|-------------------|
+| `/actuator/health` | Health check / 健康检查 |
+| `/actuator/agent-metrics` | Custom agent metrics / 自定义Agent指标 |
+| `/actuator/agent-diagnostics` | Per-agent diagnostics / Agent诊断 |
+| `/actuator/prometheus` | Prometheus metrics / Prometheus指标 |
+
+### Key Metrics / 关键指标
+
+| Metric / 指标 | Type / 类型 | Description / 说明 |
+|---------------|-------------|-------------------|
+| `agent_execution_duration` | Timer | Agent execution duration / Agent执行耗时 |
+| `agent_execution_success` | Counter | Successful executions / 成功执行次数 |
+| `agent_execution_failure` | Counter | Failed executions / 失败执行次数 |
+| `agent_execution_timeout` | Counter | Timeout count / 超时次数 |
+| `agent_token_consumption` | Summary | Token usage per execution / Token消耗 |
+| `agent_active_count` | Gauge | Currently active agents / 活跃Agent数 |
+
+### Circuit Breaker / 断路器
+
+| State / 状态 | Condition / 条件 |
+|--------------|-----------------|
+| CLOSED | Normal operation / 正常运行 |
+| OPEN | Failure rate > 50% or Timeout rate > 30% / 失败率>50%或超时率>30% |
+| HALF_OPEN | Auto recovery after 30s / 30秒后自动恢复 |
+
+---
+
 ## 🔧 Tools & MCP / 工具与MCP
+
+### Tool Registry / 工具注册
+
+```java
+// Dynamic registration / 动态注册
+toolRegistryService.register("myTool", "Description", Set.of("search"), callback);
+
+// Capability discovery / 能力发现
+ToolCallback[] tools = toolRegistryService.getToolCallbacksByCapability("search");
+
+// Auto discovery from Spring Context / 从Spring Context自动发现
+// All ToolCallback beans are auto-registered
+```
 
 ### Built-in Tools / 内置工具
 
@@ -237,33 +346,6 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 | PDF Generation / PDF生成 | `PDFGenerationTool` | iText + Asian fonts / iText+亚洲字体 |
 | Terminate / 终止 | `TerminateTool` | Agent self-stop / Agent主动结束 |
 
-### MCP Integration / MCP集成
-
-- External MCP services via Spring AI MCP Client
-- SSE + stdio connection modes
-- Trust levels: VERIFIED(100) / PARTNER(70) / COMMUNITY(30) / PRIVATE(0)
-
----
-
-## 📡 API Reference / API 参考
-
-| Category / 分类 | Method | Path / 路径 | Auth / 鉴权 |
-|----------------|--------|------------|-------------|
-| Orchestrator Chat / 智能路由对话 | GET | `/ai/orchestrator/chat` | JWT |
-| Manus Super Agent / 超级智能体 | GET | `/ai/manus/chat` | - |
-| Basic Chat / 基础对话 | GET | `/ai/ai_chat/chat/sync\|sse\|sse_emitter` | - |
-| RAG Chat / RAG对话 | GET | `/ai/ai_chat/rag/sync` | - |
-| Tool Chat / 工具对话 | GET | `/ai/ai_chat/tools/sync` | - |
-| Document / 文档管理 | POST/GET/DELETE | `/document/*` | - |
-| Session / 会话管理 | ALL | `/session/*` | JWT |
-| Favorites / 收藏 | POST/DELETE/GET | `/favorite/*` | JWT |
-| Profile / 用户画像 | GET/DELETE | `/profile/me` | JWT |
-| Artifacts / 交付物 | GET | `/artifact/*` | JWT |
-| Trace / 轨迹查询 | GET | `/trace/*` | JWT |
-| Usage / 用量统计 | GET | `/usage/stats` | JWT |
-| Export / 导入导出 | GET/POST | `/export/*` | JWT |
-| Health / 健康检查 | GET | `/health` | - |
-
 ---
 
 ## 🧪 Testing / 测试
@@ -275,6 +357,10 @@ mvn test
 # Run specific test / 运行指定测试
 mvn test -Dtest=MemoryCoordinatorTest
 mvn test -Dtest=AgentRoutingEvalTest
+
+# Stress test / 压测
+k6 run --vus 10 --duration 30s stress-test.js
+./stress-test.sh 5 20
 ```
 
 ### Test Coverage / 测试覆盖
@@ -296,13 +382,28 @@ mvn test -Dtest=AgentRoutingEvalTest
 
 | Document / 文档 | Description / 说明 |
 |----------------|-------------------|
-| [WIKI.md](docs/WIKI.md) | Full project wiki / 完整项目Wiki |
-| [FEATURES.md](docs/FEATURES.md) | Feature layers (L0-L27) / 功能分层文档 |
+| [WIKI.md](docs/WIKI.md) | Full project wiki (L0-L33) / 完整项目Wiki |
+| [FEATURES.md](docs/FEATURES.md) | Feature layers / 功能分层文档 |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture design / 架构设计 |
-| [INTERVIEW_QA_SKILL.md](docs/INTERVIEW_QA_SKILL.md) | Interview Q&A (30+ questions) / 面试问答手册 |
-| [CODE_REVIEW_REPORT](docs/CODE_REVIEW_REPORT_2026-06-25.md) | Code review report / 代码审查报告 |
+| [INTERVIEW_QA_SKILL.md](docs/INTERVIEW_QA_SKILL.md) | Interview Q&A (50+ questions) / 面试问答手册 |
+| [CODE_REVIEW_REPORT](docs/CODE_REVIEW_REPORT_2026-06-26.md) | Code review (9.3/10) / 代码审查报告 |
+| [HELLO_AGENTS_SUMMARY](docs/HELLO_AGENTS_SUMMARY.md) | Hello-Agents study notes / Hello-Agents学习笔记 |
 | [NLU Design v4.2](docs/nlu-layer-design-v4.2.md) | NLU pipeline design / NLU管道设计 |
 | [Multi-Agent Architecture](docs/multi-agent-runtime-architecture.md) | Multi-agent runtime / 多Agent运行时架构 |
+
+---
+
+## 📊 Capability Layers / 能力层级
+
+```
+L0-L27: Core capabilities / 核心能力
+L28: Performance monitoring / 性能监控
+L29: Classic paradigms / 经典范式
+L30: Context engineering / 上下文工程
+L31: Tool registry / 工具注册
+L32: Reflexion memory / 失败记忆
+L33: RAG rerank / 重排序
+```
 
 ---
 

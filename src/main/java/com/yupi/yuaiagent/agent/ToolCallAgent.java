@@ -201,7 +201,9 @@ public class ToolCallAgent extends ReActAgent {
         Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
         ToolExecutionResult toolExecutionResult;
         int retryCount = 0;
-        while (true) {
+        int maxAttempts = MAX_TIMEOUT_RETRIES + 1; // Total attempts = retries + 1
+        
+        while (retryCount < maxAttempts) {
             try {
                 final Prompt toolPrompt = prompt;
                 toolExecutionResult = CompletableFuture
@@ -212,7 +214,7 @@ public class ToolCallAgent extends ReActAgent {
             } catch (java.util.concurrent.CompletionException e) {
                 if (e.getCause() instanceof TimeoutException) {
                     retryCount++;
-                    if (retryCount <= MAX_TIMEOUT_RETRIES) {
+                    if (retryCount < maxAttempts) {
                         // 自动重试：方向对，网络问题，不换关键词
                         log.warn("[ToolCall] tool execution timed out (attempt {}/{}), retrying same call...",
                                 retryCount, MAX_TIMEOUT_RETRIES);

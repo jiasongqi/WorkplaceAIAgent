@@ -298,35 +298,77 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
     // ─── Helper Methods ────────────────────────────────────────────────
 
     /**
-     * Parse plan from LLM response (simplified JSON parsing).
+     * Parse plan from LLM response using Jackson for robust JSON parsing.
      */
+    @SuppressWarnings("unchecked")
     private List<PlanStep> parsePlan(String planResponse) {
-        // Simple parsing - in production, use Jackson or structured output
         List<PlanStep> steps = new ArrayList<>();
 
         try {
-            // Extract steps from JSON-like response
-            // This is a simplified parser - enhance as needed
-            String[] lines = planResponse.split("\n");
-            int stepId = 1;
-
-            for (String line : lines) {
-                line = line.trim();
-                if (line.contains("\"action\"") && line.contains(":")) {
-                    // Extract action text
-                    int start = line.indexOf(":\"") + 2;
-                    int end = line.lastIndexOf("\"");
-                    if (start > 1 && end > start) {
-                        String action = line.substring(start, end);
-                        steps.add(new PlanStep(stepId++, action, "Output from step " + (stepId - 1)));
-                    }
+            // Extract JSON from response (LLM may add extra text)
+            String json = extractJson(planResponse);
+            
+            // Parse with Jackson
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, Object> planMap = mapper.readValue(json, Map.class);
+            
+            // Extract steps array
+            List<Map<String, Object>> stepsList = (List<Map<String, Object>>) planMap.get("steps");
+            if (stepsList != null) {
+                int stepId = 1;
+                for (Map<String, Object> stepMap : stepsList) {
+                    String action = (String) stepMap.getOrDefault("action", "Execute step " + stepId);
+                    String expectedOutput = (String) stepMap.getOrDefault("expected_output", "");
+                    steps.add(new PlanStep(stepId++, action, expectedOutput));
                 }
             }
+        } catch (Exception e) {
+            log.warn("[PlanAndSolveAgent] JSON parsing failed, using fallback: {}", e.getMessage());
+            // Fallback: try line-by-line parsing
+            steps = parsePlanFallback(planResponse);
+        }
 
-            // Fallback: if no steps parsed, create generic steps
-            if (steps.isEmpty()) {
-                steps.add(new PlanStep(1, "Analyze the task requirements", "Analysis complete"));
-                steps.add(new PlanStep(2, "Execute the main task", "Task executed"));
+        // Final fallback: if still empty, create generic steps
+        if (steps.isEmpty()) {
+            steps.add(new PlanStep(1, "Analyze the task requirements", "Analysis complete"));
+            steps.add(new PlanStep(2, "Execute the main task", "Task executed"));
+            steps.add(new PlanStep(3, "Verify and summarize results", "Verification complete"));
+        }
+
+        log.info("[PlanAndSolveAgent] Parsed {} steps from plan", steps.size());
+        return steps;
+    }
+
+    /**
+     * Extract JSON object from text that may contain extra content.
+     */
+    private String extractJson(String text) {
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return text.substring(start, end + 1);
+        }
+        return text;
+    }
+
+    /**
+     * Fallback parser for non-JSON responses.
+     */
+    private List<PlanStep> parsePlanFallback(String planResponse) {
+        List<PlanStep> steps = new ArrayList<>();
+        String[] lines = planResponse.split("\n");
+        int stepId = 1;
+
+        for (String line : lines) {
+            line = line.trim();
+            // Match numbered list items: "1. action" or "1) action"
+            if (line.matches("^\\d+[.)]\\s+.*")) {
+                String action = line.replaceFirst("^\\d+[.)]\\s+", "");
+                steps.add(new PlanStep(stepId++, action, "Output from step " + (stepId - 1)));
+            }
+        }
+        return steps;
+    }
                 steps.add(new PlanStep(3, "Verify and summarize results", "Verification complete"));
             }
 

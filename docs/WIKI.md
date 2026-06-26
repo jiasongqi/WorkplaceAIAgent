@@ -799,6 +799,136 @@ ToolCallback[] searchTools = toolRegistryService.getToolCallbacksByCapability("s
 
 ---
 
+## 二十、Reflexion 失败记忆 (L32)
+
+### 20.1 机制说明
+
+基于 Reflexion 论文，Agent 从失败中学习：
+
+| 组件 | 职责 |
+|------|------|
+| `ReflexionMemory` | 失败轨迹存储 (per-user + global) |
+| `ReflexionService` | 集成服务 (记录/查询/注入) |
+
+### 20.2 核心功能
+
+- **失败记录**：taskType + error + resolution
+- **相关性检索**：按 taskType 匹配历史失败
+- **提示词注入**：格式化为"历史失败经验"
+- **自动过期**：7 天后自动清理
+
+### 20.3 使用方式
+
+```java
+// 记录失败
+reflexionService.recordFailure(userId, "tool_call", "超时", "增加超时时间");
+
+// 获取失败上下文 (注入提示词)
+String context = reflexionService.getFailureContext(userId, "tool_call");
+```
+
+---
+
+## 二十一、RAG Rerank 重排序 (L33)
+
+### 21.1 机制说明
+
+检索后对文档重排序，提升相关性：
+
+| 组件 | 职责 |
+|------|------|
+| `RerankService` | 重排序服务 |
+
+### 21.2 评分策略
+
+| 因素 | 权重 | 说明 |
+|------|------|------|
+| 关键词重叠 | 60% | Jaccard + 覆盖率 |
+| 文档质量 | 20% | 长度 + 结构 |
+| 位置偏差 | 20% | 原始检索顺序 |
+
+### 21.3 使用方式
+
+```java
+// 重排序
+List<Document> reranked = rerankService.rerank(query, documents);
+
+// Top-K 过滤
+List<Document> top5 = rerankService.rerankTopK(query, documents, 5);
+```
+
+---
+
+## 二十二、性能监控与诊断 (L28)
+
+### 22.1 监控指标
+
+| 指标 | 类型 | 说明 |
+|------|------|------|
+| `agent_execution_duration` | Timer | Agent 执行耗时 (P50/P95/P99) |
+| `agent_execution_success` | Counter | 成功执行次数 |
+| `agent_execution_failure` | Counter | 失败执行次数 |
+| `agent_execution_timeout` | Counter | 超时次数 |
+| `agent_token_consumption` | Summary | Token 消耗 |
+| `agent_tool_calls` | Summary | 工具调用次数 |
+| `agent_step_count` | Summary | 执行步数 |
+| `agent_active_count` | Gauge | 当前活跃 Agent 数 |
+
+### 22.2 断路器机制
+
+| 状态 | 说明 | 转换条件 |
+|------|------|----------|
+| CLOSED | 正常运行 | 默认状态 |
+| OPEN | 拒绝请求 | 失败率 > 50% 或超时率 > 30% 或连续失败 5 次 |
+| HALF_OPEN | 测试恢复 | 30 秒后自动转换 |
+
+### 22.3 诊断端点
+
+```
+# 全局诊断
+GET /actuator/agent-diagnostics
+
+# 单个 Agent 诊断
+GET /actuator/agent-diagnostics/{agentType}
+```
+
+返回内容：
+- Global overview (活跃 Agent 数、成功率)
+- Per-agent metrics (耗时、Token、工具调用)
+- Circuit breaker status (断路器状态)
+- Health assessment (健康评估)
+- Recommendations (优化建议)
+
+### 22.4 Prometheus 集成
+
+```bash
+# 获取 Prometheus 指标
+curl http://localhost:8123/api/actuator/prometheus
+```
+
+Grafana 查询示例：
+```promql
+# Agent 成功率
+rate(agent_execution_success_total[5m]) / rate(agent_execution_duration_seconds_count[5m])
+
+# Agent P95 延迟
+histogram_quantile(0.95, rate(agent_execution_duration_seconds_bucket[5m]))
+
+# 活跃 Agent 数
+agent_active_count
+```
+
+### 22.5 告警规则建议
+
+| 指标 | 阈值 | 说明 |
+|------|------|------|
+| 成功率 | < 80% | Agent 执行成功率过低 |
+| P95 延迟 | > 10s | Agent 响应过慢 |
+| 超时率 | > 20% | 频繁超时 |
+| 断路器状态 | OPEN | Agent 被断路器阻断 |
+
+---
+
 ## 附录：能力分层总览
 
 ```
@@ -834,6 +964,8 @@ L28 性能评估与监控   Actuator + Micrometer + Prometheus + 压测脚本
 L29 经典范式支持     ReAct/Plan-and-Solve/Reflection + 范式选择器
 L30 上下文工程优化   相关性评分 + 动态预算分配 + 关键信息提取
 L31 工具注册机制     动态注册表 + 能力发现 + 健康监控
+L32 Reflexion 机制   失败轨迹记忆 + 自动注入提示词
+L33 RAG Rerank       关键词重叠 + 文档质量评分 + 位置偏差
 横切关注点：JWT 鉴权 · 会话三态生命周期 · 归档/回收站 · AppService 业务编排层 · 全局异常处理 · 结构化输出
 ```
 

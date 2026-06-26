@@ -188,8 +188,8 @@ management:
   endpoints:
     web:
       exposure:
-        # Expose health, info, metrics, prometheus, agent-metrics
-        include: health,info,metrics,prometheus,agent-metrics
+        # Expose health, info, metrics, prometheus, agent-metrics, agent-diagnostics
+        include: health,info,metrics,prometheus,agent-metrics,agent-diagnostics
       base-path: /actuator
   endpoint:
     health:
@@ -199,6 +199,8 @@ management:
     prometheus:
       enabled: true
     agent-metrics:
+      enabled: true
+    agent-diagnostics:
       enabled: true
   metrics:
     tags:
@@ -221,6 +223,24 @@ workpilot:
   quality:
     # 质检审查模型（红蓝对抗用，与主对话模型不同以避免自我审查偏见）
     model: ${QUALITY_REVIEW_MODEL:qwen3.7-plus}
+
+# ─── Reflexion 失败记忆配置 ───
+reflexion:
+  enabled: ${REFLEXION_ENABLED:true}
+  max-memories-per-user: ${REFLEXION_MAX_MEMORIES:50}
+  expiration-days: ${REFLEXION_EXPIRATION_DAYS:7}
+
+# ─── RAG Rerank 配置 ───
+rag:
+  rerank:
+    enabled: ${RERANK_ENABLED:true}
+    top-k: ${RERANK_TOP_K:5}
+
+# ─── Paradigm 范式选择配置 ───
+paradigm:
+  selector:
+    enabled: ${PARADIGM_SELECTOR_ENABLED:true}
+    default-paradigm: ${DEFAULT_PARADIGM:react}
 
 # ─── 分层记忆配置 ───
 memory:

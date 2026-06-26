@@ -396,6 +396,28 @@ public class FactStoreLayer {
         return locks.computeIfAbsent(userId, k -> new ReentrantReadWriteLock());
     }
 
+    /**
+     * Cleanup locks for users that are no longer in the facts index.
+     * This prevents memory leaks from abandoned lock entries.
+     * Should be called periodically (e.g., via @Scheduled).
+     */
+    public void cleanupStaleLocks() {
+        int beforeSize = locks.size();
+        locks.keySet().removeIf(userId -> !factsIndex.containsKey(userId));
+        int afterSize = locks.size();
+        if (beforeSize != afterSize) {
+            log.info("[FactStoreLayer] Cleaned up {} stale locks: {} -> {}", 
+                    beforeSize - afterSize, beforeSize, afterSize);
+        }
+    }
+
+    /**
+     * Get current lock count (for monitoring).
+     */
+    public int getLockCount() {
+        return locks.size();
+    }
+
     private void persistToFile(String userId, List<FactEntry> facts) {
         Path filePath = storageDir.resolve(userId + ".json");
         try {

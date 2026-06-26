@@ -1,7 +1,7 @@
 ---
 name: workpilot-interview-qa
-description: WorkPilot（全场景职场生存智囊）面试问答手册。覆盖架构设计、技术实现、场景设计三大类 30+ 问题，含 STAR 法则回答模板和高频追问。适用于 AI Agent 方向面试准备。
-version: 1.0.0
+description: WorkPilot（全场景职场生存智囊）面试问答手册。覆盖架构设计、技术实现、场景设计三大类 50+ 问题，含 STAR 法则回答模板和高频追问。适用于 AI Agent 方向面试准备。
+version: 1.5.0
 tags: [interview, agent, architecture, career]
 ---
 
@@ -10,6 +10,7 @@ tags: [interview, agent, architecture, career]
 > 项目：全场景职场生存智囊（WorkPilot）
 > 技术栈：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope
 > 定位：全场景职场 AI 智囊平台，覆盖求职到离职全生命周期
+> 更新：v1.5 — 新增性能评估、经典范式、上下文工程、工具注册相关问题
 
 ---
 
@@ -415,3 +416,290 @@ tags: [interview, agent, architecture, career]
 ### Q35: 如何做灰度发布？
 
 > PromptRegistry 支持多版本 + trafficPercent 加权随机。WorkflowMatcher 支持 Rule/LLM/FALLBACK 三种策略切换。EvalCenter 回归测试验证新版本效果。可以先 10% 流量切到新 Prompt，观察 EvalReport 的 passRate 和 regression，再逐步放量。
+
+---
+
+## 七、新增功能相关 Q&A (v1.5)
+
+### Q36: 性能评估框架是怎么设计的？
+
+**回答要点**：
+- **Actuator 集成**：Spring Boot Actuator + Micrometer + Prometheus
+- **7 个核心指标**：
+  - `agent_request_duration` (Timer) — 请求延迟 P50/P95/P99
+  - `agent_tool_call_duration` (Timer) — 工具调用延迟
+  - `agent_token_usage` (DistributionSummary) — Token 消耗
+  - `agent_tool_call_total` (Counter) — 工具调用次数 (按 agent/tool/result 标签)
+  - `agent_active_requests` (Gauge) — 当前活跃请求数
+  - `agent_error_total` (Counter) — 错误计数
+  - `agent_step_count` (DistributionSummary) — 每请求步数
+- **自定义端点**：`/actuator/agent-metrics` 返回聚合指标
+- **健康检查**：`AgentHealthIndicator` 检查活跃请求数和响应时间
+- **压测脚本**：k6 渐进式负载 + Shell 简易压测
+
+**追问**：为什么选 Micrometer 而不是自建指标系统？
+> Micrometer 是 Spring Boot Actuator 的标准指标库，与 Prometheus/Grafana 生态无缝集成。自建系统需要额外维护成本，且无法直接接入现有的监控体系。Micrometer 支持 Timer/Counter/Gauge/DistributionSummary 等多种指标类型，满足 Agent 监控需求。
+
+---
+
+### Q37: 经典范式支持是怎么设计的？
+
+**回答要点**：
+- **三种范式**：
+  - **REACT**：Think → Act → 循环，适合交互式任务
+  - **PLAN_AND_SOLVE**：规划 → 执行 → 验证，适合复杂多步骤任务
+  - **REFLECTION**：生成 → 评估 → 反思 → 修正，适合高质量输出
+- **范式选择器**：`ParadigmSelector` 基于 NLU 意图 + 关键词启发式自动选择
+- **组件结构**：
+  - `AgentParadigm` — 范式枚举
+  - `ParadigmSelector` — 智能选择器
+  - `BaseParadigmAgent` — 抽象基类
+  - `PlanAndSolveAgent` — Plan-and-Solve 实现
+  - `ReflectionAgent` — Reflection 实现
+  - `ParadigmAgentFactory` — 工厂模式
+  - `ParadigmService` — 高层 API
+
+**追问**：范式选择的准确率怎么保证？
+> 当前是规则 + 关键词启发式，不调用 LLM。准确率通过以下方式保证：1）NLU 意图映射（DATA_QUERY → PLAN_AND_SOLVE）；2）关键词匹配（"分析"/"对比" → PLAN_AND_SOLVE）；3）默认 REACT（最通用）。未来可加入用户反馈循环，动态调整选择策略。
+
+---
+
+### Q38: Plan-and-Solve 范式的执行流程？
+
+**回答要点**：
+- **三阶段执行**：
+  1. **Planning Phase**：LLM 生成结构化计划（JSON 格式，3-7 个步骤）
+  2. **Execution Phase**：按计划逐步执行，记录每步结果
+  3. **Verification Phase**：LLM 验证执行结果，检查完整性
+- **进度跟踪**：`buildProgressSummary()` 构建已执行步骤摘要
+- **容错设计**：计划解析失败时降级为单步直接执行
+- **Trace 集成**：每个阶段和步骤都有 TraceSpan 记录
+
+**追问**：如果计划执行到一半失败了怎么办？
+> 1）记录已执行步骤的结果；2）返回部分完成的结果；3）Verification Phase 会识别缺失步骤；4）用户可基于部分结果继续或重新规划。不会丢失已执行的工作。
+
+---
+
+### Q39: Reflection 范式的迭代优化流程？
+
+**回答要点**：
+- **四阶段迭代**：
+  1. **Generation**：生成初始响应
+  2. **Evaluation**：5 维评分（准确性/完整性/清晰度/相关性/质量）
+  3. **Reflection**：识别改进点（按优先级排序）
+  4. **Revision**：应用改进，生成优化版本
+- **迭代控制**：最多 2 次迭代，评分 ≥ 8.0 提前终止
+- **评分解析**：从 LLM 输出提取 `overall_score`
+- **成本权衡**：额外 LLM 调用换取质量提升，适合高价值输出
+
+**追问**：Reflection 的额外 LLM 调用成本怎么控制？
+> 1）设置最大迭代次数（默认 2 次）；2）评分阈值提前终止（≥ 8.0）；3）仅对高质量需求场景启用（如简历、Offer 评估）；4）通过 ParadigmSelector 按任务类型自动选择，普通对话不走 Reflection。
+
+---
+
+### Q40: 上下文工程优化做了哪些改进？
+
+**回答要点**：
+- **相关性评分**：`ContextRelevanceScorer` 按关键词重叠 + 密度对记忆项评分排序
+- **动态预算分配**：`DynamicBudgetAllocator` 根据查询类型调整 Token 预算
+  - CONVERSATIONAL：L1=75%, L2=10%, L3=10%, L4=5%
+  - FACTUAL：L1=40%, L2=35%, L3=10%, L4=15%
+  - ANALYTICAL：L1=50%, L2=15%, L3=15%, L4=20%
+- **关键信息提取**：`KeyInfoExtractor` 提取实体/主题/意图
+- **集成服务**：`ContextEngineer` 统一入口
+
+**追问**：动态预算分配的依据是什么？
+> 基于查询类型：1）事实性查询（"谁"/"什么"）优先 L2 事实层；2）分析性查询（"分析"/"对比"）优先 L4 经验层；3）对话性查询优先 L1 滑动窗口。通过关键词启发式分类，不调用 LLM。
+
+---
+
+### Q41: 工具注册机制是怎么设计的？
+
+**回答要点**：
+- **动态注册表**：`ToolRegistry` 支持运行时注册/注销工具
+- **工具元数据**：`ToolDefinition` 包含名称/描述/能力标签/健康状态
+- **能力发现**：工具名自动推断能力标签（search/file/web/terminal/document）
+- **自动发现**：`ToolDiscovery` 从 Spring Context 自动注册 ToolCallback Bean
+- **健康监控**：支持 HEALTHY/DEGRADED/UNHEALTHY 状态管理
+
+**追问**：和原来的 ToolRegistration 有什么区别？
+> 原来是静态 @Bean 注册，所有工具硬编码。新机制支持：1）运行时动态注册/注销；2）按能力标签查找工具；3）工具健康状态管理；4）自动从 Spring Context 发现。更灵活，支持工具市场场景。
+
+---
+
+### Q42: 如何用范式选择器优化不同任务？
+
+**回答要点**：
+- **自动选择**：`ParadigmSelector.select(intent, message, confidence)`
+  - DATA_QUERY / CAREER_ADVICE → PLAN_AND_SOLVE
+  - CONTENT_GENERATION / SKILL_ASSESSMENT → REFLECTION
+  - 其他 → REACT
+- **用户指定**：`ParadigmService.executeWithParadigm(message, "reflection", userId)`
+- **集成点**：在 OrchestratorAgent 中注入 ParadigmService，根据 NLU 结果选择范式
+
+**追问**：什么时候用 REACT，什么时候用 PLAN_AND_SOLVE？
+> REACT 适合需要实时调整的任务（工具调用、交互式问答），边想边做。PLAN_AND_SOLVE 适合复杂多步骤任务（职业规划、简历优化），先规划再执行。关键区别：REACT 灵活但可能循环，PLAN_AND_SOLVE 结构化但不够灵活。
+
+---
+
+### Q43: 性能指标如何接入 Grafana 监控？
+
+**回答要点**：
+- **Prometheus 端点**：`/actuator/prometheus` 暴露标准格式指标
+- **Grafana 配置**：
+  1. 添加 Prometheus 数据源（http://localhost:8123/actuator/prometheus）
+  2. 创建 Dashboard，添加 Panel 查询 `agent_request_duration_seconds_*`
+  3. 设置告警规则（如 P95 > 5s 告警）
+- **关键监控面板**：
+  - 请求延迟趋势（P50/P95/P99）
+  - 工具调用成功率
+  - Token 消耗分布
+  - 活跃请求数
+
+**追问**：如何设置性能告警？
+> Grafana 支持基于 PromQL 的告警规则。例如：1）`histogram_quantile(0.95, rate(agent_request_duration_seconds_bucket[5m])) > 5` 触发 P95 延迟告警；2）`rate(agent_error_total[5m]) / rate(agent_request_duration_seconds_count[5m]) > 0.1` 触发错误率告警。
+
+---
+
+## 八、代码审查维度相关 Q&A
+
+### Q44: 如何保证 Agent 不会陷入死循环？（代码审查维度四）
+
+**回答要点**：
+- **三层防护**：
+  1. `ReActAgent.maxIterations` 限制（默认 10 次）
+  2. `EmbeddingLoopDetector` 余弦相似度检测（0.88 阈值，滑动窗口 5 条）
+  3. `TokenBudgetManager` 三级预算控制（Normal/Compact/Compress）
+- **引导性干预**：检测到循环后注入纠错提示，让 LLM 自主修正，而非简单终止
+- **ToolResultClassifier**：分级处理工具结果（TIMEOUT/EMPTY/GARBAGE/NORMAL）
+
+---
+
+### Q45: 工具调用超时怎么处理？（代码审查维度四）
+
+**回答要点**：
+- **超时机制**：`CompletableFuture.orTimeout(30, TimeUnit.SECONDS)`
+- **自动重试**：超时后自动重试 2 次（`MAX_TIMEOUT_RETRIES`）
+- **降级策略**：重试用尽后返回友好错误信息
+- **Trace 记录**：超时事件记录到 TraceSpan
+- **结果分级**：`ToolResultClassifier` 将超时标记为 TIMEOUT 级别
+
+---
+
+### Q46: 记忆系统的并发安全怎么保证？（代码审查维度三）
+
+**回答要点**：
+- **ReadWriteLock**：`SummaryLayer` 使用读写锁保证并发安全
+- **ConcurrentHashMap**：`MemoryCoordinator.layerCache` 使用并发容器
+- **CompletableFuture**：四层并行查询，超时独立控制
+- **last-known-good 缓存**：层查询失败时使用缓存的上次成功值
+- **userId 隔离**：所有记忆按 userId 隔离，无跨用户泄漏
+
+---
+
+### Q47: 如何评估 Agent 的回答质量？（代码审查维度六）
+
+**回答要点**：
+- **QualityGuardAgent**：4 种模式（OFF/AUTO/REVIEW/RED_TEAM）
+- **5 维评分**：accuracy(30%) + completeness(20%) + logic(20%) + hallucination(30%) + risk
+- **EvalCenter**：YAML 评测套件 + 回归检测
+- **用户反馈**：Feedback 模型（UP/DOWN + comment）
+- **路由评测**：AgentRoutingEvalTest 验证意图路由准确率
+
+---
+
+### Q48: RAG 检索冲突怎么处理？（代码审查维度七）
+
+**回答要点**：
+- **MultiQueryRetriever**：多路检索后合并去重
+- **相似度阈值**：可配置的相似度过滤
+- **状态过滤**：按文档状态分类（求职/在职/通用）
+- 改进方向：时间权重 / 权威度排序 / 重排序模型
+
+---
+
+### Q49: Prompt 注入怎么防护？（代码审查维度八）
+
+**回答要点**：
+- **PromptInjectionDetector**：3 类 15 个 Pattern 检测
+  - Override：覆盖系统指令
+  - Hijack：劫持对话流程
+  - Extraction：提取系统信息
+- **检测位置**：OrchestratorAgent 入口处，NLU 之前
+- **处理策略**：检测到注入后拒绝执行，返回安全提示
+
+---
+
+### Q50: 如何保证可观测性？（代码审查维度九）
+
+**回答要点**：
+- **Trace**：全链路执行轨迹，10+ 种 StepType，实时 SSE 推送
+- **Metrics**：Actuator + Micrometer，7 个核心指标
+- **日志**：SLF4J + Logback，关键决策点有日志
+- **事件总线**：异步治理事件（AccessDeniedEvent、SandboxExecEvent）
+- **质量审查**：HIGH/CRITICAL 自动持久化审计
+
+---
+
+### Q51: Reflexion 机制是怎么设计的？
+
+**回答要点**：
+- **核心思想**：Agent 从失败中学习，避免重复犯错
+- **组件结构**：
+  - `ReflexionMemory` — 失败轨迹存储（per-user + global）
+  - `ReflexionService` — 集成服务
+- **数据模型**：FailureMemory(id, taskType, error, resolution, timestamp)
+- **核心功能**：
+  - 失败记录：taskType + error + resolution
+  - 相关性检索：按 taskType 匹配历史失败
+  - 提示词注入：格式化为"历史失败经验"
+  - 自动过期：7 天后自动清理
+
+**追问**：Reflexion 和普通的错误处理有什么区别？
+> 普通错误处理只处理当前错误，Reflexion 记录失败轨迹供未来参考。当 Agent 遇到类似任务时，会自动注入历史失败经验到提示词，让 LLM 避免重复犯错。这是一种"学习"机制，而非简单的"容错"。
+
+---
+
+### Q52: RAG Rerank 重排序是怎么做的？
+
+**回答要点**：
+- **评分策略**：
+  - 关键词重叠 (60%)：Jaccard 相似度 + 查询覆盖率
+  - 文档质量 (20%)：长度适中 + 结构化程度
+  - 位置偏差 (20%)：原始检索顺序
+- **使用场景**：检索后重排序，提升 Top-K 文档相关性
+- **组件**：`RerankService`
+
+**追问**：为什么不用 Cohere Rerank 或 BGE Reranker？
+> 当前是轻量级实现，不依赖外部 API。生产环境建议集成专业 rerank 模型（如 Cohere Rerank API 或 BGE Reranker），准确率更高。架构上 `RerankService` 是接口，可轻松替换实现。
+
+---
+
+### Q53: 范式选择器怎么集成到现有系统？
+
+**回答要点**：
+- **集成点**：`OrchestratorAgent` 注入 `ParadigmService`
+- **选择逻辑**：
+  1. NLU 意图映射：DATA_QUERY → PLAN_AND_SOLVE
+  2. 关键词启发式："分析"/"对比" → PLAN_AND_SOLVE
+  3. 默认 REACT
+- **配置化**：`paradigm.selector.enabled` 开关
+- **用户指定**：支持用户手动指定范式
+
+**追问**：什么时候用 REACT，什么时候用 PLAN_AND_SOLVE？
+> REACT 适合交互式任务（工具调用、问答），边想边做。PLAN_AND_SOLVE 适合复杂任务（规划、分析），先规划再执行。关键区别：REACT 灵活但可能循环，PLAN_AND_SOLVE 结构化但不够灵活。
+
+---
+
+### Q54: 动态预算分配的依据是什么？
+
+**回答要点**：
+- **查询类型分类**：
+  - CONVERSATIONAL：L1=75%, L2=10%, L3=10%, L4=5%
+  - FACTUAL：L1=40%, L2=35%, L3=10%, L4=15%
+  - ANALYTICAL：L1=50%, L2=15%, L3=15%, L4=20%
+- **分类依据**：关键词启发式（"谁"/"什么" → FACTUAL）
+- **集成点**：`ContextEngineer` 统一入口
+
+**追问**：为什么不直接用 LLM 分类查询类型？
+> 1）节省 LLM 调用成本；2）关键词启发式足够准确；3）分类错误影响不大（只是预算分配，不影响功能）。未来可加入 LLM 分类作为高级选项。
