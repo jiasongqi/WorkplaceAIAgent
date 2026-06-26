@@ -72,11 +72,11 @@ public class McpAuditLog {
      * Get average latency for a tool.
      */
     public long getAvgLatency(String serverName, String toolName) {
-        return entries.stream()
+        return (long) entries.stream()
                 .filter(e -> e.serverName.equals(serverName) && e.toolName.equals(toolName))
                 .mapToLong(e -> e.latencyMs)
                 .average()
-                .orElse(-1.0).longValue();
+                .orElse(-1.0);
     }
 
     /**

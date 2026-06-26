@@ -17,6 +17,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Plan-and-Solve Agent — generates a plan first, then executes step by step.
@@ -367,15 +368,6 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
                 steps.add(new PlanStep(stepId++, action, "Output from step " + (stepId - 1)));
             }
         }
-        return steps;
-    }
-                steps.add(new PlanStep(3, "Verify and summarize results", "Verification complete"));
-            }
-
-        } catch (Exception e) {
-            log.warn("[PlanAndSolveAgent] Plan parsing failed: {}", e.getMessage());
-        }
-
         return steps;
     }
 

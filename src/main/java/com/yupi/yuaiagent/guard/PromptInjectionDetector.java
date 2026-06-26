@@ -63,7 +63,7 @@ public class PromptInjectionDetector {
      */
     public DetectionResult detect(String userInput) {
         if (userInput == null || userInput.isBlank()) {
-            return DetectionResult.safe();
+            return DetectionResult.createSafe();
         }
 
         String normalized = userInput.trim();
@@ -95,7 +95,7 @@ public class PromptInjectionDetector {
             }
         }
 
-        return DetectionResult.safe();
+        return DetectionResult.createSafe();
     }
 
     private String truncate(String s, int maxLen) {
@@ -110,11 +110,11 @@ public class PromptInjectionDetector {
      * @param pattern matched pattern, null if safe
      */
     public record DetectionResult(boolean safe, String type, String pattern) {
-        static DetectionResult safe() {
+        public static DetectionResult createSafe() {
             return new DetectionResult(true, null, null);
         }
 
-        static DetectionResult blocked(String type, String pattern) {
+        public static DetectionResult blocked(String type, String pattern) {
             return new DetectionResult(false, type, pattern);
         }
     }

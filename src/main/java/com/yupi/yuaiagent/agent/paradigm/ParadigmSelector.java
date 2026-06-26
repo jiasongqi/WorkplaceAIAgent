@@ -82,13 +82,13 @@ public class ParadigmSelector {
 
         return switch (intent) {
             // Complex analysis tasks → Plan-and-Solve
-            case DATA_QUERY, CAREER_ADVICE -> AgentParadigm.PLAN_AND_SOLVE;
+            case QUERY_DATA, SALARY_ANALYZE, PERFORMANCE -> AgentParadigm.PLAN_AND_SOLVE;
 
             // Creative/quality tasks → Reflection
-            case CONTENT_GENERATION, SKILL_ASSESSMENT -> AgentParadigm.REFLECTION;
+            case RESUME_OPTIMIZE, OFFER_EVALUATE -> AgentParadigm.REFLECTION;
 
             // Interactive/tool tasks → ReAct
-            case TOOL_CALL, GENERAL_CHAT, UNKNOWN -> AgentParadigm.REACT;
+            default -> AgentParadigm.REACT;
         };
     }
 

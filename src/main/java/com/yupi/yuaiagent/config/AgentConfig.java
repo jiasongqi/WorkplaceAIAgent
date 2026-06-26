@@ -3,6 +3,7 @@ package com.yupi.yuaiagent.config;
 import com.yupi.yuaiagent.access.AccessDecisionService;
 import com.yupi.yuaiagent.agent.DataQueryRouter;
 import com.yupi.yuaiagent.agent.OrchestratorAgent;
+import com.yupi.yuaiagent.agent.OrchestratorDependencies;
 import com.yupi.yuaiagent.agent.ResultAggregator;
 import com.yupi.yuaiagent.agent.TaskExecutor;
 import com.yupi.yuaiagent.agent.data.CareerCoachAgent;

@@ -1,14 +1,15 @@
 package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.access.AccessDecisionService;
+import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.config.FollowUpTemplateConfig;
 import com.yupi.yuaiagent.context.ConversationContextBuilder;
 import com.yupi.yuaiagent.memory.MemoryCoordinator;
 import com.yupi.yuaiagent.message.ChatMemoryAdapter;
 import com.yupi.yuaiagent.message.PersistentMessageRepository;
-import com.yupi.yuaiagent.nlu.DataQueryRouter;
 import com.yupi.yuaiagent.nlu.NluPipeline;
+import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.quality.QualityGuardAgent;
 import com.yupi.yuaiagent.quality.QualityModeResolver;
 import com.yupi.yuaiagent.quality.QualityReviewRepository;

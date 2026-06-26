@@ -104,7 +104,7 @@ public abstract class BaseParadigmAgent {
      */
     protected TraceSpan startParadigmTrace(String paradigmName) {
         if (traceContext != null && traceRecorder != null) {
-            return traceRecorder.startSpan(traceContext, TraceStepType.AGENT_CALL,
+            return traceRecorder.startSpan(traceContext, TraceStepType.SUB_AGENT_EXECUTION,
                     "Paradigm: " + paradigmName);
         }
         return null;
@@ -128,7 +128,7 @@ public abstract class BaseParadigmAgent {
      */
     protected TraceSpan startPhaseTrace(String phaseName) {
         if (traceContext != null && traceRecorder != null) {
-            return traceRecorder.startSpan(traceContext, TraceStepType.AGENT_CALL,
+            return traceRecorder.startSpan(traceContext, TraceStepType.SUB_AGENT_EXECUTION,
                     "Phase: " + phaseName);
         }
         return null;
@@ -152,7 +152,7 @@ public abstract class BaseParadigmAgent {
      */
     protected void addStepToTrace(String stepName, String result) {
         if (traceContext != null && traceRecorder != null) {
-            TraceSpan stepSpan = traceRecorder.startSpan(traceContext, TraceStepType.AGENT_CALL,
+            TraceSpan stepSpan = traceRecorder.startSpan(traceContext, TraceStepType.SUB_AGENT_EXECUTION,
                     "Step: " + stepName);
             traceRecorder.putMetadata(stepSpan, "result_preview",
                     result.substring(0, Math.min(200, result.length())));

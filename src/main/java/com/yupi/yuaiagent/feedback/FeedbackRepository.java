@@ -22,7 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Repository
 public class FeedbackRepository {
 
-    @value("${feedback.storage.dir:./tmp/feedback}")
+    @Value("${feedback.storage.dir:./tmp/feedback}")
     private String storageDir;
 
     private final ObjectMapper objectMapper = new ObjectMapper()

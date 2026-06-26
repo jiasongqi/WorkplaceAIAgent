@@ -241,9 +241,9 @@ public class WorkflowRuntime {
 
     private String executeApprovalNode(WorkflowInstance instance, ApprovalNode node) {
         log.info("[WorkflowRuntime] 审批节点: timeout={}s, message={}", node.getTimeoutSeconds(), node.getApprovalMessage());
-        // Check if approval has timed out based on instance start time
-        if (instance.getStartedAt() != null) {
-            long elapsedSeconds = java.time.Duration.between(instance.getStartedAt(), LocalDateTime.now()).getSeconds();
+        // Check if approval has timed out based on instance creation time
+        if (instance.getCreatedAt() != null) {
+            long elapsedSeconds = java.time.Duration.between(instance.getCreatedAt(), LocalDateTime.now()).getSeconds();
             if (elapsedSeconds > node.getTimeoutSeconds()) {
                 log.warn("[WorkflowRuntime] 审批节点超时: elapsed={}s, timeout={}s", elapsedSeconds, node.getTimeoutSeconds());
                 instance.setStatus(WorkflowStatus.FAILED);

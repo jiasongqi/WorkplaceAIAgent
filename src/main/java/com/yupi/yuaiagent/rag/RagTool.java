@@ -100,16 +100,12 @@ public class RagTool {
 
     /**
      * Register this as a Spring AI ToolCallback.
+     * Uses @Tool annotation pattern consistent with other tools.
      */
-    public ToolCallback asToolCallback() {
-        return FunctionToolCallback.builder(
-                "searchKnowledgeBase",
-                "Search the knowledge base for relevant career/job documents. " +
-                "Use this when the user asks about resume, interview, salary, resignation, or career advice.")
-                .description("Search the knowledge base for relevant career/job documents")
-                .inputType(RagToolInput.class)
-                .apply(input -> search(input.query, input.topK, input.filter, input.useHyDE))
-                .build();
+    @org.springframework.ai.tool.annotation.Tool(description = "Search the knowledge base for relevant career/job documents. Use this when the user asks about resume, interview, salary, resignation, or career advice.")
+    public String searchKnowledgeBase(
+            @org.springframework.ai.tool.annotation.ToolParam(description = "Search query") String query) {
+        return search(query, 3, null, false);
     }
 
     /**

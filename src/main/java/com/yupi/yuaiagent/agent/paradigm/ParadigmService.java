@@ -41,7 +41,7 @@ public class ParadigmService {
      * @return execution result
      */
     public String execute(String message, String userId) {
-        return execute(message, userId, null, null, null);
+        return execute(message, userId, null, 0.0, null);
     }
 
     /**

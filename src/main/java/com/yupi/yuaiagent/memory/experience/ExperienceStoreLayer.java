@@ -61,7 +61,7 @@ public class ExperienceStoreLayer {
     private void persistVectors() {
         if (experienceVectorStore instanceof SimpleVectorStore simpleStore) {
             try {
-                simpleStore.save(persistenceResource);
+                simpleStore.save(persistenceResource.getFile());
             } catch (Exception e) {
                 log.warn("Failed to persist experience vectors to disk: {}", e.getMessage());
             }

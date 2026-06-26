@@ -1,5 +1,6 @@
 package com.yupi.yuaiagent.agent.paradigm;
 
+import com.yupi.yuaiagent.trace.model.TraceSpan;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;

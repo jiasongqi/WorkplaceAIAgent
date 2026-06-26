@@ -28,11 +28,11 @@ public class FactPreservingCompressor {
 
     /** Patterns to extract key facts from conversation */
     private static final List<FactPattern> FACT_PATTERNS = List.of(
-            new FactPattern("姓名", Pattern.compile("(?:我叫|我是|我的名字是?|名字叫?)\s*(\S{1,10})")),
-            new FactPattern("联系方式", Pattern.compile("(?:手机|电话|联系|微信|邮箱)[是为：:]?\s*([\d\w@.+-]{5,30})")),
-            new FactPattern("公司", Pattern.compile("(?:我在|我的?公司是?|工作于|就职于)\s*(\S{2,20})")),
-            new FactPattern("职位", Pattern.compile("(?:我是|我的?职位是?|担任|岗位是?)\s*(\S{2,15}(?:工程师|经理|总监|主管|专员|顾问|分析师|设计师|架构师|CTO|CEO|VP|总监|副总))")),
-            new FactPattern("偏好", Pattern.compile("(?:我喜欢|我偏好|我希望|我需要|我想要)\s*(\S{2,30})"))
+            new FactPattern("姓名", Pattern.compile("(?:我叫|我是|我的名字是?|名字叫?)\\s*(\\S{1,10})")),
+            new FactPattern("联系方式", Pattern.compile("(?:手机|电话|联系|微信|邮箱)[是为：:]?\\s*([\\d\\w@.+-]{5,30})")),
+            new FactPattern("公司", Pattern.compile("(?:我在|我的?公司是?|工作于|就职于)\\s*(\\S{2,20})")),
+            new FactPattern("职位", Pattern.compile("(?:我是|我的?职位是?|担任|岗位是?)\\s*(\\S{2,15}(?:工程师|经理|总监|主管|专员|顾问|分析师|设计师|架构师|CTO|CEO|VP|总监|副总))")),
+            new FactPattern("偏好", Pattern.compile("(?:我喜欢|我偏好|我希望|我需要|我想要)\\s*(\\S{2,30})"))
     );
 
     /**

@@ -28,7 +28,9 @@ import com.yupi.yuaiagent.access.AccessDecisionService;
 import com.yupi.yuaiagent.validation.InfoValidator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -203,7 +205,7 @@ public class OrchestratorAgent {
             try {
                 // 0. Prompt Injection detection
                 var injectionResult = promptInjectionDetector.detect(message);
-                if (!injectionResult.safe()) {
+                if (injectionResult.safe() == false) {
                     log.warn("[Orchestrator] Prompt injection blocked: type={}, pattern={}",
                             injectionResult.type(), injectionResult.pattern());
                     emitter.send(SseEmitter.event().name("error")
@@ -342,8 +344,8 @@ public class OrchestratorAgent {
         // Fast-path: short/simple messages skip NLU LLM call → go directly to GENERAL agent
         // This avoids 3-8s DashScope latency for simple greetings or vague messages
         boolean fastPath = !KeywordRouter.containsCareerKeyword(message);
-        List<AgentIntent> intents;
-        RouteHint routeHint;
+        List<AgentIntent> intents = List.of(AgentIntent.GENERAL);
+        RouteHint routeHint = new RouteHint(AgentIntent.GENERAL.name(), null, 0.0, null, null, null);
 
         if (fastPath) {
             // Try rule-based keyword routing first (no LLM call)
@@ -490,7 +492,11 @@ public class OrchestratorAgent {
         // L27: Trigger memory extraction pipeline (async, non-blocking)
         if (memoryCoordinator != null && StringUtils.hasText(userId)) {
             try {
-                memoryCoordinator.onTurnCompleted(userId, chatId, message, fullAnswer);
+                // Create a simple message list from the conversation
+                List<Message> memoryMessages = new java.util.ArrayList<>();
+                memoryMessages.add(new UserMessage(message));
+                memoryMessages.add(new AssistantMessage(fullAnswer));
+                memoryCoordinator.onTurnCompleted(userId, chatId, memoryMessages);
             } catch (Exception e) {
                 log.warn("[MemoryCoordinator] extraction trigger failed: {}", e.getMessage());
             }

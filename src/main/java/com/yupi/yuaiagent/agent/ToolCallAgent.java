@@ -199,7 +199,7 @@ public class ToolCallAgent extends ReActAgent {
         // 调用工具（with timeout protection + auto-retry for TIMEOUT）
         boolean isTimeout = false;
         Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
-        ToolExecutionResult toolExecutionResult;
+        ToolExecutionResult toolExecutionResult = null;
         int retryCount = 0;
         int maxAttempts = MAX_TIMEOUT_RETRIES + 1; // Total attempts = retries + 1
         
