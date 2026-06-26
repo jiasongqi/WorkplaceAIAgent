@@ -112,8 +112,9 @@ public class AgentConfig {
             ResultAggregator resultAggregator,
             AccessDecisionService accessDecisionService,
             @org.springframework.beans.factory.annotation.Qualifier("agentExecutor") Executor agentExecutor,
-            @org.springframework.lang.Nullable MemoryCoordinator memoryCoordinator) {
-        return new OrchestratorAgent(
+            @org.springframework.lang.Nullable MemoryCoordinator memoryCoordinator,
+            com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector) {
+        var deps = new OrchestratorDependencies(
                 dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager,
                 followUpTemplateConfig, infoValidator, calendarServiceFactory, appointmentRepository,
                 skillExecutor, skillRegistry, userProfileService, artifactShelf,
@@ -121,7 +122,8 @@ public class AgentConfig {
                 qualityGuardAgent, qualityModeResolver, qualityReviewRepository, messageRepository,
                 nluPipeline, dataQueryRouter,
                 workflowMatcher, workflowRegistry, contextBuilder, taskExecutor, resultAggregator,
-                accessDecisionService, agentExecutor, memoryCoordinator);
+                accessDecisionService, agentExecutor, memoryCoordinator, promptInjectionDetector);
+        return new OrchestratorAgent(deps);
     }
 
     @Bean

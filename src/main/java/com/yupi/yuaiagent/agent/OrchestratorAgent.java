@@ -82,65 +82,40 @@ public class OrchestratorAgent {
     private final ContextInjectionService contextInjectionService;
     private final com.yupi.yuaiagent.message.PersistentMessageRepository messageRepository;
     private final AccessDecisionService accessDecisionService;
+    private final com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector;
     private final Executor agentExecutor;
 
     /**
-     * 构造函数 - 使用 ChatMemoryManager
+     * Constructor — uses aggregated {@link OrchestratorDependencies} to reduce parameter count.
      */
-    public OrchestratorAgent(ChatModel chatModel, VectorStore vectorStore,
-                             ToolCallback[] tools, QueryRewriter queryRewriter,
-                             ChatMemoryManager chatMemoryManager,
-                             FollowUpTemplateConfig templateConfig,
-                             InfoValidator infoValidator,
-                             CalendarServiceFactory calendarServiceFactory,
-                             AppointmentRepository appointmentRepository,
-                             SkillExecutor skillExecutor,
-                             SkillRegistry skillRegistry,
-                             UserProfileService userProfileService,
-                             ArtifactShelf artifactShelf,
-                             TraceRecorder traceRecorder,
-                             TraceRepository traceRepository,
-                             ChatMemoryAdapter chatMemoryAdapter,
-                             QualityGuardAgent qualityGuardAgent,
-                             QualityModeResolver qualityModeResolver,
-                             QualityReviewRepository qualityReviewRepository,
-                             com.yupi.yuaiagent.message.PersistentMessageRepository messageRepository,
-                             NluPipeline nluPipeline,
-                             DataQueryRouter dataQueryRouter,
-                             WorkflowMatcher workflowMatcher,
-                             WorkflowRegistry workflowRegistry,
-                             ConversationContextBuilder contextBuilder,
-                             TaskExecutor taskExecutor,
-                             ResultAggregator resultAggregator,
-                             AccessDecisionService accessDecisionService,
-                             Executor agentExecutor,
-                             MemoryCoordinator memoryCoordinator) {
+    public OrchestratorAgent(OrchestratorDependencies deps) {
 
         // 创建各专业 Agent
-        this.resumeAgent = new ResumeAgent(chatModel, vectorStore, queryRewriter, chatMemoryManager);
-        this.negotiationAgent = new NegotiationAgent(chatModel, tools, queryRewriter, chatMemoryManager);
-        this.escapeAgent = new EscapeAgent(chatModel, tools, queryRewriter, chatMemoryManager);
-        this.generalCareerAgent = new GeneralCareerAgent(chatModel, chatMemoryManager);
-        this.consultationAgent = new ConsultationAgent(chatModel, chatMemoryManager, templateConfig, infoValidator, calendarServiceFactory, appointmentRepository);
-        this.skillExecutor = skillExecutor;
-        this.skillRegistry = skillRegistry;
-        this.chatMemoryManager = chatMemoryManager;
-        this.memoryCoordinator = memoryCoordinator;
-        this.traceRecorder = traceRecorder;
-        this.traceRepository = traceRepository;
-        this.chatMemoryAdapter = chatMemoryAdapter;
-        this.qualityReviewHandler = new QualityReviewHandler(qualityGuardAgent, qualityModeResolver, qualityReviewRepository, traceRecorder);
-        this.contextInjectionService = new ContextInjectionService(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder);
-        this.messageRepository = messageRepository;
-        this.nluPipeline = nluPipeline;
-        this.dataQueryRouter = dataQueryRouter;
-        this.workflowMatcher = workflowMatcher;
-        this.workflowRegistry = workflowRegistry;
-        this.contextBuilder = contextBuilder;
-        this.taskExecutor = taskExecutor;
-        this.resultAggregator = resultAggregator;
-        this.accessDecisionService = accessDecisionService;
-        this.agentExecutor = agentExecutor;
+        this.resumeAgent = new ResumeAgent(deps.chatModel(), deps.vectorStore(), deps.queryRewriter(), deps.chatMemoryManager());
+        this.negotiationAgent = new NegotiationAgent(deps.chatModel(), deps.tools(), deps.queryRewriter(), deps.chatMemoryManager());
+        this.escapeAgent = new EscapeAgent(deps.chatModel(), deps.tools(), deps.queryRewriter(), deps.chatMemoryManager());
+        this.generalCareerAgent = new GeneralCareerAgent(deps.chatModel(), deps.chatMemoryManager());
+        this.consultationAgent = new ConsultationAgent(deps.chatModel(), deps.chatMemoryManager(), deps.templateConfig(), deps.infoValidator(), deps.calendarServiceFactory(), deps.appointmentRepository());
+        this.skillExecutor = deps.skillExecutor();
+        this.skillRegistry = deps.skillRegistry();
+        this.chatMemoryManager = deps.chatMemoryManager();
+        this.memoryCoordinator = deps.memoryCoordinator();
+        this.traceRecorder = deps.traceRecorder();
+        this.traceRepository = deps.traceRepository();
+        this.chatMemoryAdapter = deps.chatMemoryAdapter();
+        this.qualityReviewHandler = new QualityReviewHandler(deps.qualityGuardAgent(), deps.qualityModeResolver(), deps.qualityReviewRepository(), deps.traceRecorder());
+        this.contextInjectionService = new ContextInjectionService(deps.userProfileService(), deps.artifactShelf(), deps.messageRepository(), deps.chatMemoryManager(), deps.traceRecorder());
+        this.messageRepository = deps.messageRepository();
+        this.nluPipeline = deps.nluPipeline();
+        this.dataQueryRouter = deps.dataQueryRouter();
+        this.workflowMatcher = deps.workflowMatcher();
+        this.workflowRegistry = deps.workflowRegistry();
+        this.contextBuilder = deps.contextBuilder();
+        this.taskExecutor = deps.taskExecutor();
+        this.resultAggregator = deps.resultAggregator();
+        this.accessDecisionService = deps.accessDecisionService();
+        this.promptInjectionDetector = deps.promptInjectionDetector();
+        this.agentExecutor = deps.agentExecutor();
 
         // Register AgentRunner map on TaskExecutor
         taskExecutor.setAgentRunners(java.util.Map.of(
@@ -211,8 +186,34 @@ public class OrchestratorAgent {
         // Bind SSE emitter for real-time trace events (Req 10.1)
         traceCtx.bindSseEmitter(emitter);
 
+        // SSE disconnect handling — clean up resources when client disconnects
+        final TraceContext finalTraceCtx = traceCtx;
+        emitter.onTimeout(() -> {
+            log.warn("[Orchestrator] SSE timeout for chatId={}", chatId);
+            traceRecorder.failTrace(finalTraceCtx);
+            persistTrace(finalTraceCtx);
+        });
+        emitter.onError(e -> {
+            log.warn("[Orchestrator] SSE error for chatId={}: {}", chatId, e.getMessage());
+            traceRecorder.failTrace(finalTraceCtx);
+            persistTrace(finalTraceCtx);
+        });
+
         CompletableFuture.runAsync(() -> {
             try {
+                // 0. Prompt Injection detection
+                var injectionResult = promptInjectionDetector.detect(message);
+                if (!injectionResult.safe()) {
+                    log.warn("[Orchestrator] Prompt injection blocked: type={}, pattern={}",
+                            injectionResult.type(), injectionResult.pattern());
+                    emitter.send(SseEmitter.event().name("error")
+                            .data("检测到不安全的输入内容，请重新提问。"));
+                    traceRecorder.failTrace(traceCtx);
+                    persistTrace(traceCtx);
+                    emitter.complete();
+                    return;
+                }
+
                 // 1. 先尝试技能匹配
                 TraceSpan skillSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SKILL_MATCH, "技能匹配");
                 Flux<String> skillFlux = skillExecutor.executeStream(message, chatId, null);

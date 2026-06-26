@@ -240,7 +240,17 @@ public class WorkflowRuntime {
     }
 
     private String executeApprovalNode(WorkflowInstance instance, ApprovalNode node) {
-        log.info("[WorkflowRuntime] 审批节点: {}", node.getApprovalMessage());
+        log.info("[WorkflowRuntime] 审批节点: timeout={}s, message={}", node.getTimeoutSeconds(), node.getApprovalMessage());
+        // Check if approval has timed out based on instance start time
+        if (instance.getStartedAt() != null) {
+            long elapsedSeconds = java.time.Duration.between(instance.getStartedAt(), LocalDateTime.now()).getSeconds();
+            if (elapsedSeconds > node.getTimeoutSeconds()) {
+                log.warn("[WorkflowRuntime] 审批节点超时: elapsed={}s, timeout={}s", elapsedSeconds, node.getTimeoutSeconds());
+                instance.setStatus(WorkflowStatus.FAILED);
+                return "Approval timed out after " + elapsedSeconds + "s: " + node.getApprovalMessage();
+            }
+        }
+        instance.setStatus(WorkflowStatus.PAUSED);
         return "Approval required: " + node.getApprovalMessage();
     }
 
@@ -252,20 +262,85 @@ public class WorkflowRuntime {
      * comparisons, which is inherently safe. Adding script engine support would create
      * Remote Code Execution (RCE) vulnerabilities. If complex expressions are needed in the
      * future, use a sandboxed DSL — NOT general-purpose scripting.</p>
+     *
+     * <p>Supported operators: == (equals), != (not equals), contains (substring match),
+     * > / < (numeric comparison). Keys must be alphanumeric + underscore only.</p>
      */
     private boolean evaluateSimpleCondition(String expression, Map<String, Object> context) {
-        if (expression == null) return true;
-        // V1: 简单实现 "key==value" 或 "key!=value"
-        if (expression.contains("==")) {
-            String[] parts = expression.split("==", 2);
-            Object val = context.get(parts[0].trim());
-            return val != null && val.toString().equals(parts[1].trim());
+        if (expression == null || expression.isBlank()) return true;
+
+        String trimmed = expression.trim();
+
+        // contains operator: "key contains value"
+        if (trimmed.contains(" contains ")) {
+            String[] parts = trimmed.split(" contains ", 2);
+            String key = parts[0].trim();
+            String expected = parts[1].trim().replace("\"", "");
+            validateKey(key);
+            Object val = context.get(key);
+            return val != null && val.toString().contains(expected);
         }
-        if (expression.contains("!=")) {
-            String[] parts = expression.split("!=", 2);
-            Object val = context.get(parts[0].trim());
-            return val == null || !val.toString().equals(parts[1].trim());
+        // != operator: "key!=value"
+        if (trimmed.contains("!=")) {
+            String[] parts = trimmed.split("!=", 2);
+            String key = parts[0].trim();
+            String expected = parts[1].trim().replace("\"", "");
+            validateKey(key);
+            Object val = context.get(key);
+            return val == null || !val.toString().equals(expected);
         }
-        return true;
+        // == operator: "key==value"
+        if (trimmed.contains("==")) {
+            String[] parts = trimmed.split("==", 2);
+            String key = parts[0].trim();
+            String expected = parts[1].trim().replace("\"", "");
+            validateKey(key);
+            Object val = context.get(key);
+            return val != null && val.toString().equals(expected);
+        }
+        // > operator: "key>value" (numeric)
+        if (trimmed.contains(">")) {
+            String[] parts = trimmed.split(">", 2);
+            String key = parts[0].trim();
+            validateKey(key);
+            Object val = context.get(key);
+            if (val == null) return false;
+            try {
+                return Double.parseDouble(val.toString()) > Double.parseDouble(parts[1].trim());
+            } catch (NumberFormatException e) {
+                log.warn("[WorkflowRuntime] Non-numeric comparison: {}", expression);
+                return false;
+            }
+        }
+        // < operator: "key<value" (numeric)
+        if (trimmed.contains("<")) {
+            String[] parts = trimmed.split("<", 2);
+            String key = parts[0].trim();
+            validateKey(key);
+            Object val = context.get(key);
+            if (val == null) return false;
+            try {
+                return Double.parseDouble(val.toString()) < Double.parseDouble(parts[1].trim());
+            } catch (NumberFormatException e) {
+                log.warn("[WorkflowRuntime] Non-numeric comparison: {}", expression);
+                return false;
+            }
+        }
+        // Boolean literal
+        if ("true".equalsIgnoreCase(trimmed)) return true;
+        if ("false".equalsIgnoreCase(trimmed)) return false;
+
+        log.warn("[WorkflowRuntime] Unrecognized condition expression: {}", expression);
+        return false;
+    }
+
+    /**
+     * Validate that a key contains only safe characters (alphanumeric, underscore, dot).
+     * Prevents injection via crafted key names.
+     */
+    private void validateKey(String key) {
+        if (!key.matches("[a-zA-Z0-9_.]+")) {
+            throw new IllegalArgumentException("Invalid condition key (alphanumeric/_/. only): " + key);
+        }
     }
 }

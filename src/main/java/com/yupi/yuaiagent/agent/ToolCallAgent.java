@@ -285,7 +285,7 @@ public class ToolCallAgent extends ReActAgent {
             }
         }
 
-        log.info(results);
+        log.debug(results);
         return results;
     }
 }

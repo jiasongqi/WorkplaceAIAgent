@@ -1,6 +1,6 @@
 # WorkPilot 项目功能 Wiki
 
-> 更新日期：2026-06-25  
+> 更新日期：2026-06-26 (v1.5 — Hello-Agents 优化完成)  
 > 品牌名：WorkPilot（职场生存智囊）  
 > 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope
 
@@ -163,6 +163,24 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 
 统计维度：总事件数、按类型/Agent 分组、近 7 天日趋势、总耗时。
 
+### 3.9 推理效率追踪 (新增)
+
+`AgentEfficiencyTracker` 追踪每个 Agent 的推理效率：
+
+| 指标 | 说明 |
+|------|------|
+| avgSteps | 平均执行步数（越少越好） |
+| avgTokens | 平均 Token 消耗 |
+| avgToolCalls | 平均工具调用次数 |
+| completionRate | 任务完成率 |
+| avgLatencyMs | 平均延迟 |
+
+### 3.10 用户反馈系统 (新增)
+
+- `Feedback` 模型：userId、chatId、messageId、rating(UP/DOWN)、comment、agentType、intent
+- `FeedbackRepository`：文件持久化 + 统计（approvalRate per agent）
+- `FeedbackController`：POST /feedback（提交）、GET /feedback/stats（统计）
+
 ---
 
 ## 四、Agent 体系
@@ -171,6 +189,8 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 
 ```
 用户消息
+  │
+  ├─ Prompt Injection 检测（PromptInjectionDetector）
   │
   ├─ KeywordRouter: 快速路径（零LLM，规则匹配）
   │     ├─ 命中 → 直接路由到对应 Agent
@@ -188,11 +208,18 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
   │     ├─ 跨 Agent 历史注入
   │     └─ L27 分层记忆注入
   │
+  ├─ DynamicPromptProvider: 动态 System Prompt
+  │     └─ 根据 intent 选择最优 prompt 模板
+  │
   ├─ 单意图: 分发给对应 Agent
   │
   ├─ 多意图: 串行执行 + agent-turn SSE 事件
   │
-  └─ QualityReviewHandler: 质量审查（异步）
+  ├─ QualityReviewHandler: 质量审查（异步）
+  │
+  ├─ AgentEfficiencyTracker: 推理效率追踪
+  │
+  └─ MemoryCoordinator.onTurnCompleted(): 触发记忆提取
 ```
 
 **关键设计**：
@@ -293,7 +320,13 @@ BaseAgent → ReActAgent（思考-行动循环）→ ToolCallAgent → YuManus
 
 ```
 用户问题 → QueryRewriter → MultiQueryRetriever（3路扩展）→ VectorStore → 合并去重 → LLM
+                     ↓
+              HyDERetriever（假设文档嵌入）→ 生成假设答案 → 用答案做向量检索
 ```
+
+**HyDE（Hypothetical Document Embedding）**：先让 LLM 生成一个"假设答案"，用这个答案去做向量检索，比用问题检索更准——因为假设答案与实际文档共享更多语义相似性。
+
+**RagTool**：RAG 解耦为可复用 Tool，任何 Agent 都可调用（不再硬编码在 ResumeAgent 里）。支持相似度阈值、topK、状态过滤、HyDE 开关。
 
 ### 6.2 对话记忆
 
@@ -346,6 +379,10 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 **容错设计**：每层查询超时独立（默认 2000ms），失败时使用 `layerCache` 中的 last-known-good 数据。总预算 6000 tokens，按 L1→L4 优先级递减分配。
 
 **集成点**：`OrchestratorAgent` 在每次对话完成后调用 `memoryCoordinator.onTurnCompleted()` 触发提取管道。
+
+**程序性记忆（ProceduralMemory）**：记录工具调用模式（成功率/延迟/意图关联），让 Agent 逐渐学会用户习惯。支持按用户/全局统计，可推荐最优工具。
+
+**事实保留压缩（FactPreservingCompressor）**：压缩对话历史时自动提取并保留用户关键事实（姓名/联系方式/公司/职位/偏好），确保压缩不丢失用户明确说过的信息。
 
 ---
 
@@ -440,6 +477,9 @@ APPROVED → PUBLISHED（发布）
 | EmbeddingLoopDetector | 循环检测（余弦相似度 0.88） |
 | ToolResultClassifier | 工具结果分级（TIMEOUT/EMPTY/GARBAGE/NORMAL） |
 | TokenBudgetManager | Token 预算分级（Normal/Compact/Compress） |
+| PromptInjectionDetector | Prompt 注入检测（Override/Hijack/Extraction 三类 15 个 Pattern） |
+| ProceduralMemory | 程序性记忆（工具调用模式追踪，成功率/延迟/意图关联） |
+| McpAuditLog | MCP 工具调用审计日志（环形缓冲 1000 条） |
 
 ### 9.4 事件总线 (L25)
 
@@ -495,6 +535,8 @@ APPROVED → PUBLISHED（发布）
 | 用量统计 | GET | `/usage/stats` | JWT |
 | 导入导出 | GET/POST | `/export/*` | JWT |
 | 健康检查 | GET | `/health` | - |
+| 用户反馈 | POST | `/feedback` | - |
+| 反馈统计 | GET | `/feedback/stats` | - |
 
 ---
 
@@ -513,6 +555,9 @@ APPROVED → PUBLISHED（发布）
 | 用量事件 | JSON (append-only) | `./tmp/artifacts/usage-events.json` |
 | 执行轨迹 | JSON | `./tmp/traces/` |
 | 向量库 | PgVector / 内存 | PostgreSQL / SimpleVectorStore |
+| 用户反馈 | JSON | `./tmp/feedback/feedback.json` |
+| 程序性记忆 | 内存 | `ProceduralMemory`（ConcurrentHashMap） |
+| MCP 审计日志 | 内存（环形缓冲） | `McpAuditLog`（最近 1000 条） |
 | Agent 描述符 | YAML | `classpath:agents/*.yaml` |
 | 权限画像 | YAML | `classpath:permissions/*.yaml` |
 | 评测用例 | YAML | `classpath:eval/*.yaml` |
@@ -604,6 +649,156 @@ YAML 声明式 Agent 描述符，支持 Agent Marketplace 场景：
 
 ---
 
+## 十六、性能评估与监控 (L28)
+
+### 16.1 Actuator 指标监控
+
+集成 Spring Boot Actuator + Micrometer，暴露 Prometheus 格式指标：
+
+| Metric | 类型 | 说明 |
+|--------|------|------|
+| `agent_request_duration` | Timer | 请求延迟 (P50/P95/P99) |
+| `agent_tool_call_duration` | Timer | 工具调用延迟 |
+| `agent_token_usage` | DistributionSummary | Token 消耗 |
+| `agent_tool_call_total` | Counter | 工具调用次数 (按 agent/tool/result 标签) |
+| `agent_active_requests` | Gauge | 当前活跃请求数 |
+| `agent_error_total` | Counter | 错误计数 |
+| `agent_step_count` | DistributionSummary | 每请求步数 |
+
+**访问端点**：
+- `GET /actuator/health` — 健康检查
+- `GET /actuator/agent-metrics` — 自定义指标
+- `GET /actuator/prometheus` — Prometheus 格式
+
+### 16.2 压测脚本
+
+提供 k6 和 Shell 两种压测脚本：
+
+```bash
+# k6 压测 (推荐)
+k6 run --vus 10 --duration 30s stress-test.js
+
+# Shell 简易压测
+./stress-test.sh 5 20
+```
+
+---
+
+## 十七、经典范式支持 (L29)
+
+### 17.1 范式选择器
+
+根据任务特征自动选择最优推理范式：
+
+| 范式 | 适用场景 | 执行流程 |
+|------|----------|----------|
+| **REACT** | 交互式任务、工具调用 | Think → Act → 循环 |
+| **PLAN_AND_SOLVE** | 复杂多步骤任务 | 规划 → 执行 → 验证 |
+| **REFLECTION** | 高质量输出任务 | 生成 → 评估 → 反思 → 修正 |
+
+### 17.2 范式组件
+
+| 组件 | 职责 |
+|------|------|
+| `AgentParadigm` | 范式枚举 |
+| `ParadigmSelector` | 智能范式选择 (规则+关键词) |
+| `BaseParadigmAgent` | 范式 Agent 抽象基类 |
+| `PlanAndSolveAgent` | Plan-and-Solve 范式实现 |
+| `ReflectionAgent` | Reflection 范式实现 |
+| `ParadigmAgentFactory` | 范式 Agent 工厂 |
+| `ParadigmService` | 范式服务 (高层 API) |
+
+### 17.3 使用方式
+
+```java
+// 自动选择范式
+String result = paradigmService.execute("分析我的职业发展路径", userId);
+
+// 指定范式
+String result = paradigmService.executeWithParadigm("写一篇总结", "reflection", userId);
+```
+
+---
+
+## 十八、上下文工程优化 (L30)
+
+### 18.1 相关性评分
+
+按关键词重叠和密度对记忆项评分排序：
+
+| 组件 | 职责 |
+|------|------|
+| `ContextRelevanceScorer` | 相关性评分器 |
+| `DynamicBudgetAllocator` | 动态预算分配 |
+| `KeyInfoExtractor` | 关键信息提取 |
+| `ContextEngineer` | 上下文工程服务 |
+
+### 18.2 动态预算分配
+
+根据查询类型动态调整 Token 预算：
+
+| 查询类型 | L1 滑动窗口 | L2 事实 | L3 摘要 | L4 经验 |
+|----------|-------------|---------|---------|---------|
+| CONVERSATIONAL | 75% | 10% | 10% | 5% |
+| FACTUAL | 40% | 35% | 10% | 15% |
+| ANALYTICAL | 50% | 15% | 15% | 20% |
+
+### 18.3 使用方式
+
+```java
+// 分析查询
+QueryAnalysis analysis = contextEngineer.analyzeQuery("分析我的职业发展路径");
+
+// 获取动态预算
+Map<MemoryLayer, Integer> budgets = contextEngineer.getBudgetAllocation(6000, query);
+
+// 按相关性排序记忆
+List<ScoredMemory> ranked = contextEngineer.rankByRelevance(query, memoryItems);
+```
+
+---
+
+## 十九、工具注册机制 (L31)
+
+### 19.1 动态工具注册表
+
+支持运行时动态注册/注销工具：
+
+| 组件 | 职责 |
+|------|------|
+| `ToolDefinition` | 工具元数据 (名称/描述/能力/健康状态) |
+| `ToolRegistry` | 动态注册表 (注册/发现/过滤) |
+| `ToolDiscovery` | 自动发现 (Spring Bean 扫描) |
+| `ToolRegistryService` | 集成服务 (高层 API) |
+
+### 19.2 能力发现
+
+工具名自动推断能力标签：
+
+| 工具名关键词 | 推断的能力标签 |
+|--------------|----------------|
+| search, query | `search` |
+| file, read, write | `file` |
+| web, http, url | `web` |
+| terminal, command | `terminal` |
+| pdf, document | `document` |
+
+### 19.3 使用方式
+
+```java
+// 注册工具
+toolRegistryService.register("myTool", "My custom tool",
+    Set.of("custom", "utility"), myToolCallback);
+
+// 获取所有工具
+ToolCallback[] tools = toolRegistryService.getToolCallbacks();
+
+// 按能力获取工具
+ToolCallback[] searchTools = toolRegistryService.getToolCallbacksByCapability("search");
+```
+
+---
+
 ## 附录：能力分层总览
 
 ```
@@ -635,6 +830,10 @@ L24 交付物生命周期   DRAFT→REVIEWING→APPROVED→PUBLISHED→ARCHIVED 
 L25 事件总线         异步治理事件 + 审计日志
 L26 安全防护         循环检测 + 工具结果分级 + Token预算
 L27 分层记忆系统     四层记忆 + 异步提取 + Token预算分配
+L28 性能评估与监控   Actuator + Micrometer + Prometheus + 压测脚本
+L29 经典范式支持     ReAct/Plan-and-Solve/Reflection + 范式选择器
+L30 上下文工程优化   相关性评分 + 动态预算分配 + 关键信息提取
+L31 工具注册机制     动态注册表 + 能力发现 + 健康监控
 横切关注点：JWT 鉴权 · 会话三态生命周期 · 归档/回收站 · AppService 业务编排层 · 全局异常处理 · 结构化输出
 ```
 

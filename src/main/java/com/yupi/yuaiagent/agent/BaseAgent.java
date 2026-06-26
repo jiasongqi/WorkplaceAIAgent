@@ -41,7 +41,7 @@ public abstract class BaseAgent {
 
     // 执行步骤控制
     private int currentStep = 0;
-    private int maxSteps = 10;
+    private int maxSteps = 10; // default, overridden by @Value in Spring-managed subclasses
 
     // LLM 大模型
     private ChatClient chatClient;

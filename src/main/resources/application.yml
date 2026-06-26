@@ -181,6 +181,40 @@ logging:
     com.yupi.yuaiagent.access: INFO
     com.yupi.yuaiagent.sandbox: INFO
     com.yupi.yuaiagent.mcp: INFO
+    com.yupi.yuaiagent.metrics: INFO
+
+# ─── Actuator & Metrics Configuration ───
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health, info, metrics, prometheus, agent-metrics
+        include: health,info,metrics,prometheus,agent-metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+    agent-metrics:
+      enabled: true
+  metrics:
+    tags:
+      # Add application tag to all metrics
+      application: ${spring.application.name}
+    distribution:
+      # Configure percentile histogram buckets
+      percentiles-histogram:
+        http.server.requests: true
+        agent_request_duration: true
+        agent_tool_call_duration: true
+      # SLA boundaries for latency buckets
+      sla:
+        http.server.requests: 100ms,200ms,500ms,1s,2s,5s
+        agent_request_duration: 500ms,1s,2s,5s,10s,30s
+        agent_tool_call_duration: 100ms,200ms,500ms,1s,2s,5s
 
 # ─── WorkPilot 质检配置 ───
 workpilot:

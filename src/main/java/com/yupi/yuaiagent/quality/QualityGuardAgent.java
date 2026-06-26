@@ -194,11 +194,24 @@ public class QualityGuardAgent {
                 return raw.substring(jsonStart + 1, end).trim();
             }
         }
-        // Try to find JSON object directly
+        // Try to parse as JSON directly using Jackson
+        try {
+            objectMapper.readTree(raw);
+            return raw; // valid JSON as-is
+        } catch (Exception ignored) {
+            // not valid JSON, try to extract substring
+        }
+        // Fallback: find outermost braces
         int braceStart = raw.indexOf('{');
         int braceEnd = raw.lastIndexOf('}');
         if (braceStart >= 0 && braceEnd > braceStart) {
-            return raw.substring(braceStart, braceEnd + 1);
+            String candidate = raw.substring(braceStart, braceEnd + 1);
+            try {
+                objectMapper.readTree(candidate);
+                return candidate; // valid JSON substring
+            } catch (Exception e) {
+                log.warn("[QualityGuard] Extracted substring is not valid JSON, returning raw");
+            }
         }
         return raw;
     }
