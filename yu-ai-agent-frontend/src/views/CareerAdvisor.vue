@@ -141,6 +141,9 @@
             <div>
               <div v-if="msg.agentName" class="agent-label">{{ msg.agentName }}</div>
               <div class="msg-bub" v-html="renderMarkdown(msg.content)"></div>
+              <button v-if="msg.type === 'error'" class="retry-btn" @click="retrySendMessage">
+                🔄 重试
+              </button>
               <div class="msg-actions" v-if="hoveredMsg === index">
                 <button class="msg-act" @click="copyMessage(msg.content)" title="复制">📋</button>
                 <button class="msg-act" @click="toggleFavorite(msg, index)">
@@ -288,13 +291,9 @@ import { ref, onMounted, onBeforeUnmount, nextTick, computed, shallowReactive } 
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import TraceTimelineView from '../components/TraceTimelineView.vue'
-import {
-  login, createSession, listSessions, deleteSession, chatWithOrchestrator,
-  getMyProfile, clearMyProfile, getChatMessages, renameSession,
-  archiveSession, listArchivedSessions, searchSessions, uploadDocument,
-  addFavorite, removeFavorite, unarchiveSession
-} from '../api'
+import { login, getMe, createSession, listSessions, deleteSession, chatWithOrchestrator, resumeOrchestratorChat, getMyProfile, clearMyProfile, getChatMessages, renameSession, archiveSession, listArchivedSessions, searchSessions, uploadDocument, addFavorite, removeFavorite, unarchiveSession } from '../api'
 
 useHead({ title: '职场顾问 - WorkPilot' })
 
@@ -303,6 +302,7 @@ const messagesContainer = ref(null)
 const inputMessage = ref('')
 const barFocused = ref(false)
 const messages = ref([])
+const lastUserMessage = ref('')
 const sessions = ref([])
 const currentChatId = ref('')
 const isStreaming = ref(false)
@@ -439,13 +439,18 @@ onMounted(async () => {
 onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 
 const ensureLogin = async () => {
-  // Always try to login fresh to get a valid token (handles server restart)
-  try {
-    const oldUserId = localStorage.getItem('userId')
-    const res = await login('游客', oldUserId)
-    localStorage.setItem('token', res.data.data.token)
-    localStorage.setItem('userId', res.data.data.userId)
-  } catch (e) { console.error('登录失败', e) }
+  if (localStorage.getItem('token')) {
+    try {
+      await getMe()
+      return
+    } catch (_) {
+      /* token invalid */
+    }
+  }
+  // Guest login disabled by default — force register/login
+  localStorage.removeItem('token')
+  router.replace({ path: '/login', query: { redirect: '/chat/career' } })
+  throw new Error('NOT_LOGGED_IN')
 }
 
 const loadSessions = async () => {
@@ -478,11 +483,13 @@ const switchSession = async (chatId) => {
     const history = res.data?.data || []
     if (history.length > 0) {
       messages.value = history.map(m => ({
-        content: m.content,
+        content: m.content || m.partialContent || '',
         isUser: m.role === 'user',
-        type: '',
-        time: m.timestamp,
-        agentType: m.sourceType || (m.role === 'user' ? null : 'GENERAL'),
+        type: m.status === 'PARTIAL' ? 'partial' : '',
+        time: m.timestamp || Date.now(),
+        messageId: m.messageId,
+        status: m.status || 'COMPLETE',
+        agentType: m.sourceType || m.sourceId || (m.role === 'user' ? null : 'GENERAL'),
         agentName: m.sourceName || null
       }))
     }
@@ -638,7 +645,7 @@ const scrollToBottom = async () => {
   await nextTick()
   if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
 }
-const renderMarkdown = (text) => text ? marked.parse(text) : ''
+const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 const formatTimeAgo = (val) => {
   if (!val) return ''
   const d = new Date(val); if (isNaN(d.getTime())) return ''
@@ -647,6 +654,19 @@ const formatTimeAgo = (val) => {
   if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
   if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
   return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+}
+
+// Retry last message on error
+const retrySendMessage = () => {
+  if (!lastUserMessage.value || isStreaming.value) return
+  // Remove the error message
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (lastMsg && lastMsg.type === 'error') {
+    messages.value.pop()
+  }
+  // Re-set input and send
+  inputMessage.value = lastUserMessage.value
+  nextTick(() => sendMessage())
 }
 
 // Stop generation
@@ -686,6 +706,7 @@ const sendMessage = async () => {
   inputMessage.value = ''
   attachedFile.value = null
 
+  lastUserMessage.value = msg
   let finalMsg = msg
   if (file) {
     addMessage(`📎 ${file.name}`, true)
@@ -716,81 +737,144 @@ const sendMessage = async () => {
 
   let aiMsgIndex = -1
   let currentAgentInfo = { agentType: 'GENERAL', agentName: '职场通用顾问' }
+  let currentAssistantMessageId = null
+  let resumeAttempts = 0
 
-  eventSource.addEventListener('routing', (e) => {
-    isThinking.value = false
-    thinkingLabel.value = '连接专家中…'
-    addMessage(e.data, false, 'routing')
-    // Update agent display name from routing event
-    const routeMatch = e.data.match(/路由到(.+?)[\]】]/)
-    if (routeMatch) currentAgent.value = { name: routeMatch[1], type: 'general' }
-  })
+  const bindStreamHandlers = (es, { isResume = false } = {}) => {
+    es.addEventListener('routing', (e) => {
+      isThinking.value = false
+      thinkingLabel.value = '连接专家中…'
+      addMessage(e.data, false, 'routing')
+      const routeMatch = e.data.match(/路由到(.+?)[\]】]/)
+      if (routeMatch) currentAgent.value = { name: routeMatch[1], type: 'general' }
+    })
 
-  eventSource.addEventListener('agent-turn', (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      currentAgentInfo = { agentType: data.agentType, agentName: data.agentName }
-      currentAgent.value = { name: data.agentName, type: data.agentType }
-      aiMsgIndex = -1
-    } catch (err) {}
-  })
+    es.addEventListener('agent-turn', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        currentAgentInfo = { agentType: data.agentType, agentName: data.agentName }
+        currentAgent.value = { name: data.agentName, type: data.agentType }
+        aiMsgIndex = -1
+      } catch (err) {}
+    })
 
-  eventSource.addEventListener('trace', (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      switch (data.type) {
-        case 'TRACE_STARTED': traceStatus.value = 'RUNNING'; break
-        case 'SPAN_STARTED':
-          traceMap.set(data.sequence, {
-            sequence: data.sequence, stepType: data.stepType,
-            stepTypeDisplayName: data.stepTypeDisplayName,
-            label: data.label, status: 'RUNNING', errorMessage: null,
-            startTime: new Date().toISOString()
-          }); break
-        case 'SPAN_ENDED': {
-          const span = traceMap.get(data.sequence)
-          if (span) { span.status = data.status; span.errorMessage = data.errorMessage; span.endTime = new Date().toISOString() }
-          break }
-        case 'TRACE_COMPLETED': traceStatus.value = 'SUCCESS'; break
-        case 'TRACE_FAILED': traceStatus.value = 'FAILED'; break
+    es.addEventListener('message-start', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        currentAssistantMessageId = data.assistantMessageId
+        if (aiMsgIndex === -1 || isResume) {
+          if (aiMsgIndex === -1) {
+            messages.value.push({
+              content: '', isUser: false, type: '', time: Date.now(),
+              messageId: currentAssistantMessageId,
+              status: 'STREAMING',
+              agentType: currentAgentInfo.agentType, agentName: currentAgentInfo.agentName
+            })
+            aiMsgIndex = messages.value.length - 1
+          } else if (messages.value[aiMsgIndex]) {
+            messages.value[aiMsgIndex].messageId = currentAssistantMessageId
+            messages.value[aiMsgIndex].status = 'STREAMING'
+            if (isResume) messages.value[aiMsgIndex].content = ''
+          }
+        } else if (messages.value[aiMsgIndex]) {
+          messages.value[aiMsgIndex].messageId = currentAssistantMessageId
+          messages.value[aiMsgIndex].status = 'STREAMING'
+        }
+      } catch (err) {}
+    })
+
+    es.addEventListener('trace', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        switch (data.type) {
+          case 'TRACE_STARTED': traceStatus.value = 'RUNNING'; break
+          case 'SPAN_STARTED':
+            traceMap.set(data.sequence, {
+              sequence: data.sequence, stepType: data.stepType,
+              stepTypeDisplayName: data.stepTypeDisplayName,
+              label: data.label, status: 'RUNNING', errorMessage: null,
+              startTime: new Date().toISOString()
+            }); break
+          case 'SPAN_ENDED': {
+            const span = traceMap.get(data.sequence)
+            if (span) { span.status = data.status; span.errorMessage = data.errorMessage; span.endTime = new Date().toISOString() }
+            break }
+          case 'TRACE_COMPLETED': traceStatus.value = 'SUCCESS'; break
+          case 'TRACE_FAILED': traceStatus.value = 'FAILED'; break
+        }
+      } catch (err) {}
+    })
+
+    es.addEventListener('quality-review', (e) => {
+      try { qualityReview.value = JSON.parse(e.data) } catch (err) {}
+    })
+    es.addEventListener('quality-blocked', (e) => { qualityBlocked.value = e.data })
+    es.addEventListener('clarification', (e) => {
+      isThinking.value = false; addMessage(e.data, false, 'clarification')
+      isStreaming.value = false; es.close()
+    })
+    es.addEventListener('status', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data.resume === 'partial' && aiMsgIndex >= 0) {
+          messages.value[aiMsgIndex].status = 'PARTIAL'
+          messages.value[aiMsgIndex].type = 'partial'
+        }
+      } catch (err) {}
+    })
+
+    es.onmessage = (e) => {
+      isThinking.value = false
+      if (e.data === '[DONE]') {
+        isStreaming.value = false; traceVisible.value = false; es.close()
+        if (aiMsgIndex >= 0 && messages.value[aiMsgIndex]?.status === 'STREAMING') {
+          messages.value[aiMsgIndex].status = 'COMPLETE'
+        }
+        if (!isResume) autoNameSession(msg)
+        return
       }
-    } catch (err) {}
-  })
-
-  eventSource.addEventListener('quality-review', (e) => {
-    try { qualityReview.value = JSON.parse(e.data) } catch (err) {}
-  })
-  eventSource.addEventListener('quality-blocked', (e) => { qualityBlocked.value = e.data })
-  eventSource.addEventListener('clarification', (e) => {
-    isThinking.value = false; addMessage(e.data, false, 'clarification')
-    isStreaming.value = false; eventSource.close()
-  })
-
-  eventSource.onmessage = (e) => {
-    isThinking.value = false
-    if (e.data === '[DONE]') {
-      isStreaming.value = false; traceVisible.value = false; eventSource.close()
-      // Auto-name session after first AI reply
-      autoNameSession(msg)
-      return
+      if (aiMsgIndex === -1) {
+        messages.value.push({
+          content: '', isUser: false, type: '', time: Date.now(),
+          messageId: currentAssistantMessageId,
+          status: 'STREAMING',
+          agentType: currentAgentInfo.agentType, agentName: currentAgentInfo.agentName
+        })
+        aiMsgIndex = messages.value.length - 1
+      }
+      messages.value[aiMsgIndex].content += e.data
+      scrollToBottom()
     }
-    if (aiMsgIndex === -1) {
-      messages.value.push({
-        content: '', isUser: false, type: '', time: Date.now(),
-        agentType: currentAgentInfo.agentType, agentName: currentAgentInfo.agentName
-      })
-      aiMsgIndex = messages.value.length - 1
+
+    es.onerror = () => {
+      es.close()
+      const hasContent = aiMsgIndex >= 0 && messages.value[aiMsgIndex]?.content
+      if (currentAssistantMessageId && resumeAttempts < 2) {
+        resumeAttempts += 1
+        thinkingLabel.value = '连接中断，正在续传…'
+        isThinking.value = true
+        setTimeout(() => {
+          const resumeEs = resumeOrchestratorChat(currentChatId.value, currentAssistantMessageId)
+          eventSource = resumeEs
+          bindStreamHandlers(resumeEs, { isResume: true })
+        }, 600 * resumeAttempts)
+        return
+      }
+      isThinking.value = false
+      isStreaming.value = false
+      if (aiMsgIndex >= 0) {
+        messages.value[aiMsgIndex].status = 'PARTIAL'
+        messages.value[aiMsgIndex].type = 'partial'
+      }
+      if (!hasContent) {
+        addMessage('连接出现问题，请重试。', false, 'error')
+      } else {
+        addMessage('连接中断，已保留部分回答（可刷新会话查看）。', false, 'error')
+      }
     }
-    messages.value[aiMsgIndex].content += e.data
-    scrollToBottom()
   }
 
-  eventSource.onerror = () => {
-    isThinking.value = false; isStreaming.value = false; eventSource.close()
-    if (aiMsgIndex === -1 || !messages.value[aiMsgIndex]?.content) {
-      addMessage('连接出现问题，请重试。', false)
-    }
-  }
+  bindStreamHandlers(eventSource)
 }
 
 // Auto-name session after first AI reply (if still "新对话")
@@ -1006,6 +1090,24 @@ const handleClearProfile = async () => {
 .msg-actions { margin-top: 4px; }
 .msg-act { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; color: var(--t4); }
 .msg-act:hover { background: var(--glass-hover); }
+
+/* Retry button for error messages */
+.retry-btn {
+  margin-top: 8px;
+  padding: 6px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(245,158,11,0.3);
+  background: rgba(245,158,11,0.1);
+  color: var(--gold-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.retry-btn:hover {
+  background: rgba(245,158,11,0.2);
+  border-color: rgba(245,158,11,0.5);
+}
 
 /* Routing badge */
 .routing-badge {

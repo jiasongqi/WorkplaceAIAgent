@@ -12,7 +12,8 @@ public enum ResultCode {
     VALIDATE_FAILED(400, "Parameter validation failed"),
     UNAUTHORIZED(401, "Not logged in or token expired"),
     FORBIDDEN(403, "No relevant permissions"),
-    NOT_FOUND(404, "Resource not found");
+    NOT_FOUND(404, "Resource not found"),
+    TOO_MANY_REQUESTS(429, "Quota exceeded");
 
     private final long code;
     private final String message;

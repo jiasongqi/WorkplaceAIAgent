@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: workpilot-db
+    environment:
+      POSTGRES_DB: workpilot
+      POSTGRES_USER: workpilot
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-workpilot123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workpilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: workpilot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: workpilot-app
+    ports:
+      - "8123:8123"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      PG_DATASOURCE_URL: jdbc:postgresql://postgres:5432/workpilot
+      PG_USERNAME: workpilot
+      PG_PASSWORD: ${PG_PASSWORD:-workpilot123}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      SEARCH_API_KEY: ${SEARCH_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - appdata:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:

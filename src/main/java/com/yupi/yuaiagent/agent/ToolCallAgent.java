@@ -152,7 +152,7 @@ public class ToolCallAgent extends ReActAgent {
             }
         } catch (Exception e) {
             log.error(getName() + "的思考过程遇到了问题：" + e.getMessage());
-            getMessageList().add(new AssistantMessage("处理时遇到了错误：" + e.getMessage()));
+            getMessageList().add(new AssistantMessage(friendlyLlmError(e.getMessage())));
             return false;
         }
     }
@@ -289,5 +289,20 @@ public class ToolCallAgent extends ReActAgent {
 
         log.debug(results);
         return results;
+    }
+
+    private static String friendlyLlmError(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "处理时遇到了错误，请稍后重试。";
+        }
+        if (raw.contains("AllocationQuota") || raw.contains("Free quota exhausted")
+                || raw.contains("FreeTierOnly")) {
+            return "模型调用失败：DashScope 免费额度已用尽。"
+                    + "请到阿里云控制台充值，或关闭「仅使用免费额度」后重试。";
+        }
+        if (raw.contains("401") || raw.contains("InvalidApiKey") || raw.contains("Unauthorized")) {
+            return "模型调用失败：API Key 无效或未配置，请检查 spring.ai.dashscope.api-key。";
+        }
+        return "处理时遇到了错误：" + raw;
     }
 }

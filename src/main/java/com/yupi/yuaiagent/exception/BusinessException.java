@@ -37,6 +37,10 @@ public class BusinessException extends RuntimeException {
         return new BusinessException(ResultCode.UNAUTHORIZED);
     }
 
+    public static BusinessException notLoggedIn(String message) {
+        return new BusinessException(ResultCode.UNAUTHORIZED, message);
+    }
+
     public static BusinessException forbidden() {
         return new BusinessException(ResultCode.FORBIDDEN);
     }
@@ -47,5 +51,9 @@ public class BusinessException extends RuntimeException {
 
     public static BusinessException badRequest(String message) {
         return new BusinessException(ResultCode.VALIDATE_FAILED, message);
+    }
+
+    public static BusinessException tooManyRequests(String message) {
+        return new BusinessException(ResultCode.TOO_MANY_REQUESTS, message);
     }
 }

@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -70,6 +71,7 @@ class MemoryCoordinatorTest {
     void setUp() {
         // Real allocator with default percentages: L1=60%, L2=15%, L3=10%, L4=15%
         budgetAllocator = new TokenBudgetAllocator(60, 15, 10, 15);
+        Executor directExecutor = Runnable::run;
         coordinator = new MemoryCoordinator(
                 slidingWindow,
                 factStore,
@@ -77,6 +79,7 @@ class MemoryCoordinatorTest {
                 experienceStore,
                 budgetAllocator,
                 extractionPipeline,
+                directExecutor,
                 TIMEOUT_MS,
                 TOTAL_BUDGET
         );

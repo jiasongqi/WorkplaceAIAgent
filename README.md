@@ -5,6 +5,7 @@
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0-blue)](https://docs.spring.io/spring-ai/reference/)
 [![Vue.js](https://img.shields.io/badge/Vue.js-3-brightgreen?logo=vuedotjs)](https://vuejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.6-blue)]()
 
 > **全场景职场 AI 智囊平台，覆盖从求职到离职的全生命周期。**  
 > **An all-scenario AI career coach platform covering the full lifecycle from job seeking to resignation.**

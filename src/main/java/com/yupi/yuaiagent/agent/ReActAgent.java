@@ -1,9 +1,14 @@
 package com.yupi.yuaiagent.agent;
 
+import cn.hutool.core.util.StrUtil;
 import com.yupi.yuaiagent.budget.TokenBudgetManager;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+
+import java.util.List;
 
 /**
  * ReAct (Reasoning and Acting) 模式的代理抽象类
@@ -56,7 +61,9 @@ public abstract class ReActAgent extends BaseAgent {
                 // LLM 判断无需调用工具 → 任务完成，终止循环
                 // 修复：不设置 FINISHED 会导致 BaseAgent 循环继续浪费 LLM 调用
                 setState(com.yupi.yuaiagent.agent.model.AgentState.FINISHED);
-                return "思考完成 - 无需行动";
+                // 把模型已生成的文本回传给前端，避免只显示「思考完成」导致聊天区空白
+                String reply = lastAssistantText();
+                return StrUtil.isNotBlank(reply) ? reply : "思考完成 - 无需行动";
             }
             // 再行动
             return act();
@@ -65,6 +72,18 @@ public abstract class ReActAgent extends BaseAgent {
             log.error("[ReActAgent] step execution failed", e);
             return "步骤执行失败：" + e.getMessage();
         }
+    }
+
+    private String lastAssistantText() {
+        List<Message> messages = getMessageList();
+        if (messages == null || messages.isEmpty()) {
+            return null;
+        }
+        Message last = messages.get(messages.size() - 1);
+        if (last instanceof AssistantMessage assistantMessage) {
+            return assistantMessage.getText();
+        }
+        return null;
     }
 
 }

@@ -65,6 +65,15 @@ public class MemoryCoordinator {
      */
     private final ConcurrentHashMap<String, String> layerCache = new ConcurrentHashMap<>();
 
+    /** Timestamps for each layerCache entry, used for TTL-based eviction. */
+    private final ConcurrentHashMap<String, Long> layerCacheTimestamps = new ConcurrentHashMap<>();
+
+    /** Cache entry time-to-live: 5 minutes. */
+    private static final long CACHE_TTL_MS = 300_000;
+
+    /** Maximum number of entries before eviction is triggered. */
+    private static final int MAX_CACHE_SIZE = 10_000;
+
     public MemoryCoordinator(
             SlidingWindowLayer slidingWindow,
             FactStoreLayer factStore,
@@ -98,6 +107,11 @@ public class MemoryCoordinator {
      * @return 包含各层记忆的 SystemMessage
      */
     public SystemMessage assembleContext(String userId, String conversationId, String agentType) {
+        // Evict expired cache entries when size exceeds threshold
+        if (layerCache.size() > MAX_CACHE_SIZE / 2) {
+            evictExpiredCacheEntries();
+        }
+
         log.info("开始组装上下文: userId={}, conversationId={}, agentType={}", userId, conversationId, agentType);
 
         // 1. 获取各层 Token 预算分配
@@ -266,11 +280,13 @@ public class MemoryCoordinator {
     }
 
     /**
-     * 缓存层结果（仅缓存非空值）。
+     * 缓存层结果（仅缓存非空值），同时记录时间戳用于 TTL 驱逐。
      */
     private void cacheLayerResult(String userId, MemoryLayer layer, String content) {
         if (content != null && !content.isBlank()) {
-            layerCache.put(buildCacheKey(userId, layer), content);
+            String key = buildCacheKey(userId, layer);
+            layerCache.put(key, content);
+            layerCacheTimestamps.put(key, System.currentTimeMillis());
         }
     }
 
@@ -279,6 +295,26 @@ public class MemoryCoordinator {
      */
     private String buildCacheKey(String userId, MemoryLayer layer) {
         return userId + ":" + layer.name();
+    }
+
+    /**
+     * Evict expired cache entries based on TTL. Also removes orphaned entries
+     * from layerCache that no longer have a corresponding timestamp.
+     */
+    private void evictExpiredCacheEntries() {
+        long now = System.currentTimeMillis();
+        int beforeSize = layerCache.size();
+
+        // Remove expired timestamps
+        layerCacheTimestamps.entrySet().removeIf(e -> now - e.getValue() > CACHE_TTL_MS);
+
+        // Remove cache entries that no longer have a timestamp (expired or orphaned)
+        layerCache.keySet().removeIf(k -> !layerCacheTimestamps.containsKey(k));
+
+        int evicted = beforeSize - layerCache.size();
+        if (evicted > 0) {
+            log.info("Evicted {} expired layerCache entries, remaining: {}", evicted, layerCache.size());
+        }
     }
 
     // ========== 各层查询方法 ==========

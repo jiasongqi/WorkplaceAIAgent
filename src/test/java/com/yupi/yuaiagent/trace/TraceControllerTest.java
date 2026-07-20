@@ -54,17 +54,19 @@ class TraceControllerTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        // Create and configure a real TraceRepository
-        traceRepository = new TraceRepository();
-        var propsField = TraceRepository.class.getDeclaredField("traceProperties");
+        // Create and configure a real TraceRepository, backed by a real FileTraceStore
+        // (TraceRepository now delegates persistence to a pluggable TraceStore).
+        FileTraceStore fileTraceStore = new FileTraceStore();
+        var propsField = FileTraceStore.class.getDeclaredField("traceProperties");
         propsField.setAccessible(true);
-        propsField.set(traceRepository, new TraceProperties());
+        propsField.set(fileTraceStore, new TraceProperties());
 
-        var storageDirField = TraceRepository.class.getDeclaredField("storageDir");
+        var storageDirField = FileTraceStore.class.getDeclaredField("storageDir");
         storageDirField.setAccessible(true);
-        storageDirField.set(traceRepository, tempDir.toString());
+        storageDirField.set(fileTraceStore, tempDir.toString());
 
-        traceRepository.init();
+        fileTraceStore.init();
+        traceRepository = new TraceRepository(fileTraceStore);
 
         // Mock AuthService
         authService = org.mockito.Mockito.mock(AuthService.class);

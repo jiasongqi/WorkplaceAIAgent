@@ -1,27 +1,21 @@
 package com.yupi.yuaiagent.session;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import jakarta.annotation.PostConstruct;
+import com.yupi.yuaiagent.repository.entity.ChatSessionEntity;
+import com.yupi.yuaiagent.repository.jpa.ChatSessionJpaRepository;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
-import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 /**
  * Session manager with three-state lifecycle: ACTIVE / ARCHIVED / DELETED.
  * <p>
- * File-based persistence. Sessions are soft-deleted (status → DELETED),
+ * JPA persistence. Sessions are soft-deleted (status → DELETED),
  * physically cleaned up after 30 days by SessionCleanupJob.
  *
  * @author jsq
@@ -30,139 +24,80 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SessionManager {
 
-    @Value("${session.storage.dir:./tmp/sessions}")
-    private String storageDir;
+    private final ChatSessionJpaRepository jpaRepo;
 
-    private final ObjectMapper objectMapper;
-
-    // userId -> List<SessionInfo>
-    private final Map<String, List<SessionInfo>> userSessions = new ConcurrentHashMap<>();
-    // chatId -> userId (reverse index for auth)
-    private final Map<String, String> chatOwner = new ConcurrentHashMap<>();
-
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private File storageFile;
-
-    public SessionManager() {
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.registerModule(new JavaTimeModule());
-    }
-
-    @PostConstruct
-    public void init() {
-        try {
-            File dir = new File(storageDir);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
-            storageFile = new File(dir, "sessions.json");
-            loadFromFile();
-            log.info("Session storage initialized, path: {}", storageFile.getAbsolutePath());
-        } catch (Exception e) {
-            log.error("Failed to initialize session storage", e);
-        }
+    public SessionManager(ChatSessionJpaRepository jpaRepo) {
+        this.jpaRepo = jpaRepo;
     }
 
     // ─── Create ───
 
     public SessionInfo createSession(String userId, String title) {
-        lock.writeLock().lock();
-        try {
-            String chatId = UUID.randomUUID().toString();
-            SessionInfo session = new SessionInfo(chatId, title, LocalDateTime.now());
-            userSessions.computeIfAbsent(userId, k -> new ArrayList<>()).add(0, session);
-            chatOwner.put(chatId, userId);
-            saveToFile();
-            log.info("User {} created session {}", userId, chatId);
-            return session;
-        } finally {
-            lock.writeLock().unlock();
-        }
+        String chatId = UUID.randomUUID().toString();
+        ChatSessionEntity entity = new ChatSessionEntity();
+        entity.setSessionId(chatId);
+        entity.setUserId(userId);
+        entity.setTitle(title);
+        entity.setStatus("ACTIVE");
+        entity.setState(new HashMap<>());
+        jpaRepo.save(entity);
+        log.info("User {} created session {}", userId, chatId);
+        return toDomain(entity);
     }
 
     // ─── Read ───
 
     /** Returns ACTIVE sessions for a user (newest first). */
     public List<SessionInfo> getUserSessions(String userId) {
-        lock.readLock().lock();
-        try {
-            return userSessions.getOrDefault(userId, Collections.emptyList()).stream()
-                    .filter(s -> s.getStatus() == SessionStatus.ACTIVE)
-                    .collect(Collectors.toList());
-        } finally {
-            lock.readLock().unlock();
-        }
+        return jpaRepo.findByUserId(userId).stream()
+                .filter(e -> "ACTIVE".equals(e.getStatus()))
+                .sorted(Comparator.comparing((ChatSessionEntity e) -> e.getCreatedAt()).reversed())
+                .map(this::toDomain)
+                .toList();
     }
 
     /** Returns sessions filtered by status. */
     public List<SessionInfo> getSessionsByStatus(String userId, SessionStatus status) {
-        lock.readLock().lock();
-        try {
-            return userSessions.getOrDefault(userId, Collections.emptyList()).stream()
-                    .filter(s -> s.getStatus() == status)
-                    .collect(Collectors.toList());
-        } finally {
-            lock.readLock().unlock();
-        }
+        return jpaRepo.findByUserId(userId).stream()
+                .filter(e -> status.name().equals(e.getStatus()))
+                .map(this::toDomain)
+                .toList();
     }
 
     /** Finds a session by chatId (any status). */
     public SessionInfo findByChatId(String chatId) {
-        String userId = chatOwner.get(chatId);
-        if (userId == null) return null;
-        lock.readLock().lock();
-        try {
-            return userSessions.getOrDefault(userId, Collections.emptyList()).stream()
-                    .filter(s -> s.getChatId().equals(chatId))
-                    .findFirst()
-                    .orElse(null);
-        } finally {
-            lock.readLock().unlock();
-        }
+        return jpaRepo.findBySessionId(chatId).map(this::toDomain).orElse(null);
     }
 
     public boolean isOwner(String userId, String chatId) {
-        return userId.equals(chatOwner.get(chatId));
+        return jpaRepo.findBySessionId(chatId)
+                .map(e -> userId.equals(e.getUserId()))
+                .orElse(false);
     }
 
     // ─── Update ───
 
     /** Updates session title (auto-set from first message). */
     public void updateTitle(String chatId, String title) {
-        lock.writeLock().lock();
-        try {
-            String userId = chatOwner.get(chatId);
-            if (userId == null) return;
-            userSessions.getOrDefault(userId, Collections.emptyList()).stream()
-                    .filter(s -> s.getChatId().equals(chatId))
-                    .findFirst()
-                    .ifPresent(s -> {
-                        s.setTitle(title.length() > 20 ? title.substring(0, 20) + "..." : title);
-                        s.setLastActiveAt(LocalDateTime.now());
-                    });
-            saveToFile();
-        } finally {
-            lock.writeLock().unlock();
-        }
+        jpaRepo.findBySessionId(chatId).ifPresent(entity -> {
+            String truncatedTitle = title.length() > 20 ? title.substring(0, 20) + "..." : title;
+            entity.setTitle(truncatedTitle);
+            entity.setLastActiveAt(OffsetDateTime.now());
+            jpaRepo.save(entity);
+        });
     }
 
     /** Renames a session (user-initiated). */
     public boolean rename(String userId, String chatId, String newTitle) {
-        lock.writeLock().lock();
-        try {
-            if (!isOwner(userId, chatId)) return false;
-            userSessions.getOrDefault(userId, Collections.emptyList()).stream()
-                    .filter(s -> s.getChatId().equals(chatId))
-                    .findFirst()
-                    .ifPresent(s -> {
-                        s.setTitle(newTitle);
-                        s.setLastActiveAt(LocalDateTime.now());
-                    });
-            saveToFile();
-            return true;
-        } finally {
-            lock.writeLock().unlock();
-        }
+        return jpaRepo.findBySessionId(chatId)
+                .filter(e -> userId.equals(e.getUserId()))
+                .map(entity -> {
+                    entity.setTitle(newTitle);
+                    entity.setLastActiveAt(OffsetDateTime.now());
+                    jpaRepo.save(entity);
+                    return true;
+                })
+                .orElse(false);
     }
 
     /** Archives a session (ACTIVE → ARCHIVED). */
@@ -177,114 +112,71 @@ public class SessionManager {
 
     /** Updates session status. */
     public boolean updateStatus(String userId, String chatId, SessionStatus newStatus) {
-        lock.writeLock().lock();
-        try {
-            if (!isOwner(userId, chatId)) return false;
-            userSessions.getOrDefault(userId, Collections.emptyList()).stream()
-                    .filter(s -> s.getChatId().equals(chatId))
-                    .findFirst()
-                    .ifPresent(s -> {
-                        s.setStatus(newStatus);
-                        LocalDateTime now = LocalDateTime.now();
-                        s.setLastActiveAt(now);
-                        if (newStatus == SessionStatus.ARCHIVED) {
-                            s.setArchivedAt(now);
-                        } else if (newStatus == SessionStatus.DELETED) {
-                            s.setDeletedAt(now);
-                        }
-                    });
-            saveToFile();
-            log.info("Session {} status updated to {}", chatId, newStatus);
-            return true;
-        } finally {
-            lock.writeLock().unlock();
-        }
+        return jpaRepo.findBySessionId(chatId)
+                .filter(e -> userId.equals(e.getUserId()))
+                .map(entity -> {
+                    entity.setStatus(newStatus.name());
+                    OffsetDateTime now = OffsetDateTime.now();
+                    entity.setLastActiveAt(now);
+                    if (newStatus == SessionStatus.ARCHIVED) {
+                        entity.setArchivedAt(now);
+                    } else if (newStatus == SessionStatus.DELETED) {
+                        entity.setDeletedAt(now);
+                    }
+                    jpaRepo.save(entity);
+                    log.info("Session {} status updated to {}", chatId, newStatus);
+                    return true;
+                })
+                .orElse(false);
     }
 
     // ─── Delete ───
 
-    /**
-     * Soft delete: status → DELETED. Does NOT remove from memory or chatOwner.
-     * Physical cleanup happens after 30 days via SessionCleanupJob.
-     */
+    /** Soft delete: status → DELETED. */
     public boolean softDelete(String userId, String chatId) {
         return updateStatus(userId, chatId, SessionStatus.DELETED);
     }
 
-    /**
-     * Physical delete: removes from memory and chatOwner. Used by cleanup job
-     * or user-initiated permanent delete.
-     */
+    /** Physical delete: removes from database. */
     public boolean physicalDelete(String chatId) {
-        lock.writeLock().lock();
-        try {
-            String userId = chatOwner.remove(chatId);
-            if (userId == null) return false;
-            List<SessionInfo> sessions = userSessions.get(userId);
-            if (sessions != null) {
-                sessions.removeIf(s -> s.getChatId().equals(chatId));
-            }
-            saveToFile();
-            log.info("Session {} physically deleted", chatId);
-            return true;
-        } finally {
-            lock.writeLock().unlock();
-        }
+        return jpaRepo.findBySessionId(chatId)
+                .map(entity -> {
+                    jpaRepo.delete(entity);
+                    log.info("Session {} physically deleted", chatId);
+                    return true;
+                })
+                .orElse(false);
     }
 
     /** Finds all DELETED sessions older than the given cutoff. */
     public List<SessionInfo> findExpiredDeleted(LocalDateTime cutoff) {
-        lock.readLock().lock();
-        try {
-            return userSessions.values().stream()
-                    .flatMap(List::stream)
-                    .filter(s -> s.getStatus() == SessionStatus.DELETED)
-                    .filter(s -> s.getDeletedAt() != null && s.getDeletedAt().isBefore(cutoff))
-                    .collect(Collectors.toList());
-        } finally {
-            lock.readLock().unlock();
-        }
+        OffsetDateTime cutoffOdt = cutoff.atOffset(ZoneOffset.UTC);
+        return jpaRepo.findAll().stream()
+                .filter(e -> "DELETED".equals(e.getStatus()))
+                .filter(e -> e.getDeletedAt() != null && e.getDeletedAt().isBefore(cutoffOdt))
+                .map(this::toDomain)
+                .toList();
     }
 
-    // ─── File I/O ───
+    // ─── Mapping ───
 
-    private void loadFromFile() {
-        if (storageFile.exists() && storageFile.length() > 0) {
-            try {
-                SessionStore store = objectMapper.readValue(storageFile, new TypeReference<SessionStore>() {});
-                if (store.getUserSessions() != null) {
-                    userSessions.putAll(store.getUserSessions());
-                }
-                if (store.getChatOwner() != null) {
-                    chatOwner.putAll(store.getChatOwner());
-                }
-                log.info("Loaded sessions: {} users, {} chat mappings",
-                        userSessions.size(), chatOwner.size());
-            } catch (IOException e) {
-                log.error("Failed to load session file", e);
-            }
-        }
+    private SessionInfo toDomain(ChatSessionEntity e) {
+        SessionInfo info = new SessionInfo();
+        info.setChatId(e.getSessionId());
+        info.setTitle(e.getTitle());
+        info.setStatus(SessionStatus.valueOf(e.getStatus() != null ? e.getStatus() : "ACTIVE"));
+        info.setCreatedAt(toLocalDateTime(e.getCreatedAt()));
+        info.setLastActiveAt(toLocalDateTime(e.getLastActiveAt()));
+        info.setArchivedAt(toLocalDateTime(e.getArchivedAt()));
+        info.setDeletedAt(toLocalDateTime(e.getDeletedAt()));
+        return info;
     }
 
-    private void saveToFile() {
-        if (storageFile == null) return;
-        try {
-            SessionStore store = new SessionStore();
-            store.setUserSessions(new HashMap<>(userSessions));
-            store.setChatOwner(new HashMap<>(chatOwner));
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(storageFile, store);
-        } catch (IOException e) {
-            log.error("Failed to save session file", e);
-        }
+    private LocalDateTime toLocalDateTime(OffsetDateTime odt) {
+        return odt != null ? odt.toLocalDateTime() : null;
     }
 
     // ─── Inner classes ───
-
-    @Data
-    public static class SessionStore {
-        private Map<String, List<SessionInfo>> userSessions = new HashMap<>();
-        private Map<String, String> chatOwner = new HashMap<>();
-    }
 
     @Data
     public static class SessionInfo {

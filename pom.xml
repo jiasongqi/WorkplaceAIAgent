@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
@@ -52,7 +52,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- 阿里云百练、灵积大模型服务 -->
+        <!-- Bean Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- 闃块噷浜戠櫨缁冦€佺伒绉ぇ妯″瀷鏈嶅姟 -->
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>dashscope-sdk-java</artifactId>
@@ -72,7 +77,26 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-markdown-document-reader</artifactId>
         </dependency>
-        <!-- 手动整合 PGVector 向量存储 -->
+                <!-- H2 for local boot without PostgreSQL -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency><!-- Spring Data JPA -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- Flyway database migration -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- 鎵嬪姩鏁村悎 PGVector 鍚戦噺瀛樺偍 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -86,7 +110,7 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-pgvector-store</artifactId>
         </dependency>
-        <!-- 自动整合 PGVector 向量存储 -->
+        <!-- 鑷姩鏁村悎 PGVector 鍚戦噺瀛樺偍 -->
         <!--        <dependency>-->
         <!--            <groupId>org.springframework.ai</groupId>-->
         <!--            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>-->
@@ -107,25 +131,25 @@
             <artifactId>langchain4j-community-dashscope</artifactId>
             <version>1.0.0-beta2</version>
         </dependency>
-        <!-- 支持结构化输出 -->
+        <!-- 鏀寔缁撴瀯鍖栬緭鍑?-->
         <dependency>
             <groupId>com.github.victools</groupId>
             <artifactId>jsonschema-generator</artifactId>
             <version>4.38.0</version>
         </dependency>
-        <!-- 支持文件会话记忆持久化的序列化 -->
+        <!-- 鏀寔鏂囦欢浼氳瘽璁板繂鎸佷箙鍖栫殑搴忓垪鍖?-->
         <dependency>
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo</artifactId>
             <version>5.6.2</version>
         </dependency>
-        <!-- jsoup HTML 解析库 -->
+        <!-- jsoup HTML 瑙ｆ瀽搴?-->
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>1.19.1</version>
         </dependency>
-        <!-- PDF 生成库 -->
+        <!-- PDF 鐢熸垚搴?-->
         <!-- https://mvnrepository.com/artifact/com.itextpdf/itext-core -->
         <dependency>
             <groupId>com.itextpdf</groupId>
@@ -170,7 +194,7 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
-        <!-- jqwik 属性测试框架（基于 JUnit 5 平台，兼容 Java 21） -->
+        <!-- jqwik 灞炴€ф祴璇曟鏋讹紙鍩轰簬 JUnit 5 骞冲彴锛屽吋瀹?Java 21锛?-->
         <dependency>
             <groupId>net.jqwik</groupId>
             <artifactId>jqwik</artifactId>
@@ -210,7 +234,7 @@
         </plugins>
     </build>
 
-    <!-- 需要引入仓库配置，才能下载到最新的 Spring AI 相关的依赖 -->
+    <!-- 闇€瑕佸紩鍏ヤ粨搴撻厤缃紝鎵嶈兘涓嬭浇鍒版渶鏂扮殑 Spring AI 鐩稿叧鐨勪緷璧?-->
     <repositories>
         <repository>
             <id>spring-milestones</id>
@@ -241,3 +265,4 @@
         </repository>
     </repositories>
 </project>
+

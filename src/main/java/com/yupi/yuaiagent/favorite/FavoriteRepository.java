@@ -22,6 +22,10 @@ import java.util.stream.Collectors;
 /**
  * Favorite repository — file-based persistence.
  *
+ * <p>NOTE: @Transactional is NOT applicable — file-based storage is not managed by
+ * Spring's transaction manager. Consider adding a ReadWriteLock for concurrency safety
+ * if concurrent writes are expected.
+ *
  * @author jsq
  */
 @Slf4j

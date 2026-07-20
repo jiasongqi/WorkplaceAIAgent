@@ -29,26 +29,40 @@ public class WebSearchTool {
     @Tool(description = "Search for information from Baidu Search Engine")
     public String searchWeb(
             @ToolParam(description = "Search query keyword") String query) {
-        Map<String, Object> paramMap = new HashMap<>();
-        paramMap.put("q", query);
-        paramMap.put("api_key", apiKey);
-        paramMap.put("engine", "baidu");
-        try {
-            String response = HttpUtil.get(SEARCH_API_URL, paramMap, 10_000);
-            JSONObject jsonObject = JSONUtil.parseObj(response);
-            JSONArray organicResults = jsonObject.getJSONArray("organic_results");
-            // 只取前 5 条，且只提取 title / snippet / link 三个有效字段，减少 token 噪音
-            int limit = Math.min(5, organicResults.size());
-            String result = organicResults.subList(0, limit).stream().map(obj -> {
-                JSONObject item = (JSONObject) obj;
-                return String.format("标题：%s\n摘要：%s\n链接：%s",
-                        item.getStr("title", ""),
-                        item.getStr("snippet", ""),
-                        item.getStr("link", ""));
-            }).collect(Collectors.joining("\n---\n"));
-            return result;
-        } catch (Exception e) {
-            return "Error searching Baidu: " + e.getMessage();
+        int maxRetries = 3;
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                Map<String, Object> paramMap = new HashMap<>();
+                paramMap.put("q", query);
+                paramMap.put("api_key", apiKey);
+                paramMap.put("engine", "baidu");
+                String response = HttpUtil.get(SEARCH_API_URL, paramMap, 10_000);
+                JSONObject jsonObject = JSONUtil.parseObj(response);
+                JSONArray organicResults = jsonObject.getJSONArray("organic_results");
+                // 只取前 5 条，且只提取 title / snippet / link 三个有效字段，减少 token 噪音
+                int limit = Math.min(5, organicResults.size());
+                String result = organicResults.subList(0, limit).stream().map(obj -> {
+                    JSONObject item = (JSONObject) obj;
+                    return String.format("标题：%s\n摘要：%s\n链接：%s",
+                            item.getStr("title", ""),
+                            item.getStr("snippet", ""),
+                            item.getStr("link", ""));
+                }).collect(Collectors.joining("\n---\n"));
+                return result;
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt < maxRetries) {
+                    try {
+                        Thread.sleep(1000L * attempt); // 1s, 2s, 3s backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
         }
+        return "Error searching Baidu after " + maxRetries + " attempts: "
+                + (lastException != null ? lastException.getMessage() : "unknown");
     }
 }

@@ -1,17 +1,17 @@
 package com.yupi.yuaiagent.mcp;
 
+import com.yupi.yuaiagent.repository.entity.McpAuditLogEntity;
+import com.yupi.yuaiagent.repository.jpa.McpAuditLogJpaRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * MCP Tool Call Audit Log — records every MCP tool call with input/output/latency/success.
- *
- * <p>Provides accountability and debugging for external MCP service interactions.
- * Keeps a bounded ring buffer (last 1000 entries) to prevent memory exhaustion.</p>
+ * MCP Tool Call Audit Log — JPA persistence for MCP tool calls.
  *
  * @author jsq
  */
@@ -19,25 +19,25 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 @Component
 public class McpAuditLog {
 
-    private static final int MAX_ENTRIES = 1000;
-    private final Deque<AuditEntry> entries = new ConcurrentLinkedDeque<>();
+    private final McpAuditLogJpaRepository jpaRepo;
+
+    public McpAuditLog(McpAuditLogJpaRepository jpaRepo) {
+        this.jpaRepo = jpaRepo;
+    }
 
     /**
      * Record an MCP tool call.
      */
     public void record(String serverName, String toolName, String inputSummary,
                        String outputSummary, boolean success, long latencyMs, String errorMessage) {
-        AuditEntry entry = new AuditEntry(
-                LocalDateTime.now(), serverName, toolName,
-                truncate(inputSummary, 200), truncate(outputSummary, 200),
-                success, latencyMs, errorMessage);
-
-        entries.addLast(entry);
-
-        // Evict old entries
-        while (entries.size() > MAX_ENTRIES) {
-            entries.pollFirst();
-        }
+        McpAuditLogEntity entity = new McpAuditLogEntity();
+        entity.setServerId(serverName);
+        entity.setToolName(toolName);
+        entity.setInputSummary(truncate(inputSummary, 200));
+        entity.setOutputSummary(truncate(outputSummary, 200));
+        entity.setStatus(success ? "SUCCESS" : "FAILED");
+        entity.setDurationMs((int) latencyMs);
+        jpaRepo.save(entity);
 
         if (!success) {
             log.warn("[McpAudit] FAILED: server={}, tool={}, latency={}ms, error={}",
@@ -52,53 +52,50 @@ public class McpAuditLog {
      * Get success rate for a server.
      */
     public double getServerSuccessRate(String serverName) {
-        long total = entries.stream().filter(e -> e.serverName.equals(serverName)).count();
-        long success = entries.stream().filter(e -> e.serverName.equals(serverName) && e.success).count();
+        List<McpAuditLogEntity> entries = jpaRepo.findByServerId(serverName);
+        long total = entries.size();
+        long success = entries.stream().filter(e -> "SUCCESS".equals(e.getStatus())).count();
         return total == 0 ? -1.0 : (double) success / total;
     }
 
     /**
-     * Get success rate for a specific tool.
+     * Get success rate for a tool.
      */
-    public double getToolSuccessRate(String serverName, String toolName) {
-        long total = entries.stream()
-                .filter(e -> e.serverName.equals(serverName) && e.toolName.equals(toolName)).count();
-        long success = entries.stream()
-                .filter(e -> e.serverName.equals(serverName) && e.toolName.equals(toolName) && e.success).count();
+    public double getToolSuccessRate(String toolName) {
+        List<McpAuditLogEntity> entries = jpaRepo.findByToolName(toolName);
+        long total = entries.size();
+        long success = entries.stream().filter(e -> "SUCCESS".equals(e.getStatus())).count();
         return total == 0 ? -1.0 : (double) success / total;
     }
 
     /**
-     * Get average latency for a tool.
+     * Get recent entries.
      */
-    public long getAvgLatency(String serverName, String toolName) {
-        return (long) entries.stream()
-                .filter(e -> e.serverName.equals(serverName) && e.toolName.equals(toolName))
-                .mapToLong(e -> e.latencyMs)
-                .average()
-                .orElse(-1.0);
-    }
-
-    /**
-     * Get recent failures (for alerting).
-     */
-    public List<AuditEntry> getRecentFailures(int limit) {
-        return entries.stream()
-                .filter(e -> !e.success)
-                .sorted((a, b) -> b.timestamp.compareTo(a.timestamp))
-                .limit(limit)
+    public List<AuditEntry> getRecentEntries(int count) {
+        return jpaRepo.findAll().stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .limit(count)
+                .map(this::toDomain)
                 .toList();
     }
 
     /**
-     * Get all entries for a server.
+     * Get total entry count.
      */
-    public List<AuditEntry> getByServer(String serverName, int limit) {
-        return entries.stream()
-                .filter(e -> e.serverName.equals(serverName))
-                .sorted((a, b) -> b.timestamp.compareTo(a.timestamp))
-                .limit(limit)
-                .toList();
+    public int getEntryCount() {
+        return (int) jpaRepo.count();
+    }
+
+    /**
+     * Get statistics.
+     */
+    public Map<String, Object> getStats() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        long total = jpaRepo.count();
+        stats.put("totalEntries", total);
+        stats.put("totalSuccess", jpaRepo.findAll().stream().filter(e -> "SUCCESS".equals(e.getStatus())).count());
+        stats.put("totalFailed", jpaRepo.findAll().stream().filter(e -> "FAILED".equals(e.getStatus())).count());
+        return stats;
     }
 
     private String truncate(String s, int maxLen) {
@@ -106,11 +103,24 @@ public class McpAuditLog {
         return s.length() > maxLen ? s.substring(0, maxLen) + "..." : s;
     }
 
+    private AuditEntry toDomain(McpAuditLogEntity e) {
+        return new AuditEntry(
+                e.getCreatedAt() != null ? e.getCreatedAt().toLocalDateTime() : null,
+                e.getServerId(),
+                e.getToolName(),
+                e.getInputSummary(),
+                e.getOutputSummary(),
+                "SUCCESS".equals(e.getStatus()),
+                e.getDurationMs() != null ? e.getDurationMs() : 0,
+                null
+        );
+    }
+
     /**
      * Audit entry record.
      */
     public record AuditEntry(
-            LocalDateTime timestamp,
+            java.time.LocalDateTime timestamp,
             String serverName,
             String toolName,
             String inputSummary,

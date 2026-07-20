@@ -11,62 +11,121 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * JWT 工具类（密钥从配置文件读取，避免硬编码）
- */
 @Component
 @Slf4j
 public class JwtUtil {
 
-    // 从配置文件读取，生产环境通过环境变量 JWT_SECRET 注入
-    @Value("${jwt.secret:yu-ai-agent-default-dev-secret-key-please-change-in-prod}")
+    public static final String TYP_ACCESS = "access";
+    public static final String TYP_REFRESH = "refresh";
+
+    /** Must be set via env / application-local.yml — no insecure default in code. */
+    @Value("${jwt.secret}")
     private String secretStr;
 
-    // Token 有效期：7天
-    private static final long EXPIRE_MS = 7L * 24 * 60 * 60 * 1000;
+    @Value("${jwt.access-expire-ms:1800000}")
+    private long accessExpireMs;
+
+    @Value("${jwt.refresh-expire-ms:1209600000}")
+    private long refreshExpireMs;
 
     private byte[] getSecret() {
+        if (secretStr == null || secretStr.isBlank()) {
+            throw new IllegalStateException(
+                    "jwt.secret is empty — set JWT_SECRET or use application-local.yml (profile=local)");
+        }
         return secretStr.getBytes();
     }
 
-    /**
-     * 生成 Token
-     */
     public String generateToken(String userId, String username) {
+        return generateAccessToken(userId, username, UserRole.GUEST);
+    }
+
+    public String generateAccessToken(String userId, String username, UserRole role) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("userId", userId);
         payload.put("username", username);
-        payload.put("exp", DateUtil.offsetMillisecond(new Date(), (int) EXPIRE_MS).getTime());
+        payload.put("role", role.name());
+        payload.put("typ", TYP_ACCESS);
+        long ttl = Math.min(accessExpireMs, Integer.MAX_VALUE);
+        payload.put("exp", DateUtil.offsetMillisecond(new Date(), (int) ttl).getTime());
         return JWTUtil.createToken(payload, getSecret());
     }
 
-    /**
-     * 验证 Token 并返回 userId，无效则返回 null
-     */
+    public String generateRefreshJwt(String userId, String username, UserRole role) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("userId", userId);
+        payload.put("username", username);
+        payload.put("role", role.name());
+        payload.put("typ", TYP_REFRESH);
+        long ttl = Math.min(refreshExpireMs, Integer.MAX_VALUE);
+        payload.put("exp", DateUtil.offsetMillisecond(new Date(), (int) ttl).getTime());
+        return JWTUtil.createToken(payload, getSecret());
+    }
+
+    public long getRefreshExpireMs() {
+        return refreshExpireMs;
+    }
+
+    public long getAccessExpireMs() {
+        return accessExpireMs;
+    }
+
     public String validateToken(String token) {
+        AuthPrincipal principal = validateAccessToken(token);
+        return principal != null ? principal.userId() : null;
+    }
+
+    public AuthPrincipal validateAccessToken(String token) {
         try {
             if (!JWTUtil.verify(token, getSecret())) {
                 return null;
             }
             JWT jwt = JWTUtil.parseToken(token);
-            Object expObj = jwt.getPayload("exp");
-            long exp = 0;
-            if (expObj instanceof Number num) {
-                exp = num.longValue();
-            }
-            if (exp > 0 && exp < System.currentTimeMillis()) {
+            if (!isNotExpired(jwt)) {
                 return null;
             }
-            return (String) jwt.getPayload("userId");
+            Object typ = jwt.getPayload("typ");
+            if (typ != null && !TYP_ACCESS.equals(String.valueOf(typ))) {
+                return null;
+            }
+            String userId = (String) jwt.getPayload("userId");
+            String username = (String) jwt.getPayload("username");
+            UserRole role = UserRole.from((String) jwt.getPayload("role"));
+            if (userId == null || userId.isBlank()) {
+                return null;
+            }
+            return new AuthPrincipal(userId, username != null ? username : "游客", role);
         } catch (Exception e) {
-            log.warn("Token 验证失败: {}", e.getMessage());
+            log.warn("Access token validation failed: {}", e.getMessage());
             return null;
         }
     }
 
-    /**
-     * 从 Token 中获取用户名
-     */
+    public AuthPrincipal validateRefreshJwt(String token) {
+        try {
+            if (!JWTUtil.verify(token, getSecret())) {
+                return null;
+            }
+            JWT jwt = JWTUtil.parseToken(token);
+            if (!isNotExpired(jwt)) {
+                return null;
+            }
+            if (!TYP_REFRESH.equals(String.valueOf(jwt.getPayload("typ")))) {
+                return null;
+            }
+            String userId = (String) jwt.getPayload("userId");
+            String username = (String) jwt.getPayload("username");
+            UserRole role = UserRole.from((String) jwt.getPayload("role"));
+            if (userId == null) {
+                return null;
+            }
+            return new AuthPrincipal(userId, username, role);
+        } catch (Exception e) {
+            log.warn("Refresh JWT validation failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
     public String getUsername(String token) {
         try {
             JWT jwt = JWTUtil.parseToken(token);
@@ -74,5 +133,14 @@ public class JwtUtil {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private boolean isNotExpired(JWT jwt) {
+        Object expObj = jwt.getPayload("exp");
+        long exp = 0;
+        if (expObj instanceof Number num) {
+            exp = num.longValue();
+        }
+        return exp <= 0 || exp >= System.currentTimeMillis();
     }
 }

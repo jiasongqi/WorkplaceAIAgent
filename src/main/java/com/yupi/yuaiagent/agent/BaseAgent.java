@@ -83,6 +83,11 @@ public abstract class BaseAgent {
         try {
             // 执行循环
             for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
+                if (Thread.currentThread().isInterrupted()) {
+                    log.info("Agent execution interrupted for name={}", name);
+                    state = AgentState.FINISHED;
+                    break;
+                }
                 int stepNumber = i + 1;
                 currentStep = stepNumber;
                 log.info("Executing step {}/{}", stepNumber, maxSteps);
@@ -134,6 +139,11 @@ public abstract class BaseAgent {
             messageList.add(new UserMessage(userPrompt));
             try {
                 for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        log.info("Agent stream execution interrupted for name={}", name);
+                        state = AgentState.FINISHED;
+                        break;
+                    }
                     currentStep = i + 1;
                     log.info("Executing step {}/{}", currentStep, maxSteps);
                     String stepResult = step();
@@ -144,12 +154,14 @@ public abstract class BaseAgent {
                     externalEmitter.send(SseEmitter.event().name("message")
                             .data("执行结束：达到最大步骤（" + maxSteps + "）"));
                 }
+                externalEmitter.send(SseEmitter.event().data("[DONE]"));
                 externalEmitter.complete();
             } catch (Exception e) {
                 state = AgentState.ERROR;
                 log.error("error executing agent", e);
                 try {
                     externalEmitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
+                    externalEmitter.send(SseEmitter.event().data("[DONE]"));
                     externalEmitter.complete();
                 } catch (IOException ex) {
                     externalEmitter.completeWithError(ex);
@@ -196,6 +208,11 @@ public abstract class BaseAgent {
             try {
                 // 执行循环
                 for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        log.info("Agent stream execution interrupted for name={}", name);
+                        state = AgentState.FINISHED;
+                        break;
+                    }
                     int stepNumber = i + 1;
                     currentStep = stepNumber;
                     log.info("Executing step {}/{}", stepNumber, maxSteps);
@@ -212,13 +229,15 @@ public abstract class BaseAgent {
                     results.add("Terminated: Reached max steps (" + maxSteps + ")");
                     sseEmitter.send("执行结束：达到最大步骤（" + maxSteps + "）");
                 }
-                // 正常完成
+                // 显式结束标记，避免前端把正常关流当成连接错误
+                sseEmitter.send("[DONE]");
                 sseEmitter.complete();
             } catch (Exception e) {
                 state = AgentState.ERROR;
                 log.error("error executing agent", e);
                 try {
                     sseEmitter.send("执行错误：" + e.getMessage());
+                    sseEmitter.send("[DONE]");
                     sseEmitter.complete();
                 } catch (IOException ex) {
                     sseEmitter.completeWithError(ex);

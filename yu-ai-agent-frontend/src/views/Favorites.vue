@@ -75,7 +75,7 @@ onMounted(loadFavorites)
 <style scoped>
 .fav-layout {
   display: flex; flex-direction: column; height: 100vh;
-  background: #f0f2f5; overflow: hidden;
+  background: var(--bg-page, #0a0a0f); overflow: hidden;
 }
 .header {
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
@@ -104,15 +104,15 @@ onMounted(loadFavorites)
 .fav-role { font-size: 14px; margin-left: auto; }
 
 .fav-content {
-  font-size: 14px; color: #1f2937; line-height: 1.6;
+  font-size: 14px; color: var(--text, #e5e7eb); line-height: 1.6;
   white-space: pre-wrap; word-break: break-word;
   max-height: 120px; overflow: hidden; position: relative;
 }
 
 .fav-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
-.fav-time { font-size: 11px; color: #9ca3af; }
+.fav-time { font-size: 11px; color: var(--text-muted, #6b7280); }
 .remove-btn {
-  background: none; border: 1px solid #e5e7eb; border-radius: 6px;
+  background: none; border: 1px solid var(--glass-border, rgba(255,255,255,0.1)); border-radius: 6px;
   padding: 4px 10px; font-size: 12px; color: var(--text-muted); cursor: pointer;
 }
 .remove-btn:hover { border-color: #dc2626; color: #dc2626; }

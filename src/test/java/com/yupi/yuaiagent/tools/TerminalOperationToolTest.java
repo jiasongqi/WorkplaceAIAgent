@@ -32,7 +32,7 @@ class TerminalOperationToolTest {
 
         TerminalOperationTool terminalOperationTool = new TerminalOperationTool(sandboxFactory);
         String command = "dir";
-        String result = terminalOperationTool.executeTerminalCommand(command);
+        String result = terminalOperationTool.executeTerminalCommand(command, "");
         Assertions.assertNotNull(result);
     }
 }

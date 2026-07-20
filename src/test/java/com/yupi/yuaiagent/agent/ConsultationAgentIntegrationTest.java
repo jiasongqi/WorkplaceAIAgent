@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,7 +29,7 @@ import static org.mockito.Mockito.when;
  * 预约咨询完整流程集成测试（任务 11.2）
  *
  * <p>覆盖：意图识别 → 追问收集 → 确认 → 创建预约 → 持久化 端到端流程。
- * 日历 API 通过 {@link MockBean} 隔离，不依赖外部服务。</p>
+ * 日历 API 通过 {@link MockitoBean} 隔离，不依赖外部服务。</p>
  *
  * <p><b>Validates: Requirements 1.1, 2.2, 2.7, 5.5, 5.7</b></p>
  */
@@ -49,10 +49,10 @@ class ConsultationAgentIntegrationTest {
     @Autowired
     private InfoValidator infoValidator;
 
-    @MockBean
+    @MockitoBean
     private CalendarServiceFactory calendarServiceFactory;
 
-    @MockBean
+    @MockitoBean
     private CalendarService mockCalendarService;
 
     @Autowired

@@ -92,7 +92,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const API_BASE = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8123/api'
+const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:8123/api'
 
 const documents = ref([])
 const loading = ref(false)
@@ -228,7 +228,7 @@ onMounted(loadDocuments)
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f0f2f5;
+  background: var(--bg-page, #0a0a0f);
   overflow: hidden;
 }
 
@@ -280,10 +280,10 @@ border: 0.5px solid var(--border); box-shadow: none;
 
 /* Document list */
 .doc-list-section { background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 0.5px solid var(--border); }
-.list-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
-.list-title { font-size: 16px; font-weight: 600; margin: 0; }
-.refresh-btn { background: #f3f4f6; border: none; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
-.refresh-btn:hover { background: #e5e7eb; }
+.list-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06)); }
+.list-title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text, #e5e7eb); }
+.refresh-btn { background: var(--glass-hover, rgba(255,255,255,0.06)); border: none; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; color: var(--text-secondary, #a0aec0); }
+.refresh-btn:hover { background: var(--glass-border, rgba(255,255,255,0.1)); }
 .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .placeholder { text-align: center; color: var(--text-muted); font-size: 14px; padding: 40px; }
@@ -294,11 +294,11 @@ border: 0.5px solid var(--border); box-shadow: none;
   align-items: center;
   justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
 .doc-item:last-child { border-bottom: none; }
 .doc-info { flex: 1; }
-.doc-name { font-size: 14px; font-weight: 500; color: #1f2937; }
+.doc-name { font-size: 14px; font-weight: 500; color: var(--text, #e5e7eb); }
 .doc-meta { display: flex; gap: 8px; margin-top: 4px; }
 .doc-size { font-size: 12px; color: #9ca3af; }
 .doc-status {
@@ -330,12 +330,12 @@ border: 0.5px solid var(--border); box-shadow: none;
 .modal {
   background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 400px; width: 90%;
 }
-.modal-text { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+.modal-text { font-size: 15px; font-weight: 500; margin-bottom: 8px; color: var(--text, #e5e7eb); }
 .modal-hint { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .cancel-btn {
-  background: #f3f4f6; border: none; border-radius: 8px; padding: 8px 16px;
-  font-size: 13px; cursor: pointer;
+  background: var(--glass-hover, rgba(255,255,255,0.06)); border: none; border-radius: 8px; padding: 8px 16px;
+  font-size: 13px; cursor: pointer; color: var(--text-secondary, #a0aec0);
 }
 .confirm-delete-btn {
   background: #dc2626; color: var(--text); border: none; border-radius: 8px; padding: 8px 16px;

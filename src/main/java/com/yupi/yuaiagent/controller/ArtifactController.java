@@ -6,6 +6,8 @@ import com.yupi.yuaiagent.artifact.model.ArtifactQuery;
 import com.yupi.yuaiagent.artifact.model.ArtifactSummary;
 import com.yupi.yuaiagent.auth.JwtUtil;
 import com.yupi.yuaiagent.common.Response;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +23,7 @@ import java.util.List;
  * 校验有效性，再用 {@link JwtUtil#getUsername(String)} 取 username，约定 username 等于
  * 配置项 {@code admin.username}（默认 {@code admin}）才视为管理员。
  * <p>
- * 当前项目尚无完整角色体系，故采用上述简化的"管理员用户名"约定。无有效 JWT 或非管理员
+ * 当前项目尚无完整的角色体系，故采用上述简化的"管理员用户名"约定。无有效 JWT 或非管理员
  * 一律返回 403 且不返回任何交付物数据（Req 17.4 / 17.5）。
  *
  * @author jsq
@@ -29,6 +31,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/artifact")
 @Slf4j
+@Tag(name = "产物管理", description = "Agent生成产物的管理（仅管理员）")
 public class ArtifactController {
 
     @Resource
@@ -49,6 +52,7 @@ public class ArtifactController {
      * 非管理员返回 403 且不返回任何交付物数据（Req 17.4 / 17.5）。
      */
     @GetMapping("/list")
+    @Operation(summary = "产物列表", description = "管理员按条件查询Agent生成的产物列表")
     public Response<List<ArtifactSummary>> list(
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String chatId,
@@ -73,6 +77,7 @@ public class ArtifactController {
      * 非管理员返回 403 且不返回任何交付物数据（Req 17.5）。
      */
     @GetMapping("/{artifactId}")
+    @Operation(summary = "产物详情", description = "管理员查看指定产物的完整内容")
     public Response<Artifact> detail(
             @PathVariable String artifactId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {

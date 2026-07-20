@@ -46,28 +46,34 @@ import java.util.concurrent.Executor;
 
 /**
  * 主控 Agent（Orchestrator）
- * 根据用户意图智能分发给对应的专业子 Agent，支持真正的 token 级流式输出。
- * 
- * 路由策略：
- * - RESUME：简历优化、面试技巧、求职相关问题 → ResumeAgent
- * - NEGOTIATION：薪资谈判、涨薪、薪酬分析 → NegotiationAgent
- * - ESCAPE：离职、辞职、劳动纠纷 → EscapeAgent
- * - GENERAL：其他职场问题（人际关系、压力、职业规划等）→ GeneralCareerAgent
- * 
- * 注意：YuManus（工具型 Agent）不再通过 Orchestrator 路由，
- * 可通过 /manus/chat 接口单独调用执行具体任务。
+ * <ul>
+ *   <li>单意图：子 Agent {@code chatStream} 真 token 级 SSE</li>
+ *   <li>多意图：并行辩论 → LLM/规则综合后再推送（非逐 token）</li>
+ * </ul>
+ * workflowMatcher / taskExecutor：脚手架，未接入主聊天路径（见 FEATURES L18）。
+ *
+ * 路由：RESUME / NEGOTIATION / ESCAPE / CONSULTATION / GENERAL；
+ * DATA_QUERY 映射为 GENERAL + 诚实说明（未接业务数据源）。
+ * YuManus 走独立 /manus/chat。
  */
 @Slf4j
 public class OrchestratorAgent {
 
     private final NluPipeline nluPipeline;
     private final DataQueryRouter dataQueryRouter;
-    // V2 workflow infrastructure
+    /** 脚手架：未接入主聊天（FEATURES L18） */
     private final WorkflowMatcher workflowMatcher;
     private final WorkflowRegistry workflowRegistry;
     private final ConversationContextBuilder contextBuilder;
+    /** 脚手架：仅 setAgentRunners，主路径用 CollaborationCoordinator */
     private final TaskExecutor taskExecutor;
     private final ResultAggregator resultAggregator;
+
+    /** DATA_QUERY 未接真实数据源时注入 GENERAL 的说明 */
+    static final String DATA_QUERY_FALLBACK_NOTE = """
+            【数据查询说明】用户想查数据/报表。当前未接入业务数据源，请勿编造数字。
+            请以职场顾问方式给出替代建议：手工统计、问数口径、仪表盘建设步骤。
+            """;
     private final ResumeAgent resumeAgent;
     private final NegotiationAgent negotiationAgent;
     private final EscapeAgent escapeAgent;
@@ -86,6 +92,13 @@ public class OrchestratorAgent {
     private final AccessDecisionService accessDecisionService;
     private final com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector;
     private final Executor agentExecutor;
+    private final com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator collaborationCoordinator;
+    private final RouteHintHolder routeHintHolder = new RouteHintHolder();
+
+    /** Mutable holder so ExpertInvoker can see the latest RouteHint for DATA_QUERY. */
+    private static final class RouteHintHolder {
+        volatile RouteHint hint;
+    }
 
     /**
      * Constructor — uses aggregated {@link OrchestratorDependencies} to reduce parameter count.
@@ -97,7 +110,7 @@ public class OrchestratorAgent {
         this.negotiationAgent = new NegotiationAgent(deps.chatModel(), deps.tools(), deps.queryRewriter(), deps.chatMemoryManager());
         this.escapeAgent = new EscapeAgent(deps.chatModel(), deps.tools(), deps.queryRewriter(), deps.chatMemoryManager());
         this.generalCareerAgent = new GeneralCareerAgent(deps.chatModel(), deps.chatMemoryManager());
-        this.consultationAgent = new ConsultationAgent(deps.chatModel(), deps.chatMemoryManager(), deps.templateConfig(), deps.infoValidator(), deps.calendarServiceFactory(), deps.appointmentRepository());
+        this.consultationAgent = new ConsultationAgent(deps.chatModel(), deps.chatMemoryManager(), deps.templateConfig(), deps.infoValidator(), deps.calendarServiceFactory(), deps.appointmentRepository(), deps.humanApprovalService());
         this.skillExecutor = deps.skillExecutor();
         this.skillRegistry = deps.skillRegistry();
         this.chatMemoryManager = deps.chatMemoryManager();
@@ -106,7 +119,7 @@ public class OrchestratorAgent {
         this.traceRepository = deps.traceRepository();
         this.chatMemoryAdapter = deps.chatMemoryAdapter();
         this.qualityReviewHandler = new QualityReviewHandler(deps.qualityGuardAgent(), deps.qualityModeResolver(), deps.qualityReviewRepository(), deps.traceRecorder());
-        this.contextInjectionService = new ContextInjectionService(deps.userProfileService(), deps.artifactShelf(), deps.messageRepository(), deps.chatMemoryManager(), deps.traceRecorder());
+        this.contextInjectionService = new ContextInjectionService(deps.userProfileService(), deps.artifactShelf(), deps.messageRepository(), deps.chatMemoryManager(), deps.traceRecorder(), deps.reflexionService());
         this.messageRepository = deps.messageRepository();
         this.nluPipeline = deps.nluPipeline();
         this.dataQueryRouter = deps.dataQueryRouter();
@@ -118,6 +131,7 @@ public class OrchestratorAgent {
         this.accessDecisionService = deps.accessDecisionService();
         this.promptInjectionDetector = deps.promptInjectionDetector();
         this.agentExecutor = deps.agentExecutor();
+        this.collaborationCoordinator = deps.collaborationCoordinator();
 
         // Register AgentRunner map on TaskExecutor
         taskExecutor.setAgentRunners(java.util.Map.of(
@@ -147,12 +161,14 @@ public class OrchestratorAgent {
             return nluResult.getClarification();
         }
         AgentIntent intent = nluResult.toAgentIntent();
+        if (intent == AgentIntent.DATA_QUERY) {
+            return generalCareerAgent.chat(message, chatId, DATA_QUERY_FALLBACK_NOTE);
+        }
         return switch (intent) {
             case RESUME -> resumeAgent.chat(message, chatId);
             case NEGOTIATION -> negotiationAgent.chat(message, chatId);
             case ESCAPE -> escapeAgent.chat(message, chatId);
             case CONSULTATION -> consultationAgent.chat(message, chatId);
-            case DATA_QUERY -> "数据查询功能正在建设中";
             default -> generalCareerAgent.chat(message, chatId);
         };
     }
@@ -190,18 +206,8 @@ public class OrchestratorAgent {
 
         // SSE disconnect handling — clean up resources when client disconnects
         final TraceContext finalTraceCtx = traceCtx;
-        emitter.onTimeout(() -> {
-            log.warn("[Orchestrator] SSE timeout for chatId={}", chatId);
-            traceRecorder.failTrace(finalTraceCtx);
-            persistTrace(finalTraceCtx);
-        });
-        emitter.onError(e -> {
-            log.warn("[Orchestrator] SSE error for chatId={}: {}", chatId, e.getMessage());
-            traceRecorder.failTrace(finalTraceCtx);
-            persistTrace(finalTraceCtx);
-        });
 
-        CompletableFuture.runAsync(() -> {
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
             try {
                 // 0. Prompt Injection detection
                 var injectionResult = promptInjectionDetector.detect(message);
@@ -232,10 +238,17 @@ public class OrchestratorAgent {
                                 traceRecorder.endTrace(traceCtx);
                                 persistTrace(traceCtx);
 
+                                chatMemoryAdapter.addUserMessage(chatId, message, MessageSource.USER, null, null);
+                                var skillMsg = chatMemoryAdapter.startAssistantStream(
+                                        chatId, MessageSource.AGENT, "SKILL", "技能");
+                                emitter.send(SseEmitter.event().name("message-start")
+                                        .data("{\"assistantMessageId\":\"" + skillMsg.getMessageId() + "\"}"));
                                 emitter.send(SseEmitter.event()
                                         .name("routing")
                                         .data("[技能匹配]"));
                                 emitter.send(SseEmitter.event().name("message").data(skillResult.toString()));
+                                chatMemoryAdapter.completeAssistant(skillMsg.getMessageId(), skillResult.toString());
+                                emitter.send(SseEmitter.event().data("[DONE]"));
                                 emitter.complete();
                             } else {
                                 // 2. 技能未匹配，走原有路由逻辑
@@ -274,6 +287,19 @@ public class OrchestratorAgent {
             }
         }, agentExecutor);
 
+        emitter.onTimeout(() -> {
+            log.warn("[Orchestrator] SSE timeout for chatId={}, cancelling async task", chatId);
+            future.cancel(true);
+            traceRecorder.failTrace(finalTraceCtx);
+            persistTrace(finalTraceCtx);
+        });
+        emitter.onError(e -> {
+            log.warn("[Orchestrator] SSE error for chatId={}: {}, cancelling async task", chatId, e.getMessage());
+            future.cancel(true);
+            traceRecorder.failTrace(finalTraceCtx);
+            persistTrace(finalTraceCtx);
+        });
+
         return emitter;
     }
 
@@ -295,6 +321,16 @@ public class OrchestratorAgent {
      * 路由到专业 Agent，支持画像注入与对话结束触发。
      */
     private void routeToAgent(String message, String chatId, String userId,
+                              SseEmitter emitter, TraceContext traceCtx) throws IOException {
+        com.yupi.yuaiagent.hitl.AgentRequestContext.set(userId, chatId, null);
+        try {
+            routeToAgentInternal(message, chatId, userId, emitter, traceCtx);
+        } finally {
+            com.yupi.yuaiagent.hitl.AgentRequestContext.clear();
+        }
+    }
+
+    private void routeToAgentInternal(String message, String chatId, String userId,
                               SseEmitter emitter, TraceContext traceCtx) throws IOException {
 
         // Lock routing: if ConsultationAgent has an active session for this chat,
@@ -392,6 +428,16 @@ public class OrchestratorAgent {
             routeHint = nluResult.getRouteHint();
         }
 
+        // DATA_QUERY → treat as GENERAL with honest injection (no fake data)
+        boolean dataQueryRemapped = intents.stream().anyMatch(i -> i == AgentIntent.DATA_QUERY);
+        intents = intents.stream()
+                .map(i -> i == AgentIntent.DATA_QUERY ? AgentIntent.GENERAL : i)
+                .distinct()
+                .toList();
+        if (intents.isEmpty()) {
+            intents = List.of(AgentIntent.GENERAL);
+        }
+
         // ROUTING span — list all target agents
         String agentNames = intents.stream().map(AgentIntent::getAgentName).collect(java.util.stream.Collectors.joining(", "));
         TraceSpan routingSpan = traceRecorder.startSpan(traceCtx, TraceStepType.ROUTING, "路由到" + agentNames);
@@ -399,8 +445,12 @@ public class OrchestratorAgent {
         traceRecorder.putMetadata(routingSpan, "targetAgents", intents.stream().map(Enum::name).collect(java.util.stream.Collectors.joining(",")));
         traceRecorder.endSpan(traceCtx, routingSpan);
 
-        // Pre-compute shared context (profile + artifacts + cross-agent history)
-        String combinedInjection = contextInjectionService.buildCombinedInjection(userId, chatId, traceCtx);
+        // Pre-compute shared context (profile + artifacts + cross-agent + reflexion by intent)
+        String combinedInjection = contextInjectionService.buildCombinedInjection(
+                userId, chatId, traceCtx, intents.get(0).name());
+        if (dataQueryRemapped) {
+            combinedInjection = mergeInjection(combinedInjection, DATA_QUERY_FALLBACK_NOTE);
+        }
 
         // L27: Assemble layered memory context (if MemoryCoordinator is enabled)
         if (memoryCoordinator != null && StringUtils.hasText(userId)) {
@@ -417,69 +467,123 @@ public class OrchestratorAgent {
             }
         }
 
-        // ─── Multi-intent serial execution (V1 群聊模式) ───
-        StringBuilder combinedAnswer = new StringBuilder();
+        // Persist user message first (for history / resume correctness)
+        chatMemoryAdapter.addUserMessage(chatId, message, MessageSource.USER, null, null);
 
-        for (AgentIntent intent : intents) {
-            String memoryType = memoryTypeOf(intent);
-            contextInjectionService.syncCrossAgentMemory(chatId, memoryType, memoryTypeOf(intent));
+        routeHintHolder.hint = routeHint;
+        final String baseInjection = combinedInjection;
+        long turnStart = System.currentTimeMillis();
 
-            // MEMORY_COMPRESSION
-            TraceSpan memorySpan = traceRecorder.startSpan(traceCtx, TraceStepType.MEMORY_COMPRESSION, "记忆压缩检查");
-            chatMemoryManager.autoCompressIfNeeded(memoryType, chatId, traceCtx, status -> {
-                try { emitter.send(SseEmitter.event().name("status").data(status)); }
-                catch (IOException e) { throw new RuntimeException(e); }
-            });
-            traceRecorder.endSpan(traceCtx, memorySpan);
+        String fullAnswer;
+        AgentIntent primaryIntent;
 
-            // Agent turn event
-            emitter.send(SseEmitter.event().name("agent-turn").data(
-                "{\"agentType\":\"" + intent.name() + "\",\"agentName\":\"" + intent.getAgentName() + "\"}"));
+        if (intents.size() == 1) {
+            // ─── Single-intent: true token SSE ───
+            primaryIntent = intents.get(0);
+            emitter.send(SseEmitter.event().name("collaboration")
+                    .data("{\"mode\":\"SINGLE\",\"agents\":\"" + agentNames + "\"}"));
+            sendProgressEvent(emitter, new Object(), primaryIntent, "started", null);
 
-            // SUB_AGENT_EXECUTION span
-            TraceSpan subAgentSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION,
-                intent.getAgentName() + "执行");
-            traceRecorder.putMetadata(subAgentSpan, "agentType", memoryType);
+            TraceSpan subSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION,
+                    primaryIntent.getAgentName() + "执行");
+            fullAnswer = streamSingleExpert(primaryIntent, message, chatId, baseInjection, emitter, traceCtx, subSpan);
+            long dur = System.currentTimeMillis() - turnStart;
+            sendProgressEvent(emitter, new Object(), primaryIntent, "finished", dur);
+            traceRecorder.endSpan(traceCtx, subSpan);
 
-            // Execute agent
-            Flux<String> tokenFlux = switch (intent) {
-                case RESUME -> resumeAgent.chatStream(message, chatId, combinedInjection);
-                case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, combinedInjection);
-                case ESCAPE -> escapeAgent.chatStream(message, chatId, combinedInjection);
-                case CONSULTATION -> consultationAgent.chatStream(message, chatId, combinedInjection);
-                case DATA_QUERY -> dataQueryRouter.chatStream(routeHint, message, chatId);
-                default -> generalCareerAgent.chatStream(message, chatId, combinedInjection);
+            var qualityReview = qualityReviewHandler.review(
+                    message, fullAnswer, chatId, primaryIntent, traceCtx, emitter);
+            if (qualityReview != null
+                    && qualityReview.getOverallScore() < com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator.QUALITY_FAILOVER_THRESHOLD
+                    && primaryIntent != AgentIntent.GENERAL) {
+                emitter.send(SseEmitter.event().name("collaboration").data(
+                        "{\"mode\":\"QUALITY_FAILOVER\",\"score\":" + qualityReview.getOverallScore() + "}"));
+                var failover = collaborationCoordinator.failoverAfterQuality(
+                        primaryIntent,
+                        qualityReview.getSummary() != null ? qualityReview.getSummary()
+                                : "score=" + qualityReview.getOverallScore(),
+                        message, chatId, userId,
+                        (intent, extraInjection) -> invokeExpertSync(intent, message, chatId,
+                                mergeInjection(baseInjection, extraInjection)),
+                        List.of());
+                fullAnswer = failover.finalAnswer() != null ? failover.finalAnswer() : fullAnswer;
+                primaryIntent = failover.failoverIntent() != null ? failover.failoverIntent() : AgentIntent.GENERAL;
+                chunkAndPersistAnswer(chatId, primaryIntent, fullAnswer, emitter);
+            }
+        } else {
+            // ─── Multi-intent: parallel debate then synthesize (chunked push) ───
+            emitter.send(SseEmitter.event().name("collaboration").data(
+                    "{\"mode\":\"PARALLEL_DEBATE\",\"agents\":\"" + agentNames + "\"}"));
+
+            TraceSpan collabSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION, "多专家并行协作");
+            Object sseLock = new Object();
+            var progressListener = new com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator.ProgressListener() {
+                @Override
+                public void onExpertStarted(AgentIntent intent) {
+                    sendProgressEvent(emitter, sseLock, intent, "started", null);
+                }
+
+                @Override
+                public void onExpertFinished(AgentIntent intent, boolean success, long durationMs) {
+                    sendProgressEvent(emitter, sseLock, intent, success ? "finished" : "failed", durationMs);
+                }
             };
 
-            // Collect answer (blocking per agent — serial execution)
-            StringBuilder agentAnswer = new StringBuilder();
-            try {
-                tokenFlux.doOnNext(token -> {
-                    try {
-                        agentAnswer.append(token);
-                        emitter.send(SseEmitter.event().name("message").data(token));
-                    } catch (IOException e) { throw new RuntimeException(e); }
-                }).blockLast(); // Block until Flux completes (replaces anti-pattern toStream().count())
-                traceRecorder.endSpan(traceCtx, subAgentSpan);
-            } catch (Exception e) {
-                log.error("Agent {} 执行出错", intent.name(), e);
-                traceRecorder.failSpan(traceCtx, subAgentSpan, e.getMessage());
-                agentAnswer.append("（该专家暂时无法回答）");
-            }
+            var collabResult = collaborationCoordinator.collaborate(
+                    intents, message, chatId, userId,
+                    (intent, extraInjection) -> invokeExpertSync(intent, message, chatId,
+                            mergeInjection(baseInjection, extraInjection)),
+                    progressListener);
 
-            // Persist agent answer with source tracking
-            combinedAnswer.append(agentAnswer);
-            chatMemoryAdapter.addAssistantMessage(chatId, agentAnswer.toString(),
-                MessageSource.AGENT, intent.name(), intent.getAgentName());
+            traceRecorder.putMetadata(collabSpan, "mode", collabResult.mode().name());
+            if (collabResult.handoffArtifactId() != null) {
+                traceRecorder.putMetadata(collabSpan, "handoffArtifactId", collabResult.handoffArtifactId());
+            }
+            if (collabResult.usedFailover()) {
+                traceRecorder.putMetadata(collabSpan, "failoverTo", collabResult.failoverIntent().name());
+                traceRecorder.putMetadata(collabSpan, "failoverReason", collabResult.failoverReason());
+                emitter.send(SseEmitter.event().name("failover").data(
+                        "{\"from\":\"" + collabResult.primaryIntent().name()
+                                + "\",\"to\":\"" + collabResult.failoverIntent().name()
+                                + "\",\"reason\":\"" + escapeJson(collabResult.failoverReason()) + "\"}"));
+            }
+            traceRecorder.endSpan(traceCtx, collabSpan);
+
+            fullAnswer = collabResult.finalAnswer() != null ? collabResult.finalAnswer() : "";
+            primaryIntent = collabResult.failoverIntent() != null
+                    ? collabResult.failoverIntent()
+                    : collabResult.primaryIntent();
+            chunkAndPersistAnswer(chatId, primaryIntent, fullAnswer, emitter);
+
+            var qualityReview = qualityReviewHandler.review(
+                    message, fullAnswer, chatId, collabResult.primaryIntent(), traceCtx, emitter);
+            if (qualityReview != null
+                    && qualityReview.getOverallScore() < com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator.QUALITY_FAILOVER_THRESHOLD
+                    && collabResult.mode() != com.yupi.yuaiagent.agent.collaboration.CollaborationResult.Mode.FAILOVER
+                    && collabResult.primaryIntent() != AgentIntent.GENERAL) {
+                emitter.send(SseEmitter.event().name("collaboration").data(
+                        "{\"mode\":\"QUALITY_FAILOVER\",\"score\":" + qualityReview.getOverallScore() + "}"));
+                var failover = collaborationCoordinator.failoverAfterQuality(
+                        collabResult.primaryIntent(),
+                        qualityReview.getSummary() != null ? qualityReview.getSummary()
+                                : "score=" + qualityReview.getOverallScore(),
+                        message, chatId, userId,
+                        (intent, extraInjection) -> invokeExpertSync(intent, message, chatId,
+                                mergeInjection(baseInjection, extraInjection)),
+                        collabResult.opinions());
+                fullAnswer = failover.finalAnswer() != null ? failover.finalAnswer() : fullAnswer;
+                primaryIntent = failover.failoverIntent() != null ? failover.failoverIntent() : AgentIntent.GENERAL;
+                chunkAndPersistAnswer(chatId, primaryIntent, fullAnswer, emitter);
+            }
         }
 
-        // Quality review on combined answer
-        String fullAnswer = combinedAnswer.toString();
-        AgentIntent primaryIntent = intents.get(0);
-        qualityReviewHandler.review(message, fullAnswer, chatId, primaryIntent, traceCtx, emitter);
-
-        // Persist user message
-        chatMemoryAdapter.addUserMessage(chatId, message, MessageSource.USER, null, null);
+        long durationMs = System.currentTimeMillis() - turnStart;
+        int approxChars = fullAnswer != null ? fullAnswer.length() : 0;
+        emitter.send(SseEmitter.event().name("usage").data(
+                "{\"approxChars\":" + approxChars
+                        + ",\"approxTokens\":" + Math.max(1, approxChars / 2)
+                        + ",\"durationMs\":" + durationMs
+                        + ",\"mode\":\"" + (intents.size() > 1 ? "PARALLEL_DEBATE" : "SINGLE") + "\"}"));
 
         // Finalize trace
         traceRecorder.endTrace(traceCtx);
@@ -489,13 +593,11 @@ public class OrchestratorAgent {
         emitter.complete();
         contextInjectionService.triggerProfileUpdate(userId, memoryTypeOf(primaryIntent), chatId, traceCtx);
 
-        // L27: Trigger memory extraction pipeline (async, non-blocking)
         if (memoryCoordinator != null && StringUtils.hasText(userId)) {
             try {
-                // Create a simple message list from the conversation
                 List<Message> memoryMessages = new java.util.ArrayList<>();
                 memoryMessages.add(new UserMessage(message));
-                memoryMessages.add(new AssistantMessage(fullAnswer));
+                memoryMessages.add(new AssistantMessage(fullAnswer != null ? fullAnswer : ""));
                 memoryCoordinator.onTurnCompleted(userId, chatId, memoryMessages);
             } catch (Exception e) {
                 log.warn("[MemoryCoordinator] extraction trigger failed: {}", e.getMessage());
@@ -503,16 +605,128 @@ public class OrchestratorAgent {
         }
     }
 
-    // queryReadyArtifacts, buildArtifactContext, buildCrossAgentContext,
-    // markArtifactsConsumed, mergeInjection → delegated to ContextInjectionService
+    /**
+     * True token-level SSE for a single specialist; persists assistant message.
+     */
+    private String streamSingleExpert(AgentIntent intent, String message, String chatId,
+                                      String injection, SseEmitter emitter, TraceContext traceCtx,
+                                      TraceSpan subSpan) {
+        String memoryType = memoryTypeOf(intent);
+        contextInjectionService.syncCrossAgentMemory(chatId, memoryType, memoryType);
 
-    // runQualityReview → delegated to QualityReviewHandler
+        Flux<String> tokenFlux = switch (intent) {
+            case RESUME -> resumeAgent.chatStream(message, chatId, injection);
+            case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, injection);
+            case ESCAPE -> escapeAgent.chatStream(message, chatId, injection);
+            case CONSULTATION -> consultationAgent.chatStream(message, chatId, injection);
+            default -> generalCareerAgent.chatStream(message, chatId, injection);
+        };
 
-    // triggerProfileUpdate → delegated to ContextInjectionService
+        var streamingMsg = chatMemoryAdapter.startAssistantStream(
+                chatId, MessageSource.AGENT, intent.name(), intent.getAgentName());
+        try {
+            emitter.send(SseEmitter.event().name("message-start")
+                    .data("{\"assistantMessageId\":\"" + streamingMsg.getMessageId()
+                            + "\",\"agentType\":\"" + intent.name() + "\"}"));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        StringBuilder agentAnswer = new StringBuilder();
+        java.util.concurrent.atomic.AtomicLong lastFlush =
+                new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis());
+        try {
+            tokenFlux.doOnNext(token -> {
+                try {
+                    agentAnswer.append(token);
+                    emitter.send(SseEmitter.event().name("message").data(token));
+                    long now = System.currentTimeMillis();
+                    if (now - lastFlush.get() >= 500L || agentAnswer.length() % 40 == 0) {
+                        chatMemoryAdapter.updateAssistantPartial(
+                                streamingMsg.getMessageId(), agentAnswer.toString());
+                        lastFlush.set(now);
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).blockLast();
+            chatMemoryAdapter.completeAssistant(streamingMsg.getMessageId(), agentAnswer.toString());
+            if (subSpan != null) {
+                traceRecorder.putMetadata(subSpan, "agentType", memoryType);
+            }
+            return agentAnswer.toString();
+        } catch (Exception e) {
+            log.error("Agent {} stream failed", intent.name(), e);
+            if (subSpan != null && traceCtx != null) {
+                traceRecorder.failSpan(traceCtx, subSpan, e.getMessage());
+            }
+            if (agentAnswer.isEmpty()) {
+                agentAnswer.append("（该专家暂时无法回答）");
+            }
+            chatMemoryAdapter.updateAssistantPartial(streamingMsg.getMessageId(), agentAnswer.toString());
+            chatMemoryAdapter.markAssistantPartial(streamingMsg.getMessageId());
+            return agentAnswer.toString();
+        }
+    }
+
+    private void chunkAndPersistAnswer(String chatId, AgentIntent intent, String fullAnswer,
+                                       SseEmitter emitter) throws IOException {
+        String text = fullAnswer != null ? fullAnswer : "";
+        var streamingMsg = chatMemoryAdapter.startAssistantStream(
+                chatId, MessageSource.AGENT, intent.name(), intent.getAgentName());
+        emitter.send(SseEmitter.event().name("message-start")
+                .data("{\"assistantMessageId\":\"" + streamingMsg.getMessageId()
+                        + "\",\"agentType\":\"" + intent.name() + "\"}"));
+        int chunkSize = 40;
+        for (int i = 0; i < text.length(); i += chunkSize) {
+            emitter.send(SseEmitter.event().name("message")
+                    .data(text.substring(i, Math.min(i + chunkSize, text.length()))));
+        }
+        chatMemoryAdapter.completeAssistant(streamingMsg.getMessageId(), text);
+    }
 
     /**
-     * 将路由意图映射为子 Agent 在 ChatMemoryManager 中使用的记忆类型 key。
+     * Synchronously invoke a specialist agent (used by parallel collaboration).
      */
+    private String invokeExpertSync(AgentIntent intent, String message, String chatId,
+                                    String injection) {
+        String memoryType = memoryTypeOf(intent);
+        contextInjectionService.syncCrossAgentMemory(chatId, memoryType, memoryType);
+
+        Flux<String> tokenFlux = switch (intent) {
+            case RESUME -> resumeAgent.chatStream(message, chatId, injection);
+            case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, injection);
+            case ESCAPE -> escapeAgent.chatStream(message, chatId, injection);
+            case CONSULTATION -> consultationAgent.chatStream(message, chatId, injection);
+            case DATA_QUERY -> generalCareerAgent.chatStream(message, chatId,
+                    mergeInjection(injection, DATA_QUERY_FALLBACK_NOTE));
+            default -> generalCareerAgent.chatStream(message, chatId, injection);
+        };
+        StringBuilder sb = new StringBuilder();
+        tokenFlux.doOnNext(sb::append).blockLast();
+        return sb.toString();
+    }
+
+    /**
+     * Emits an "agent-progress" SSE event: {"agent":"...","status":"started|finished|failed","durationMs":123}.
+     */
+    private void sendProgressEvent(SseEmitter emitter, Object lock, AgentIntent intent, String status, Long durationMs) {
+        try {
+            synchronized (lock) {
+                String data = "{\"agent\":\"" + intent.name() + "\",\"status\":\"" + status + "\""
+                        + (durationMs != null ? ",\"durationMs\":" + durationMs : "") + "}";
+                emitter.send(SseEmitter.event().name("agent-progress").data(data));
+            }
+        } catch (Exception e) {
+            log.debug("[Orchestrator] agent-progress emit skipped: {}", e.getMessage());
+        }
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "'").replace("\n", " ");
+    }
+
     private String memoryTypeOf(AgentIntent intent) {
         return switch (intent) {
             case RESUME -> "resume";
@@ -524,9 +738,6 @@ public class OrchestratorAgent {
         };
     }
 
-    /**
-     * Persists the trace to the repository (fail-safe).
-     */
     private void persistTrace(TraceContext traceCtx) {
         try {
             traceRepository.save(traceCtx.getTrace());
@@ -538,6 +749,4 @@ public class OrchestratorAgent {
             log.error("[trace] failed to persist trace", e);
         }
     }
-
-    // containsCareerKeyword, keywordRouteIntent → delegated to KeywordRouter
 }

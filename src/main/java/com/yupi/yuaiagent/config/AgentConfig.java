@@ -32,6 +32,7 @@ import com.yupi.yuaiagent.workflow.WorkflowRegistry;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vectorstore.VectorStore;
+import com.yupi.yuaiagent.auth.AuthProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,7 +45,7 @@ import java.util.concurrent.Executor;
  * @author jsq
  */
 @Configuration
-@EnableConfigurationProperties({CalendarConfig.class, CompressionConfig.class})
+@EnableConfigurationProperties({CalendarConfig.class, CompressionConfig.class, AuthProperties.class})
 public class AgentConfig {
 
     /**
@@ -114,7 +115,11 @@ public class AgentConfig {
             AccessDecisionService accessDecisionService,
             @org.springframework.beans.factory.annotation.Qualifier("agentExecutor") Executor agentExecutor,
             @org.springframework.lang.Nullable MemoryCoordinator memoryCoordinator,
-            com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector) {
+            com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector,
+            com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator collaborationCoordinator,
+            com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
+            com.yupi.yuaiagent.metrics.AgentExecutionMetrics agentExecutionMetrics,
+            com.yupi.yuaiagent.hitl.HumanApprovalService humanApprovalService) {
         var deps = new OrchestratorDependencies(
                 dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, chatMemoryManager,
                 followUpTemplateConfig, infoValidator, calendarServiceFactory, appointmentRepository,
@@ -123,7 +128,8 @@ public class AgentConfig {
                 qualityGuardAgent, qualityModeResolver, qualityReviewRepository, messageRepository,
                 nluPipeline, dataQueryRouter,
                 workflowMatcher, workflowRegistry, contextBuilder, taskExecutor, resultAggregator,
-                accessDecisionService, agentExecutor, memoryCoordinator, promptInjectionDetector);
+                accessDecisionService, agentExecutor, memoryCoordinator, promptInjectionDetector,
+                collaborationCoordinator, reflexionService, agentExecutionMetrics, humanApprovalService);
         return new OrchestratorAgent(deps);
     }
 

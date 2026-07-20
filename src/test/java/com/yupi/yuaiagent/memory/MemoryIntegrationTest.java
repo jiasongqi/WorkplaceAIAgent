@@ -9,6 +9,8 @@ import com.yupi.yuaiagent.memory.sliding.SlidingWindowLayer;
 import com.yupi.yuaiagent.memory.summary.SummaryChecklist;
 import com.yupi.yuaiagent.memory.summary.SummaryLayer;
 import com.yupi.yuaiagent.profile.UserProfileService;
+import com.yupi.yuaiagent.repository.entity.UserFactEntity;
+import com.yupi.yuaiagent.repository.jpa.UserFactJpaRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,9 +25,14 @@ import org.springframework.ai.chat.model.ChatModel;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -67,6 +74,12 @@ class MemoryIntegrationTest {
     @Mock
     private ChatModel mockChatModel;
 
+    @Mock
+    private UserFactJpaRepository userFactJpaRepository;
+
+    /** In-memory simulation of the JPA repo, mirroring {@code FactStoreLayerTest}. */
+    private final Map<String, List<UserFactEntity>> factStoreBackingMap = new HashMap<>();
+
     private TokenBudgetAllocator budgetAllocator;
     private FactStoreLayer factStoreLayer;
     private SummaryLayer summaryLayer;
@@ -83,10 +96,11 @@ class MemoryIntegrationTest {
         // Real TokenBudgetAllocator (L1=60%, L2=15%, L3=10%, L4=15%)
         budgetAllocator = new TokenBudgetAllocator(60, 15, 10, 15);
 
-        // Real FactStoreLayer with temp directory
+        // Real FactStoreLayer backed by a mocked JPA repo (in-memory map simulation)
         lenient().when(userProfileService.get(anyString())).thenReturn(Optional.empty());
+        setupJpaMock();
         factStoreLayer = new FactStoreLayer(
-                tempDir.resolve("facts").toString(),
+                userFactJpaRepository,
                 budgetAllocator,
                 userProfileService
         );
@@ -103,6 +117,7 @@ class MemoryIntegrationTest {
         invokeInit(summaryLayer);
 
         // Wire together with mocked external dependencies
+        Executor directExecutor = Runnable::run;
         coordinator = new MemoryCoordinator(
                 slidingWindowLayer,
                 factStoreLayer,
@@ -110,6 +125,7 @@ class MemoryIntegrationTest {
                 experienceStoreLayer,
                 budgetAllocator,
                 extractionPipeline,
+                directExecutor,
                 TIMEOUT_MS,
                 TOTAL_BUDGET
         );
@@ -123,6 +139,35 @@ class MemoryIntegrationTest {
         Method initMethod = component.getClass().getDeclaredMethod("init");
         initMethod.setAccessible(true);
         initMethod.invoke(component);
+    }
+
+    /**
+     * Simulates JPA persistence for {@link FactStoreLayer} via an in-memory map,
+     * mirroring the approach used in {@code FactStoreLayerTest}.
+     */
+    private void setupJpaMock() {
+        lenient().when(userFactJpaRepository.findByUserId(anyString())).thenAnswer(inv -> {
+            String userId = inv.getArgument(0);
+            return factStoreBackingMap.getOrDefault(userId, new ArrayList<>());
+        });
+        lenient().when(userFactJpaRepository.findByUserIdAndFactKey(anyString(), anyString())).thenAnswer(inv -> {
+            String userId = inv.getArgument(0);
+            String factKey = inv.getArgument(1);
+            return factStoreBackingMap.getOrDefault(userId, new ArrayList<>()).stream()
+                    .filter(e -> factKey.equals(e.getFactKey()))
+                    .findFirst();
+        });
+        lenient().when(userFactJpaRepository.save(any(UserFactEntity.class))).thenAnswer(inv -> {
+            UserFactEntity entity = inv.getArgument(0);
+            List<UserFactEntity> userFacts = factStoreBackingMap.computeIfAbsent(entity.getUserId(), k -> new ArrayList<>());
+            userFacts.removeIf(e -> e.getFactKey().equals(entity.getFactKey()));
+            if (entity.getId() == null) {
+                entity.setId((long) (userFacts.size() + 1));
+            }
+            entity.setUpdatedAt(OffsetDateTime.now());
+            userFacts.add(entity);
+            return entity;
+        });
     }
 
     @Nested

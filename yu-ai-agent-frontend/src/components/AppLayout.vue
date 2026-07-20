@@ -11,6 +11,7 @@
     <div class="app-content">
       <!-- Topbar -->
       <header class="topbar">
+        <button class="hamburger-btn" @click="mobileNavOpen = !mobileNavOpen" aria-label="Toggle menu">☰</button>
         <div class="logo-area" @click="$router.push('/')">
           <div class="logo-orb"></div>
           <span class="logo-text">WorkPilot</span>
@@ -28,14 +29,56 @@
           </router-link>
         </nav>
         <div class="topbar-r">
-          <button class="tb-btn" @click="$router.push('/knowledge')" title="知识库"><BookOpen :size="16" /></button>
-          <button class="tb-btn" @click="$router.push('/artifacts')" title="交付物"><ClipboardList :size="16" /></button>
-          <button class="tb-btn" @click="$router.push('/favorites')" title="收藏"><Star :size="16" /></button>
-          <button class="tb-btn" @click="$router.push('/usage')" title="用量"><BarChart3 :size="16" /></button>
-          <button class="tb-btn" @click="$router.push('/admin')" title="管理"><Settings :size="16" /></button>
+          <button class="tb-btn" @click="$router.push('/knowledge')" title="知识库">📚</button>
+          <button class="tb-btn" @click="$router.push('/artifacts')" title="交付物">📦</button>
+          <button class="tb-btn" @click="$router.push('/favorites')" title="收藏">⭐</button>
+          <button class="tb-btn" @click="$router.push('/usage')" title="用量">📊</button>
+          <button class="tb-btn" @click="$router.push('/admin')" title="管理">⚙️</button>
           <div class="user-orb">{{ userInitial }}</div>
         </div>
       </header>
+
+      <!-- Mobile nav drawer -->
+      <Transition name="drawer">
+        <div v-if="mobileNavOpen" class="mobile-drawer-overlay" @click.self="mobileNavOpen = false">
+          <nav class="mobile-drawer">
+            <div class="drawer-header">
+              <div class="logo-area">
+                <div class="logo-orb"></div>
+                <span class="logo-text">WorkPilot</span>
+              </div>
+              <button class="drawer-close" @click="mobileNavOpen = false">×</button>
+            </div>
+            <router-link
+              v-for="item in navItems"
+              :key="item.path"
+              :to="item.path"
+              class="drawer-link"
+              :class="{ active: isActive(item.path) }"
+              @click="mobileNavOpen = false"
+            >
+              <span class="nav-icon">{{ item.icon }}</span>
+              <span>{{ item.label }}</span>
+            </router-link>
+            <div class="drawer-divider"></div>
+            <router-link class="drawer-link" to="/knowledge" @click="mobileNavOpen = false">
+              <span class="nav-icon">📚</span><span>知识库</span>
+            </router-link>
+            <router-link class="drawer-link" to="/artifacts" @click="mobileNavOpen = false">
+              <span class="nav-icon">📦</span><span>交付物</span>
+            </router-link>
+            <router-link class="drawer-link" to="/favorites" @click="mobileNavOpen = false">
+              <span class="nav-icon">⭐</span><span>收藏</span>
+            </router-link>
+            <router-link class="drawer-link" to="/usage" @click="mobileNavOpen = false">
+              <span class="nav-icon">📊</span><span>用量</span>
+            </router-link>
+            <router-link class="drawer-link" to="/admin" @click="mobileNavOpen = false">
+              <span class="nav-icon">⚙️</span><span>管理</span>
+            </router-link>
+          </nav>
+        </div>
+      </Transition>
 
       <!-- Main view -->
       <div class="main-view">
@@ -52,9 +95,9 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { BookOpen, ClipboardList, Star, BarChart3, Settings } from 'lucide-vue-next'
 
 const route = useRoute()
+const mobileNavOpen = ref(false)
 const username = ref(localStorage.getItem('username') || '用户')
 const userInitial = computed(() => (username.value || 'U').charAt(0).toUpperCase())
 
@@ -209,5 +252,116 @@ const isActive = (path) => {
   .topbar-nav { display: none; }
   .topbar { padding: 12px 16px; }
   .tb-btn:nth-child(n+3) { display: none; }
+  .hamburger-btn { display: flex; }
+}
+
+/* Hamburger button */
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--t2);
+  font-size: 20px;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: background 0.2s var(--ease);
+}
+.hamburger-btn:hover {
+  background: var(--glass-hover);
+}
+
+/* Mobile drawer overlay */
+.mobile-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(5, 6, 13, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.mobile-drawer {
+  width: 260px;
+  height: 100%;
+  background: var(--layer1, #111827);
+  border-right: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.drawer-close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--t3);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.drawer-close:hover {
+  background: var(--glass-hover);
+  color: var(--t1);
+}
+
+.drawer-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  color: var(--t3);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s var(--ease);
+}
+.drawer-link:hover {
+  background: var(--glass-hover);
+  color: var(--t2);
+}
+.drawer-link.active {
+  background: var(--gold-soft);
+  color: var(--gold-text);
+}
+
+.drawer-divider {
+  height: 1px;
+  background: var(--glass-border);
+  margin: 8px 18px;
+}
+
+/* Drawer transition */
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: opacity 0.25s ease;
+}
+.drawer-enter-active .mobile-drawer,
+.drawer-leave-active .mobile-drawer {
+  transition: transform 0.25s ease;
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  opacity: 0;
+}
+.drawer-enter-from .mobile-drawer,
+.drawer-leave-to .mobile-drawer {
+  transform: translateX(-100%);
 }
 </style>

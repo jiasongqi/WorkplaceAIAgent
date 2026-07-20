@@ -3,11 +3,26 @@ spring:
     name: yu-ai-agent
   profiles:
     active: local
-# 临时注释掉，便于大家开发调试和部署（实际填写 PgVector 数据库信息）
-#  datasource:
-#    url: xxx
-#    username: root
-#    password: 123456
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/yuaiagent}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  flyway:
+    enabled: false
   ai:
     dashscope:
       # API Key 通过环境变量 DASHSCOPE_API_KEY 注入，禁止硬编码到代码仓库
@@ -19,22 +34,20 @@ spring:
       base-url: http://localhost:11434
       chat:
         model: gemma3:1b
-# 临时注释掉，便于大家开发调试和部署（实际需要启动 MCP 服务）
-#    mcp:
-#      client:
-#        sse:
-#          connections:
-#            server1:
-#              url: http://localhost:8127
-#        stdio:
-#          servers-configuration: classpath:mcp-servers.json
-# 临时注释掉，便于大家开发调试和部署（实际需要启动 PgVector 数据库）
-#    vectorstore:
-#      pgvector:
-#        index-type: HNSW
-#        dimensions: 1536
-#        distance-type: COSINE_DISTANCE
-#        max-document-batch-size: 10000 # Optional: Maximum number of documents per batch
+    mcp:
+      client:
+        sse:
+          connections:
+            server1:
+              url: http://localhost:8127
+        stdio:
+          servers-configuration: classpath:mcp-servers.json
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        dimensions: 1536
+        distance-type: COSINE_DISTANCE
+        max-document-batch-size: 10000
 server:
   port: 8123
   servlet:
@@ -60,9 +73,11 @@ knife4j:
 search-api:
   # API Key 通过环境变量 SEARCH_API_KEY 注入
   api-key: ${SEARCH_API_KEY:}
-# JWT 密钥（生产环境通过环境变量 JWT_SECRET 注入，避免硬编码）
+# JWT 密钥（本地请用 application-local.yml 或环境变量；生产必须注入 JWT_SECRET）
 jwt:
-  secret: ${JWT_SECRET:yu-ai-agent-default-dev-secret-key-please-change-in-prod}
+  secret: ${JWT_SECRET:}
+  access-expire-ms: ${JWT_ACCESS_EXPIRE_MS:1800000}
+  refresh-expire-ms: ${JWT_REFRESH_EXPIRE_MS:1209600000}
 # 日历服务配置
 calendar:
   # 默认日历服务提供商：FEISHU 或 DINGTALK
@@ -172,6 +187,37 @@ agent:
       similarity-threshold: ${GUARD_LOOP_SIMILARITY_THRESHOLD:0.88}
       # 连续重复次数阈值，达到后注入引导消息
       consecutive-threshold: ${GUARD_LOOP_CONSECUTIVE_THRESHOLD:2}
+
+# ─── 应用层配置 ───
+app:
+  storage:
+    # file = 消息/轨迹落 ./tmp（演示）; jdbc = PostgreSQL MessageStore/TraceStore
+    type: ${STORAGE_TYPE:file}
+  auth:
+    # 默认关闭游客：强制注册/登录，防止 API Token 被刷
+    # 临时演示可设 GUEST_ENABLED=true（且建议同时 GUEST_PASSWORD_REQUIRED=true）
+    guest-enabled: ${GUEST_ENABLED:false}
+    guest-password-required: ${GUEST_PASSWORD_REQUIRED:true}
+    guest-password: ${GUEST_PASSWORD:}
+    admin-password: ${ADMIN_PASSWORD:}
+    storage-dir: ${AUTH_STORAGE_DIR:./tmp/auth}
+    quota:
+      guest:
+        daily-chats: ${QUOTA_GUEST_CHATS:3}
+        daily-tokens: ${QUOTA_GUEST_TOKENS:15000}
+      user:
+        daily-chats: ${QUOTA_USER_CHATS:50}
+        daily-tokens: ${QUOTA_USER_TOKENS:200000}
+      admin:
+        daily-chats: ${QUOTA_ADMIN_CHATS:10000}
+        daily-tokens: ${QUOTA_ADMIN_TOKENS:50000000}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:8123,https://www.codefather.cn}
+  # 人工审批网关（HITL）— 高危副作用操作执行前需人工确认
+  hitl:
+    terminal-require-approval: ${HITL_TERMINAL_APPROVAL:true}
+    calendar-require-approval: ${HITL_CALENDAR_APPROVAL:true}
+    approval-ttl-seconds: ${HITL_APPROVAL_TTL_SECONDS:300}
 
 # 修改日志级别，查看 Spring AI 更多调用细节
 logging:

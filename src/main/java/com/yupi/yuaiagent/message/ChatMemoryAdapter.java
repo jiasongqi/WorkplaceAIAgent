@@ -66,6 +66,41 @@ public class ChatMemoryAdapter {
     }
 
     /**
+     * Creates a STREAMING assistant message before SSE tokens arrive.
+     */
+    public PersistentChatMessage startAssistantStream(String chatId,
+                                                      MessageSource sourceType, String sourceId, String sourceName) {
+        return persistentRepo.startStreaming(chatId, "assistant", sourceType, sourceId, sourceName);
+    }
+
+    public void updateAssistantPartial(String messageId, String partialContent) {
+        persistentRepo.updatePartial(messageId, partialContent);
+    }
+
+    public void completeAssistant(String messageId, String fullContent) {
+        persistentRepo.complete(messageId, fullContent);
+        // Best-effort ChatMemory sync with completed text
+        PersistentChatMessage pm = persistentRepo.findByMessageId(messageId);
+        if (pm != null) {
+            try {
+                syncToChatMemory(pm.getChatId(), pm);
+            } catch (Exception e) {
+                log.warn("[ChatMemoryAdapter] ChatMemory sync after complete failed: {}", e.getMessage());
+            }
+        }
+    }
+
+    public void markAssistantPartial(String messageId) {
+        if (messageId != null) {
+            persistentRepo.markPartial(messageId);
+        }
+    }
+
+    public PersistentChatMessage findByMessageId(String messageId) {
+        return persistentRepo.findByMessageId(messageId);
+    }
+
+    /**
      * Adds a system message. Persists to Truth first, then syncs to ChatMemory.
      */
     public PersistentChatMessage addSystemMessage(String chatId, String content) {

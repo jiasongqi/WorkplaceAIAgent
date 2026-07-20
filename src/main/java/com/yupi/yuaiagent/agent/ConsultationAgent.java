@@ -9,6 +9,8 @@ import com.yupi.yuaiagent.calendar.CalendarService;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.config.FollowUpTemplateConfig;
+import com.yupi.yuaiagent.hitl.AgentRequestContext;
+import com.yupi.yuaiagent.hitl.HumanApprovalService;
 import com.yupi.yuaiagent.repository.AppointmentRepository;
 import com.yupi.yuaiagent.validation.InfoValidator;
 import lombok.extern.slf4j.Slf4j;
@@ -110,6 +112,8 @@ public class ConsultationAgent {
     private final InfoValidator infoValidator;
     private final CalendarServiceFactory calendarServiceFactory;
     private final AppointmentRepository appointmentRepository;
+    /** Nullable — when absent, HITL gating for calendar creation is skipped (e.g. unit tests). */
+    private final HumanApprovalService approvalService;
     
     // 会话状态存储（chatId -> 状态）
     private final Map<String, ConsultationState> sessionStates = new ConcurrentHashMap<>();
@@ -127,11 +131,24 @@ public class ConsultationAgent {
                              FollowUpTemplateConfig templateConfig, InfoValidator infoValidator,
                              CalendarServiceFactory calendarServiceFactory,
                              AppointmentRepository appointmentRepository) {
+        this(chatModel, chatMemoryManager, templateConfig, infoValidator,
+                calendarServiceFactory, appointmentRepository, null);
+    }
+
+    /**
+     * 构造函数（支持 HITL 人工审批网关）
+     */
+    public ConsultationAgent(ChatModel chatModel, ChatMemoryManager chatMemoryManager,
+                             FollowUpTemplateConfig templateConfig, InfoValidator infoValidator,
+                             CalendarServiceFactory calendarServiceFactory,
+                             AppointmentRepository appointmentRepository,
+                             HumanApprovalService approvalService) {
         this.chatMemory = chatMemoryManager.getMemory("consultation");
         this.templateConfig = templateConfig;
         this.infoValidator = infoValidator;
         this.calendarServiceFactory = calendarServiceFactory;
         this.appointmentRepository = appointmentRepository;
+        this.approvalService = approvalService;
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(new MyLoggerAdvisor())
@@ -170,6 +187,21 @@ public class ConsultationAgent {
         return chat(message, chatId, null);
     }
 
+    /** 可预约服务目录（询问「有什么可约」时直接返回，不进入填表） */
+    private static final String SERVICE_CATALOG = """
+            ### 可以预约的咨询服务
+
+            WorkPilot 目前支持一对一预约以下方向（约 30–60 分钟）：
+
+            1. **简历与求职咨询** — 简历优化、投递策略、面试准备
+            2. **薪资谈判咨询** — 谈薪话术、报价区间、涨薪路径
+            3. **离职规划咨询** — 辞职节奏、交接、竞业与补偿风险
+            4. **通用职场咨询** — 晋升、沟通、团队协作等一对一答疑
+
+            想预约的话，直接说方向 + 时间即可，例如：
+            「预约简历咨询，明天下午 3 点」
+            """;
+
     /**
      * 同步对话（支持画像注入）
      *
@@ -186,11 +218,31 @@ public class ConsultationAgent {
         CoreInformation info = sessionInfos.computeIfAbsent(chatId, k -> new CoreInformation());
         
         log.info("ConsultationAgent 处理消息，会话：{}，状态：{}", chatId, state);
+
+        // 取消预约：任意收集阶段可退出，避免路由长期锁定
+        if (isCancelBooking(message) && state != ConsultationState.INITIAL && state != ConsultationState.COMPLETED) {
+            clearSession(chatId);
+            return "好的，已取消本次预约流程。之后想约随时说「我想预约咨询」即可。";
+        }
+
+        // 「有什么可以预约」：先介绍目录，不要当成姓名/时间等槽位答案
+        if (isServiceCatalogInquiry(message)) {
+            String catalog = SERVICE_CATALOG.trim();
+            if (state == ConsultationState.INITIAL || state == ConsultationState.COMPLETED) {
+                // 仅介绍，不进入填表，避免把闲聊锁进预约状态机
+                return catalog;
+            }
+            String pending = currentQuestionFields.get(chatId);
+            if (pending != null) {
+                return catalog + "\n\n---\n若继续刚才的预约，请补充您的**" + renderFieldName(pending) + "**。";
+            }
+            return catalog + "\n\n若要继续预约，请告诉我您想约的方向与时间。";
+        }
         
         // 如果是初始状态，先检测意图
         if (state == ConsultationState.INITIAL) {
             if (!detectConsultationIntent(message)) {
-                return "您好！我是预约咨询助手。如果您需要预约咨询服务，请告诉我您想预约的时间和咨询主题。";
+                return SERVICE_CATALOG.trim() + "\n\n如果您需要预约，请告诉我希望咨询的方向与时间。";
             }
             state = ConsultationState.COLLECTING_INFO;
             sessionStates.put(chatId, state);
@@ -278,6 +330,14 @@ public class ConsultationAgent {
         String currentField = currentQuestionFields.get(chatId);
 
         if (currentField != null) {
+            // 用户在追问中途改口问「能约什么」已在 chat() 入口处理；
+            // 明显不是在答当前槽位时，不要用「请提供具体时间」之类校验文案怼回去
+            if (isOffTopicSlotReply(message, currentField)) {
+                return "我这边先记下您在问预约相关说明。\n\n"
+                        + SERVICE_CATALOG.trim()
+                        + "\n\n---\n若继续预约，请直接回复您的**"
+                        + renderFieldName(currentField) + "**。";
+            }
             if (isCoreField(currentField)) {
                 // 核心字段：校验用户回答（Req 5.6）
                 String validationMessage = validateAnswer(currentField, message);
@@ -324,6 +384,47 @@ public class ConsultationAgent {
      */
     private boolean isCoreField(String fieldName) {
         return CoreInfoType.fromFieldName(fieldName) != null;
+    }
+
+    /** 用户在问「有什么可约 / 服务介绍」，而不是在提交预约槽位 */
+    static boolean isServiceCatalogInquiry(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String m = message.trim();
+        return m.matches("(?s).*(有什么|有哪些|哪些服务|能约什么|可以预约什么|先告诉我|介绍一下).*(预约|咨询).*")
+                || m.matches("(?s).*(预约|咨询).*(什么|哪些|哪些服务|能约什么).*")
+                || m.contains("可以预约什么")
+                || m.contains("有什么可以预约")
+                || m.contains("能预约什么")
+                || m.contains("预约什么服务");
+    }
+
+    static boolean isCancelBooking(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String m = message.trim();
+        return m.contains("取消预约") || m.contains("不约了") || m.contains("取消这次")
+                || "取消".equals(m) || "算了".equals(m) || "不用了".equals(m);
+    }
+
+    /**
+     * 当前在等某个槽位时，用户回复明显不是在填该槽（例如仍在问介绍）。
+     */
+    private boolean isOffTopicSlotReply(String message, String currentField) {
+        if (isServiceCatalogInquiry(message) || isCancelBooking(message)) {
+            return true;
+        }
+        // 等时间时，整句在问「什么/哪些」且不含日期特征 → 不当作时间答案
+        if ("appointmentTime".equals(currentField)) {
+            String m = message == null ? "" : message;
+            boolean askingWhat = m.contains("什么") || m.contains("哪些") || m.contains("介绍");
+            boolean looksLikeTime = m.matches(".*\\d.*") || m.contains("点") || m.contains("号")
+                    || m.contains("明天") || m.contains("后天") || m.contains("周") || m.contains("月");
+            return askingWhat && !looksLikeTime;
+        }
+        return false;
     }
 
     /**
@@ -543,6 +644,26 @@ public class ConsultationAgent {
      * 处理创建预约阶段
      */
     private String handleCreatingAppointment(String message, String chatId, CoreInformation info) {
+        // HITL 网关：日历创建为高危副作用操作，需人工审批（Req: HITL calendar create）
+        if (approvalService != null
+                && approvalService.requiresApproval(HumanApprovalService.ActionType.CALENDAR_CREATE)) {
+            String appointmentSummary = String.format("姓名=%s, 联系方式=%s, 时间=%s, 主题=%s",
+                    info.getName(), info.getContact(),
+                    infoValidator.formatDateTime(info.getAppointmentTime()), info.getTopic());
+            AgentRequestContext.Holder ctx = AgentRequestContext.get();
+            String approvalId = ctx != null ? ctx.approvalId() : null;
+            boolean approved = approvalService.consumeIfApproved(
+                    approvalId, HumanApprovalService.ActionType.CALENDAR_CREATE, appointmentSummary);
+            if (!approved) {
+                String userId = ctx != null ? ctx.userId() : null;
+                HumanApprovalService.ApprovalRequest req = approvalService.requestApproval(
+                        userId, chatId, HumanApprovalService.ActionType.CALENDAR_CREATE,
+                        "创建日历预约：" + appointmentSummary, appointmentSummary);
+                // 保持在 CREATING_APPOINTMENT 状态，等待人工审批后重新触发确认
+                return approvalService.pendingMessage(req);
+            }
+        }
+
         try {
             // 创建预约记录
             Appointment appointment = info.toAppointment(chatId, calendarServiceFactory.getCalendarService().getProvider());

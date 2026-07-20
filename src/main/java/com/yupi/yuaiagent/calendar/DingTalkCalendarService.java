@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yupi.yuaiagent.agent.model.Appointment;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -40,7 +42,10 @@ public class DingTalkCalendarService implements CalendarService {
     private final ObjectMapper objectMapper;
 
     public DingTalkCalendarService() {
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = new RestTemplateBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .readTimeout(Duration.ofSeconds(15))
+                .build();
         this.objectMapper = new ObjectMapper();
     }
 

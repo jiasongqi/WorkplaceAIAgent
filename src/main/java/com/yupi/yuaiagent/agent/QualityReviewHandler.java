@@ -48,23 +48,17 @@ public class QualityReviewHandler {
      * Runs quality review after agent answer is complete.
      * Sends quality-review SSE event. Blocks answer if CRITICAL risk.
      *
-     * @param userQuestion original user message
-     * @param agentAnswer  combined agent answer
-     * @param chatId       chat session ID
-     * @param intent       primary routing intent
-     * @param traceCtx     trace context for span recording
-     * @param emitter      SSE emitter for real-time events
+     * @return review result, or null if skipped / failed
      */
-    public void review(String userQuestion, String agentAnswer, String chatId,
-                       AgentIntent intent, TraceContext traceCtx, SseEmitter emitter) {
+    public QualityReview review(String userQuestion, String agentAnswer, String chatId,
+                                AgentIntent intent, TraceContext traceCtx, SseEmitter emitter) {
         if (agentAnswer == null || agentAnswer.isBlank()) {
-            return;
+            return null;
         }
 
-        // Resolve quality mode (AUTO)
         QualityMode mode = qualityModeResolver.resolve(userQuestion, intent, QualityMode.AUTO);
         if (mode == QualityMode.OFF) {
-            return;
+            return null;
         }
 
         TraceSpan reviewSpan = traceRecorder.startSpan(traceCtx, TraceStepType.QUALITY_REVIEW, "质量审查");
@@ -76,23 +70,19 @@ public class QualityReviewHandler {
                 qualityReview = qualityGuardAgent.review(userQuestion, agentAnswer, chatId);
             }
 
-            // Record trace metadata
             traceRecorder.putMetadata(reviewSpan, "overallScore", String.valueOf(qualityReview.getOverallScore()));
             traceRecorder.putMetadata(reviewSpan, "riskLevel", qualityReview.getRiskLevel().name());
             traceRecorder.putMetadata(reviewSpan, "mode", mode.name());
             traceRecorder.endSpan(traceCtx, reviewSpan);
 
-            // Persist HIGH/CRITICAL reviews
             qualityReviewRepository.saveIfHighRisk(qualityReview);
 
-            // Send quality-review SSE event
             try {
                 emitter.send(SseEmitter.event().name("quality-review").data(qualityReview));
             } catch (IOException e) {
                 log.debug("Failed to send quality-review SSE event", e);
             }
 
-            // Block if CRITICAL risk
             if (qualityReview.getRiskLevel().isBlocking()) {
                 TraceSpan blockedSpan = traceRecorder.startSpan(traceCtx, TraceStepType.QUALITY_BLOCKED, "质量阻断");
                 traceRecorder.putMetadata(blockedSpan, "reason", qualityReview.getSummary());
@@ -107,10 +97,12 @@ public class QualityReviewHandler {
             }
 
             log.info("[QualityGuard] mode={}, overall={}, risk={}", mode, qualityReview.getOverallScore(), qualityReview.getRiskLevel());
+            return qualityReview;
 
         } catch (Exception e) {
             log.error("Quality review failed, continuing normally", e);
             traceRecorder.failSpan(traceCtx, reviewSpan, e.getMessage());
+            return null;
         }
     }
 }

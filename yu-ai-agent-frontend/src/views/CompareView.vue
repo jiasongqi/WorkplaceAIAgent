@@ -64,9 +64,10 @@
 import { ref, reactive, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const router = useRouter()
-const API_BASE = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8123/api'
+const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:8123/api'
 
 const question = ref('')
 const isRunning = ref(false)
@@ -86,7 +87,7 @@ const goBack = () => router.push('/')
 
 const renderMarkdown = (text) => {
   if (!text) return ''
-  return marked.parse(text)
+  return DOMPurify.sanitize(marked.parse(text))
 }
 
 const scrollToBottom = async (el) => {
@@ -189,7 +190,7 @@ const saveResult = async () => {
 <style scoped>
 .compare-layout {
   display: flex; flex-direction: column; height: 100vh;
-  background: #f0f2f5; overflow: hidden;
+  background: var(--bg-page, #0a0a0f); overflow: hidden;
 }
 .header {
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
@@ -208,12 +209,13 @@ const saveResult = async () => {
 .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .input-section {
-  display: flex; gap: 12px; padding: 16px 20px; background: var(--surface);
-  border-bottom: 1px solid #e5e7eb;
+  display: flex; gap: 12px; padding: 16px 20px; background: var(--bg-card, #1a1a2e);
+  border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
 .question-input {
-  flex: 1; border: 1px solid #d1d5db; border-radius: var(--radius); padding: 10px 14px;
+  flex: 1; border: 1px solid var(--glass-border, rgba(255,255,255,0.1)); border-radius: var(--radius); padding: 10px 14px;
   font-size: 15px; resize: none; outline: none; font-family: inherit;
+  background: var(--bg-page, #0a0a0f); color: var(--text, #e5e7eb);
 }
 .question-input:focus { border-color: #dc2626; }
 .compare-btn {
@@ -228,13 +230,13 @@ const saveResult = async () => {
 }
 .agent-panel {
   flex: 1; display: flex; flex-direction: column;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
 .agent-panel:last-child { border-right: none; }
 
 .panel-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 16px; border-bottom: 1px solid #e5e7eb;
+  padding: 10px 16px; border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
 .a-header { background: rgba(59,130,246,0.05); }
 .b-header { background: rgba(16,185,129,0.05); }
@@ -251,7 +253,7 @@ const saveResult = async () => {
 .panel-placeholder.thinking { animation: pulse 1.5s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-.panel-text { font-size: 14px; line-height: 1.7; color: #1f2937; }
+.panel-text { font-size: 14px; line-height: 1.7; color: var(--text, #e5e7eb); }
 .panel-text :deep(h1), .panel-text :deep(h2), .panel-text :deep(h3) { font-weight: 600; margin: 10px 0 6px; }
 .panel-text :deep(p) { margin: 6px 0; }
 .panel-text :deep(code) { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
@@ -260,6 +262,6 @@ const saveResult = async () => {
 
 @media (max-width: 768px) {
   .results-area { flex-direction: column; }
-  .agent-panel { border-right: none; border-bottom: 1px solid #e5e7eb; }
+  .agent-panel { border-right: none; border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06)); }
 }
 </style>

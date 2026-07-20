@@ -3,6 +3,7 @@ package com.yupi.yuaiagent.tools;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.http.HttpUtil;
 import com.yupi.yuaiagent.constant.FileConstant;
+import com.yupi.yuaiagent.guard.UrlSafetyGuard;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
@@ -11,7 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * 资源下载工具（含路径穿越校验）
+ * 资源下载工具（路径穿越校验 + SSRF 防护）
  */
 public class ResourceDownloadTool {
 
@@ -19,9 +20,11 @@ public class ResourceDownloadTool {
     public String downloadResource(
             @ToolParam(description = "URL of the resource to download") String url,
             @ToolParam(description = "Name of the file to save the downloaded resource") String fileName) {
+        if (!UrlSafetyGuard.isSafeUrl(url)) {
+            return UrlSafetyGuard.rejectMessage();
+        }
         String fileDir = FileConstant.FILE_SAVE_DIR + "/download";
         try {
-            // 路径穿越校验：防止 fileName 含 "../" 等跳出下载目录
             Path basePath = Paths.get(fileDir).toAbsolutePath().normalize();
             Path resolved = basePath.resolve(fileName).normalize();
             if (!resolved.startsWith(basePath)) {

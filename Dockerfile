@@ -1,16 +1,25 @@
-# 使用预装 Maven 和 JDK21 的镜像
-FROM maven:3.9-amazoncorretto-21
+# Stage 1: Build
+FROM maven:3.9-amazoncorretto-21 AS builder
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn clean package -DskipTests -B
+
+# Stage 2: Runtime
+FROM amazoncorretto:21-alpine
 WORKDIR /app
 
-# 只复制必要的源代码和配置文件
-COPY pom.xml .
-COPY src ./src
+# Non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 
-# 使用 Maven 执行打包
-RUN mvn clean package -DskipTests
+COPY --from=builder /app/target/yu-ai-agent-0.0.1-SNAPSHOT.jar app.jar
 
-# 暴露应用端口
 EXPOSE 8123
 
-# 使用生产环境配置启动应用
-CMD ["java", "-jar", "/app/target/yu-ai-agent-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=prod"]
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:8123/api/actuator/health || exit 1
+
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", \
+            "-jar", "app.jar", "--spring.profiles.active=prod"]

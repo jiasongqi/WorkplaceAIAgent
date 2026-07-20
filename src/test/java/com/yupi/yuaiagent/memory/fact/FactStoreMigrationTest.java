@@ -4,20 +4,32 @@ import com.yupi.yuaiagent.memory.TokenBudgetAllocator;
 import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.profile.model.CommunicationPreference;
 import com.yupi.yuaiagent.profile.model.UserProfile;
+import com.yupi.yuaiagent.repository.entity.UserFactEntity;
+import com.yupi.yuaiagent.repository.jpa.UserFactJpaRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * FactStoreLayer 迁移专项测试
+ * FactStoreLayer 迁移专项测试（旧版文件存储 API）。
+ *
+ * <p>自 FactStoreLayer 迁移到 JPA 持久化（见 {@link FactStoreLayerTest}）后，
+ * 本测试改用 Mock {@link UserFactJpaRepository} 的内存模拟方式重写构造，
+ * 迁移语义（字段映射/懒迁移/幂等性/边界情况）覆盖保持不变。
  *
  * <p>重点验证：
  * <ul>
@@ -35,6 +47,8 @@ class FactStoreMigrationTest {
     private FactStoreLayer factStore;
     private TokenBudgetAllocator allocator;
     private UserProfileService userProfileService;
+    private UserFactJpaRepository jpaRepo;
+    private final Map<String, List<UserFactEntity>> backingStore = new HashMap<>();
 
     @BeforeEach
     void setUp() {
@@ -42,8 +56,37 @@ class FactStoreMigrationTest {
         userProfileService = mock(UserProfileService.class);
         // Default: no profile
         when(userProfileService.get(anyString())).thenReturn(Optional.empty());
-        factStore = new FactStoreLayer(tempDir.toString(), allocator, userProfileService);
+
+        jpaRepo = mock(UserFactJpaRepository.class);
+        setupJpaMock();
+
+        factStore = new FactStoreLayer(jpaRepo, allocator, userProfileService);
         factStore.init();
+    }
+
+    private void setupJpaMock() {
+        when(jpaRepo.findByUserId(anyString())).thenAnswer(inv -> {
+            String userId = inv.getArgument(0);
+            return backingStore.getOrDefault(userId, new ArrayList<>());
+        });
+        when(jpaRepo.findByUserIdAndFactKey(anyString(), anyString())).thenAnswer(inv -> {
+            String userId = inv.getArgument(0);
+            String factKey = inv.getArgument(1);
+            return backingStore.getOrDefault(userId, new ArrayList<>()).stream()
+                    .filter(e -> factKey.equals(e.getFactKey()))
+                    .findFirst();
+        });
+        when(jpaRepo.save(any(UserFactEntity.class))).thenAnswer(inv -> {
+            UserFactEntity entity = inv.getArgument(0);
+            List<UserFactEntity> userFacts = backingStore.computeIfAbsent(entity.getUserId(), k -> new ArrayList<>());
+            userFacts.removeIf(e -> e.getFactKey().equals(entity.getFactKey()));
+            if (entity.getId() == null) {
+                entity.setId((long) (userFacts.size() + 1));
+            }
+            entity.setUpdatedAt(OffsetDateTime.now());
+            userFacts.add(entity);
+            return entity;
+        });
     }
 
     // ========== 1. Field Mapping Correctness ==========

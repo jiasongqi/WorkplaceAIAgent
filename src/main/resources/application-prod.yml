@@ -75,3 +75,20 @@ trace:
 workpilot:
   quality:
     model: ${QUALITY_REVIEW_MODEL:qwen3.7-plus}
+
+# ─── 应用安全（生产环境）───
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:https://www.codefather.cn}
+  auth:
+    guest-enabled: false
+    guest-password-required: true
+    guest-password: ${GUEST_PASSWORD}
+    admin-password: ${ADMIN_PASSWORD}
+    quota:
+      guest:
+        daily-chats: 3
+        daily-tokens: 15000
+      user:
+        daily-chats: 50
+        daily-tokens: 200000

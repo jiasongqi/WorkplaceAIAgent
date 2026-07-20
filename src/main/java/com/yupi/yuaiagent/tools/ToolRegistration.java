@@ -1,5 +1,6 @@
 package com.yupi.yuaiagent.tools;
 
+import com.yupi.yuaiagent.hitl.HumanApprovalService;
 import com.yupi.yuaiagent.sandbox.SandboxFactory;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
@@ -17,12 +18,12 @@ public class ToolRegistration {
     private String searchApiKey;
 
     @Bean
-    public ToolCallback[] allTools(SandboxFactory sandboxFactory) {
+    public ToolCallback[] allTools(SandboxFactory sandboxFactory, HumanApprovalService humanApprovalService) {
         FileOperationTool fileOperationTool = new FileOperationTool();
         WebSearchTool webSearchTool = new WebSearchTool(searchApiKey);
         WebScrapingTool webScrapingTool = new WebScrapingTool();
         ResourceDownloadTool resourceDownloadTool = new ResourceDownloadTool();
-        TerminalOperationTool terminalOperationTool = new TerminalOperationTool(sandboxFactory);
+        TerminalOperationTool terminalOperationTool = new TerminalOperationTool(sandboxFactory, humanApprovalService);
         PDFGenerationTool pdfGenerationTool = new PDFGenerationTool();
         TerminateTool terminateTool = new TerminateTool();
         return ToolCallbacks.from(

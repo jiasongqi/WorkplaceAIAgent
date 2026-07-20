@@ -12,9 +12,18 @@ import java.util.List;
  * @param userProfile         user profile injection text
  * @param conversationSummary compressed conversation summary
  * @param recentMessages      last N messages for LLM context
+ * @param chatId              conversation id (for AgentRunner persistence)
+ * @param injection           extra prompt injection (failover reason, etc.)
  */
 public record ConversationContext(
     String userProfile,
     String conversationSummary,
-    List<Message> recentMessages
-) {}
+    List<Message> recentMessages,
+    String chatId,
+    String injection
+) {
+    /** Backward-compatible 3-arg constructor used by ConversationContextBuilder. */
+    public ConversationContext(String userProfile, String conversationSummary, List<Message> recentMessages) {
+        this(userProfile, conversationSummary, recentMessages, null, null);
+    }
+}

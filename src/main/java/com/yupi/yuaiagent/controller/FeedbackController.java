@@ -3,6 +3,8 @@ package com.yupi.yuaiagent.controller;
 import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.feedback.Feedback;
 import com.yupi.yuaiagent.feedback.FeedbackRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,11 +19,13 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/feedback")
 @RequiredArgsConstructor
+@Tag(name = "反馈", description = "用户对AI回答的评分反馈")
 public class FeedbackController {
 
     private final FeedbackRepository feedbackRepository;
 
     @PostMapping
+    @Operation(summary = "提交反馈", description = "用户对AI回答提交评分反馈（点赞/踩）")
     public Response<String> submitFeedback(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestParam String chatId,
@@ -44,6 +48,7 @@ public class FeedbackController {
     }
 
     @GetMapping("/stats")
+    @Operation(summary = "反馈统计", description = "获取反馈统计数据（点赞数、踩数、好评率）")
     public Response<FeedbackStats> getStats() {
         long totalUp = feedbackRepository.countByRating(Feedback.Rating.UP);
         long totalDown = feedbackRepository.countByRating(Feedback.Rating.DOWN);

@@ -6,6 +6,8 @@ import com.yupi.yuaiagent.exception.BusinessException;
 import com.yupi.yuaiagent.session.SessionManager;
 import com.yupi.yuaiagent.trace.TraceRepository;
 import com.yupi.yuaiagent.trace.model.ExecutionTrace;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/trace")
+@Tag(name = "执行追踪", description = "Agent执行过程追踪与调试")
 public class TraceController {
 
     @Resource
@@ -45,6 +48,7 @@ public class TraceController {
      * The caller must own the trace or own the chat session.
      */
     @GetMapping("/{traceId}")
+    @Operation(summary = "获取单条追踪", description = "根据ID获取单条执行追踪记录")
     public Response<ExecutionTrace> getTrace(
             @PathVariable String traceId,
             @RequestParam(value = "token", required = false) String token,
@@ -67,6 +71,7 @@ public class TraceController {
      * Verifies the caller owns the chat session before returning traces.
      */
     @GetMapping("/chat/{chatId}")
+    @Operation(summary = "按会话查询追踪", description = "按会话ID分页查询执行追踪记录")
     public Response<List<ExecutionTrace>> getTracesByChat(
             @PathVariable String chatId,
             @RequestParam(defaultValue = "1") int pageNum,
@@ -89,6 +94,7 @@ public class TraceController {
      * The caller can only access their own traces.
      */
     @GetMapping("/user/{userId}")
+    @Operation(summary = "按用户查询追踪", description = "按用户ID分页查询执行追踪记录")
     public Response<List<ExecutionTrace>> getTracesByUser(
             @PathVariable String userId,
             @RequestParam(defaultValue = "1") int pageNum,

@@ -169,6 +169,7 @@ public class AgentExecutionMetrics {
     /**
      * Get metrics snapshot for an agent.
      */
+    @SuppressWarnings("deprecation")
     public AgentMetricsSnapshot getSnapshot(String agentType) {
         AgentMetricsBundle bundle = getBundle(agentType);
 

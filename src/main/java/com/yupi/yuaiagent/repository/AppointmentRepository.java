@@ -20,6 +20,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * 预约记录存储
  * 基于文件的持久化存储（可替换为数据库实现）
+ *
+ * <p>NOTE: @Transactional is NOT applicable here — this is a file-based repository,
+ * not backed by a JPA/Spring transaction manager. Concurrency is handled via
+ * {@link ReentrantReadWriteLock} instead. If migrated to JPA, add @Transactional
+ * to save/update/delete methods.
  * 
  * @author jsq
  */

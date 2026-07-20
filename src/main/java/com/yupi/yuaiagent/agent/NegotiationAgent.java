@@ -33,6 +33,7 @@ public class NegotiationAgent {
             5. 时机把握：指导何时提出薪资要求、如何应对反压
             
             在给出建议前，请先使用搜索工具了解当前市场薪资水平，确保建议基于真实数据。
+            引用搜索或资料时注明来源（网站/报告名）；若未搜到可靠数据，请明确说明并给出估算区间的假设前提。
             """;
 
     private final ChatClient chatClient;

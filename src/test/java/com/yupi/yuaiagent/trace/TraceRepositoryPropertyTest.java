@@ -26,16 +26,19 @@ class TraceRepositoryPropertyTest {
     @BeforeEach
     void setUp() throws Exception {
         traceProperties = new TraceProperties();
-        repository = new TraceRepository();
-        var propsField = TraceRepository.class.getDeclaredField("traceProperties");
+        // TraceRepository now delegates persistence to a pluggable TraceStore;
+        // build a real FileTraceStore and wrap it, mirroring TraceControllerTest.
+        FileTraceStore fileTraceStore = new FileTraceStore();
+        var propsField = FileTraceStore.class.getDeclaredField("traceProperties");
         propsField.setAccessible(true);
-        propsField.set(repository, traceProperties);
+        propsField.set(fileTraceStore, traceProperties);
 
-        var storageDirField = TraceRepository.class.getDeclaredField("storageDir");
+        var storageDirField = FileTraceStore.class.getDeclaredField("storageDir");
         storageDirField.setAccessible(true);
-        storageDirField.set(repository, tempDir.toString());
+        storageDirField.set(fileTraceStore, tempDir.toString());
 
-        repository.init();
+        fileTraceStore.init();
+        repository = new TraceRepository(fileTraceStore);
     }
 
     @Test

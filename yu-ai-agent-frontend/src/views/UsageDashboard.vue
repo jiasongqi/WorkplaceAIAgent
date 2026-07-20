@@ -140,7 +140,7 @@ onMounted(loadStats)
 <style scoped>
 .usage-layout {
   display: flex; flex-direction: column; height: 100vh;
-  background: #f0f2f5; overflow: hidden;
+  background: var(--bg-page, #0a0a0f); overflow: hidden;
 }
 .header {
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
@@ -166,7 +166,7 @@ onMounted(loadStats)
 .card-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 
 .section { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 0.5px solid var(--border); box-shadow: none; }
-.section-title { font-size: 15px; font-weight: 600; margin: 0 0 16px; }
+.section-title { font-size: 15px; font-weight: 600; margin: 0 0 16px; color: var(--text, #e5e7eb); }
 
 .daily-chart { display: flex; align-items: flex-end; gap: 8px; height: 160px; padding-top: 20px; }
 .daily-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -182,8 +182,8 @@ onMounted(loadStats)
 
 .type-list { display: flex; flex-direction: column; gap: 10px; }
 .type-row { display: flex; align-items: center; gap: 10px; }
-.type-name { font-size: 13px; color: #374151; min-width: 100px; }
-.type-bar-track { flex: 1; height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; }
+.type-name { font-size: 13px; color: var(--text-secondary, #a0aec0); min-width: 100px; }
+.type-bar-track { flex: 1; height: 8px; background: var(--glass-hover, rgba(255,255,255,0.06)); border-radius: 4px; overflow: hidden; }
 .type-bar-fill { height: 100%; background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border-radius: 4px; transition: width 0.5s ease; }
 .agent-bar { background: #059669; }
 .type-count { font-size: 13px; color: var(--text-muted); min-width: 30px; text-align: right; }

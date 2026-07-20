@@ -1,20 +1,19 @@
 package com.yupi.yuaiagent.feedback;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.yupi.yuaiagent.repository.entity.FeedbackEntity;
+import com.yupi.yuaiagent.repository.jpa.FeedbackJpaRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.annotation.PostConstruct;
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.UUID;
 
 /**
- * Feedback Repository — file-based persistence for user feedback.
+ * Feedback Repository — JPA persistence for user feedback.
  *
  * @author jsq
  */
@@ -22,61 +21,39 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Repository
 public class FeedbackRepository {
 
-    @Value("${feedback.storage.dir:./tmp/feedback}")
-    private String storageDir;
+    private final FeedbackJpaRepository jpaRepo;
 
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule());
-    private final List<Feedback> feedbackList = new CopyOnWriteArrayList<>();
-
-    @PostConstruct
-    public void init() {
-        File dir = new File(storageDir);
-        if (!dir.exists()) dir.mkdirs();
-        File file = new File(dir, "feedback.json");
-        if (file.exists()) {
-            try {
-                List<Feedback> loaded = objectMapper.readValue(file,
-                        new TypeReference<List<Feedback>>() {});
-                feedbackList.addAll(loaded);
-                log.info("[FeedbackRepository] Loaded {} feedback entries", loaded.size());
-            } catch (IOException e) {
-                log.warn("[FeedbackRepository] Failed to load feedback: {}", e.getMessage());
-            }
-        }
+    public FeedbackRepository(FeedbackJpaRepository jpaRepo) {
+        this.jpaRepo = jpaRepo;
     }
 
+    @Transactional
     public void save(Feedback feedback) {
-        feedbackList.add(feedback);
-        persist();
+        FeedbackEntity entity = toEntity(feedback);
+        jpaRepo.save(entity);
     }
 
     public List<Feedback> findAll() {
-        return Collections.unmodifiableList(feedbackList);
+        return jpaRepo.findAll().stream().map(this::toDomain).toList();
     }
 
     public List<Feedback> findByUserId(String userId) {
-        return feedbackList.stream()
-                .filter(f -> f.userId().equals(userId))
-                .toList();
+        return jpaRepo.findByUserId(userId).stream().map(this::toDomain).toList();
     }
 
     public List<Feedback> findByAgentType(String agentType) {
-        return feedbackList.stream()
-                .filter(f -> f.agentType().equals(agentType))
-                .toList();
+        return jpaRepo.findByAgentType(agentType).stream().map(this::toDomain).toList();
     }
 
     public long countByRating(Feedback.Rating rating) {
-        return feedbackList.stream()
-                .filter(f -> f.rating() == rating)
-                .count();
+        return jpaRepo.countByRating(rating.name());
     }
 
     public double getApprovalRate() {
-        if (feedbackList.isEmpty()) return -1.0;
+        List<Feedback> all = findAll();
+        if (all.isEmpty()) return -1.0;
         long up = countByRating(Feedback.Rating.UP);
-        return (double) up / feedbackList.size();
+        return (double) up / all.size();
     }
 
     public double getAgentApprovalRate(String agentType) {
@@ -87,12 +64,36 @@ public class FeedbackRepository {
         return (double) up / agentFeedback.size();
     }
 
-    private void persist() {
-        try {
-            File file = new File(storageDir, "feedback.json");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, feedbackList);
-        } catch (IOException e) {
-            log.error("[FeedbackRepository] Failed to persist feedback", e);
-        }
+    // ========== Mapping ==========
+
+    private FeedbackEntity toEntity(Feedback f) {
+        FeedbackEntity e = new FeedbackEntity();
+        e.setFeedbackId(f.id() != null ? f.id() : UUID.randomUUID().toString());
+        e.setUserId(f.userId());
+        e.setChatId(f.chatId());
+        e.setMessageId(f.messageId());
+        e.setAgentType(f.agentType());
+        e.setRating(f.rating().name());
+        e.setComment(f.comment());
+        e.setIntent(f.intent());
+        return e;
+    }
+
+    private Feedback toDomain(FeedbackEntity e) {
+        return new Feedback(
+                e.getFeedbackId(),
+                e.getUserId(),
+                e.getChatId(),
+                e.getMessageId(),
+                Feedback.Rating.valueOf(e.getRating()),
+                e.getComment(),
+                e.getAgentType(),
+                e.getIntent(),
+                toLocalDateTime(e.getCreatedAt())
+        );
+    }
+
+    private LocalDateTime toLocalDateTime(OffsetDateTime odt) {
+        return odt != null ? odt.toLocalDateTime() : null;
     }
 }

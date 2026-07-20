@@ -1,6 +1,6 @@
 # WorkPilot 项目功能 Wiki
 
-> 更新日期：2026-06-26 (v1.5 — Hello-Agents 优化完成)  
+> 更新日期：2026-06-26 (v1.6 — 编译修复完成)  
 > 品牌名：WorkPilot（职场生存智囊）  
 > 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope
 
@@ -926,6 +926,70 @@ agent_active_count
 | P95 延迟 | > 10s | Agent 响应过慢 |
 | 超时率 | > 20% | 频繁超时 |
 | 断路器状态 | OPEN | Agent 被断路器阻断 |
+
+---
+
+## 二十三、编译修复记录 (v1.6)
+
+### 23.1 修复的问题
+
+| 文件 | 问题 | 修复方案 |
+|------|------|----------|
+| `PlanAndSolveAgent.java` | 重复代码导致语法错误 | 删除重复代码，恢复完整方法 |
+| `FactPreservingCompressor.java` | 正则转义错误 | `\s` → `\\s` |
+| `OrchestratorDependencies.java` | 缺少 import | 添加 CalendarServiceFactory/UserProfileService |
+| `FeedbackRepository.java` | `@value` 小写 | 改为 `@Value` 大写 |
+| `BaseParadigmAgent.java` | AGENT_CALL 不存在 | 改为 SUB_AGENT_EXECUTION |
+| `ParadigmSelector.java` | NluIntent 值错误 | 使用正确的 QUERY_DATA/SALARY_ANALYZE 等 |
+| `ParadigmService.java` | null 不能转 double | 改为 0.0 |
+| `PlanAndSolveAgent.java` | Map 未导入 | 添加 import |
+| `ReflectionAgent.java` | TraceSpan 未导入 | 添加 import |
+| `WorkflowRuntime.java` | getStartedAt() 不存在 | 改为 getCreatedAt() |
+| `ExperienceStoreLayer.java` | FileSystemResource 不能转 File | 使用 `.getFile()` |
+| `PromptInjectionDetector.java` | safe() 和 record 组件同名 | 重命名为 `createSafe()` |
+| `OrchestratorAgent.java` | 缺少 import | 添加 UserMessage/AssistantMessage |
+| `OrchestratorAgent.java` | 变量未初始化 | 添加默认值 |
+| `ToolCallAgent.java` | toolExecutionResult 未初始化 | 初始化为 null |
+| `McpAuditLog.java` | 不能取消引用 double | 直接强转 `(long)` |
+| `RagTool.java` | builder 方法不匹配 | 改用 `@Tool` 注解 |
+| `AgentConfig.java` | OrchestratorDependencies 找不到 | 添加 import |
+
+### 23.2 编译状态
+
+- **编译命令**: `mvn clean compile`
+- **编译结果**: BUILD SUCCESS
+- **警告**: 
+  - AgentExecutionMetrics 使用过时 API (不影响功能)
+  - FileBasedChatMemory 使用未经检查操作 (不影响功能)
+
+### 23.3 新增组件
+
+| 组件 | 说明 |
+|------|------|
+| `AgentMetrics` | Micrometer 自定义指标 |
+| `AgentMetricsEndpoint` | 自定义 Actuator 端点 |
+| `AgentHealthIndicator` | 健康检查指示器 |
+| `AgentExecutionMetrics` | 每个 Agent 执行指标 |
+| `AgentCircuitBreaker` | 断路器机制 |
+| `AgentDiagnosticsEndpoint` | 诊断端点 |
+| `AgentParadigm` | 范式枚举 |
+| `ParadigmSelector` | 范式选择器 |
+| `BaseParadigmAgent` | 范式 Agent 基类 |
+| `PlanAndSolveAgent` | Plan-and-Solve 范式 |
+| `ReflectionAgent` | Reflection 范式 |
+| `ParadigmAgentFactory` | 范式 Agent 工厂 |
+| `ParadigmService` | 范式服务 |
+| `ContextRelevanceScorer` | 相关性评分器 |
+| `DynamicBudgetAllocator` | 动态预算分配 |
+| `KeyInfoExtractor` | 关键信息提取 |
+| `ContextEngineer` | 上下文工程服务 |
+| `ToolDefinition` | 工具元数据 |
+| `ToolRegistry` | 工具注册表 |
+| `ToolDiscovery` | 工具自动发现 |
+| `ToolRegistryService` | 工具注册服务 |
+| `ReflexionMemory` | 失败记忆 |
+| `ReflexionService` | Reflexion 服务 |
+| `RerankService` | RAG 重排序 |
 
 ---
 

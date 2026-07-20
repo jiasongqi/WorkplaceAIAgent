@@ -29,8 +29,14 @@ public class PersistentChatMessage {
     /** Message role: "user", "assistant", or "system". */
     private String role;
 
-    /** Message content (plain text or markdown). */
+    /** Message content (plain text or markdown). Full text when COMPLETE. */
     private String content;
+
+    /** Mid-stream buffer for SSE resume (STREAMING / PARTIAL). */
+    private String partialContent;
+
+    /** STREAMING / PARTIAL / COMPLETE. Null treated as COMPLETE. */
+    private MessageStatus status;
 
     /** Epoch millis when the message was created. */
     private long timestamp;

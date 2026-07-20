@@ -56,8 +56,11 @@ public final class KeywordRouter {
         if (lower.matches(".*(?:离职|辞职|裁员|竞业|交接|走人|不想干|被辞|辞退|解雇|开除).*")) {
             return AgentIntent.ESCAPE;
         }
-        // CONSULTATION agent
-        if (lower.matches(".*(?:预约|咨询|约时间|顾问).*")) {
+        // 仅询问「有什么可约」→ 仍走 CONSULTATION（由 Agent 返回服务目录），但排除纯闲聊「咨询一下想法」误伤由 NLU 处理
+        // CONSULTATION agent：明确预约/约时间，或询问可预约服务
+        if (lower.matches(".*(?:预约|约时间|约个顾问|预约咨询|预约专家).*")
+                || lower.matches(".*(?:有什么|有哪些).*(?:预约|可约).*")
+                || lower.matches(".*咨询预约.*")) {
             return AgentIntent.CONSULTATION;
         }
         // Interview → GENERAL

@@ -40,7 +40,7 @@ public class ConversationContextBuilder {
             .map(this::toLlmMessage)
             .toList();
 
-        return new ConversationContext(profile, summary, recent);
+        return new ConversationContext(profile, summary, recent, chatId, profile);
     }
 
     private Message toLlmMessage(com.yupi.yuaiagent.message.PersistentChatMessage pm) {

@@ -34,25 +34,51 @@ public class ContextInjectionService {
     private final PersistentMessageRepository messageRepository;
     private final ChatMemoryManager chatMemoryManager;
     private final TraceRecorder traceRecorder;
+    private final com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService;
 
     public ContextInjectionService(UserProfileService userProfileService,
                                    ArtifactShelf artifactShelf,
                                    PersistentMessageRepository messageRepository,
                                    ChatMemoryManager chatMemoryManager,
                                    TraceRecorder traceRecorder) {
+        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder, null);
+    }
+
+    public ContextInjectionService(UserProfileService userProfileService,
+                                   ArtifactShelf artifactShelf,
+                                   PersistentMessageRepository messageRepository,
+                                   ChatMemoryManager chatMemoryManager,
+                                   TraceRecorder traceRecorder,
+                                   com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService) {
         this.userProfileService = userProfileService;
         this.artifactShelf = artifactShelf;
         this.messageRepository = messageRepository;
         this.chatMemoryManager = chatMemoryManager;
         this.traceRecorder = traceRecorder;
+        this.reflexionService = reflexionService;
     }
 
     /**
      * Builds the combined injection context (profile + artifacts + cross-agent history).
+     * Uses "GENERAL" as the reflexion task type — prefer the overload that accepts an
+     * explicit {@code taskType} once the routed intent is known.
      *
      * @return combined context string, or empty if nothing to inject
      */
     public String buildCombinedInjection(String userId, String chatId, TraceContext traceCtx) {
+        return buildCombinedInjection(userId, chatId, traceCtx, "GENERAL");
+    }
+
+    /**
+     * Builds the combined injection context (profile + artifacts + cross-agent history +
+     * per-intent reflexion failure memory).
+     *
+     * @param taskType the resolved routing intent name (e.g. "RESUME", "NEGOTIATION"), used to
+     *                 scope {@link com.yupi.yuaiagent.agent.reflexion.ReflexionService} lookups
+     *                 so a failure recorded for one specialist doesn't leak into another's prompt.
+     * @return combined context string, or empty if nothing to inject
+     */
+    public String buildCombinedInjection(String userId, String chatId, TraceContext traceCtx, String taskType) {
         // Profile injection
         TraceSpan profileSpan = traceRecorder.startSpan(traceCtx, TraceStepType.PROFILE_INJECTION, "画像注入");
         String profileInjection = StringUtils.hasText(userId)
@@ -72,6 +98,18 @@ public class ContextInjectionService {
         String crossAgentContext = buildCrossAgentContext(chatId);
         if (StringUtils.hasText(crossAgentContext)) {
             combined = mergeInjection(combined, crossAgentContext);
+        }
+
+        if (reflexionService != null && StringUtils.hasText(userId)) {
+            try {
+                String failureCtx = reflexionService.getFailureContext(
+                        userId, StringUtils.hasText(taskType) ? taskType : "GENERAL");
+                if (StringUtils.hasText(failureCtx)) {
+                    combined = mergeInjection(combined, failureCtx);
+                }
+            } catch (Exception e) {
+                log.debug("Reflexion injection skipped: {}", e.getMessage());
+            }
         }
 
         // Mark consumed

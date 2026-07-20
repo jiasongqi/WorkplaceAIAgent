@@ -159,7 +159,7 @@ const loginAsAdmin = async () => {
     localStorage.setItem('token', data.token)
     localStorage.setItem('userId', data.userId)
     localStorage.setItem('username', data.username || 'admin')
-    isAdmin.value = data.username === 'admin' || true
+    isAdmin.value = data.username === 'admin'
     hint.value = { type: 'success', text: '✓ 已以管理员身份登录，可查询交付物' }
     await loadList()
   } catch (e) {
@@ -293,7 +293,7 @@ const formatDateTime = (value) => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f0f2f5;
+  background: var(--bg-page, #0a0a0f);
   overflow: hidden;
 }
 
@@ -361,7 +361,7 @@ border: 0.5px solid var(--border);
   min-width: 360px;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: var(--bg-card, #1a1a2e);
   border-radius: 12px;
 border: 0.5px solid var(--border);
   overflow: hidden;
@@ -372,16 +372,18 @@ border: 0.5px solid var(--border);
   flex-wrap: wrap;
   gap: 8px;
   padding: 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
 
 .filter-input {
   flex: 1 1 100%;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 14px;
   outline: none;
+  background: var(--bg-page, #0a0a0f);
+  color: var(--text, #e5e7eb);
   transition: border-color 0.2s;
 }
 .filter-input:focus { border-color: #1e40af; }
@@ -398,8 +400,8 @@ border: 0.5px solid var(--border);
 .query-btn { background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); color: var(--text); flex: 1; }
 .query-btn:hover:not(:disabled) { background: #1d4ed8; }
 .query-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.reset-btn { background: #f3f4f6; color: #374151; flex: 1; }
-.reset-btn:hover:not(:disabled) { background: #e5e7eb; }
+.reset-btn { background: var(--glass-hover, rgba(255,255,255,0.06)); color: var(--text-secondary, #a0aec0); flex: 1; }
+.reset-btn:hover:not(:disabled) { background: var(--glass-border, rgba(255,255,255,0.1)); }
 
 .hint {
   margin: 12px 14px 0;
@@ -431,13 +433,13 @@ border: 0.5px solid var(--border);
 .placeholder.error { color: #dc2626; }
 
 .list-item {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.06));
   border-radius: 10px;
   padding: 12px 14px;
   cursor: pointer;
   transition: all 0.2s;
 }
-.list-item:hover { border-color: #93c5fd; background: #f8fafc; }
+.list-item:hover { border-color: #93c5fd; background: var(--glass-hover, rgba(255,255,255,0.04)); }
 .list-item.active { border-color: #1e40af; background: rgba(30, 64, 175, 0.05); }
 
 .item-top {
@@ -451,7 +453,7 @@ border: 0.5px solid var(--border);
 .item-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text, #e5e7eb);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -505,7 +507,7 @@ border: 0.5px solid var(--border);
 /* 详情面板 */
 .detail-panel {
   flex: 1;
-  background: white;
+  background: var(--bg-card, #1a1a2e);
   border-radius: 12px;
 border: 0.5px solid var(--border);
   overflow-y: auto;
@@ -515,7 +517,7 @@ border: 0.5px solid var(--border);
 .detail-title {
   font-size: 20px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text, #e5e7eb);
   margin: 0 0 18px;
 }
 
@@ -530,12 +532,12 @@ border: 0.5px solid var(--border);
 
 .field-label { font-size: 12px; font-weight: 600; color: #6b7280; }
 
-.field-value { font-size: 14px; color: #1f2937; word-break: break-all; }
+.field-value { font-size: 14px; color: var(--text-secondary, #a0aec0); word-break: break-all; }
 .field-value.mono { font-family: monospace; font-size: 13px; }
 
-.content-block { border-top: 1px solid #f3f4f6; padding-top: 16px; }
+.content-block { border-top: 1px solid var(--glass-border, rgba(255,255,255,0.06)); padding-top: 16px; }
 
-.content-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+.content-label { font-size: 13px; font-weight: 600; color: var(--text-secondary, #a0aec0); margin-bottom: 8px; }
 
 .content-pre {
   background: #1f2937;

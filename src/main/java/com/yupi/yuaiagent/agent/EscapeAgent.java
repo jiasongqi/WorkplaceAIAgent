@@ -34,6 +34,7 @@ public class EscapeAgent {
             6. 离职后规划：背调应对、竞业协议处理、下一步职业规划
             
             当用户需要生成交接清单或证据整理文档时，请使用文件生成工具输出 PDF 文件。
+            涉及法规时注明「一般性信息，非法律意见」，并建议核对当地最新规定或咨询专业人士。
             """;
 
     private final ChatClient chatClient;

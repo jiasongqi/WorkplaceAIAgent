@@ -5,24 +5,28 @@ import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.common.ResultCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/**
- * Global exception handler — converts exceptions to Response<T>.
- *
- * @author jsq
- */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
-    public Response<Void> handleBusiness(BusinessException e) {
+    public ResponseEntity<Response<Void>> handleBusiness(BusinessException e) {
         log.warn("Business exception: code={}, msg={}", e.getCode(), e.getMessage());
-        return new Response<>(e.getCode(), e.getMessage(), null);
+        HttpStatus status = switch ((int) e.getCode()) {
+            case 401 -> HttpStatus.UNAUTHORIZED;
+            case 403 -> HttpStatus.FORBIDDEN;
+            case 404 -> HttpStatus.NOT_FOUND;
+            case 400 -> HttpStatus.BAD_REQUEST;
+            case 429 -> HttpStatus.TOO_MANY_REQUESTS;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+        return ResponseEntity.status(status).body(new Response<>(e.getCode(), e.getMessage(), null));
     }
 
     @ExceptionHandler(CalendarService.CalendarException.class)

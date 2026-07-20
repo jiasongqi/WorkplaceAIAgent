@@ -10,16 +10,22 @@
 
 ## 能力分层总览
 
+> **状态图例**：`[闭环]` 端到端可用（真实调用/真实数据，无占位逻辑）· `[部分]` 核心路径闭环，部分分支/子能力为简化实现或需额外开关 · `[脚手架]` 数据结构与接口已就位，尚未接入真实执行/调用链。
+>
+> 关键层级：L5/L17 多 Agent `[闭环]`（**单意图真 SSE**；多意图并行辩论+综合后推送 + failover + agent-progress）· L8 黑板 `[部分]` · L18 工作流 `[脚手架]`（未接主聊天）· L21 注册中心 `[脚手架]` · L22 评测 `[部分]`（routing 门禁闭环；live 需 ADMIN）· L23 Prompt A/B `[脚手架]`。
+>
+> 面试话术速查：`docs/INTERVIEW-DEFENSE.md`
+
 ```
 L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
    └─ L1 RAG 知识库   八篇职场文档检索 + Multi-Query 多路召回 + 查询改写
        └─ L2 工具调用   联网搜索 / 文件 / 网页抓取 / 资源下载 / 终端 / PDF
            └─ L3 MCP    图片搜索等外部 MCP 服务
                └─ L4 Manus 超级智能体   ReAct 自主规划 + 工具循环
-                   └─ L5 Multi-Agent 智能路由   意图识别 → 5 个专业 Agent
-                       └─ L6 预约咨询   状态机追问 + 飞书/钉钉日历
+                   └─ L5 Multi-Agent 智能路由 [闭环]   意图识别 → 5 个专业 Agent + 并行辩论/failover + SSE 进度事件
+                       └─ L6 预约咨询   状态机追问 + 飞书/钉钉日历 + HITL 人工审批
                        └─ L7 记忆压缩   Token/轮数策略 + LLM 摘要
-                       └─ L8 黑板协作   交付物货架 + 数据员工 + 用户画像
+                       └─ L8 黑板协作 [部分]   交付物货架 + 数据员工 + 用户画像
                        └─ L9 技能系统   YAML 声明式技能热加载
                        └─ L10 质量守护  自动审查(Review/RedTeam) + 风险分级 + 审计持久化
                        └─ L11 收藏系统  消息快照 + orphan 标记
@@ -28,13 +34,13 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L14 对话搜索  加权评分 + 时间衰减
                        └─ L15 持久化消息  Source of Truth + 双索引
                        └─ L16 NLU 意图理解层  1次LLM + 别名解析 + 槽位提取 + 意图分类 + 澄清
-                       └─ L17 多 Agent 运行时  群聊模式 + Task Orchestrator + 工作流引擎
-                       └─ L18 工作流引擎  6种节点 + 实例状态 + 持久化
+                       └─ L17 多 Agent 运行时 [闭环]   群聊模式 + Task Orchestrator + 工作流引擎
+                       └─ L18 工作流引擎 [脚手架]   6种节点 + 实例状态 + 持久化
                        └─ L19 沙箱执行  Docker/本地进程隔离 + 5层防护
                        └─ L20 访问控制与治理  投票式决策 + Agent权限 + MCP信任 + Quota配额
-                       └─ L21 Agent 注册中心  YAML声明式 + Marketplace就绪
-                       └─ L22 评测中心  回归测试 + 发版评估
-                       └─ L23 Prompt 版本管理  多版本 + 灰度发布 + A/B测试
+                       └─ L21 Agent 注册中心 [脚手架]   YAML声明式 + Marketplace就绪
+                       └─ L22 评测中心 [部分]   路由门禁闭环 + 内容评测可选 live 闭环
+                       └─ L23 Prompt 版本管理 [脚手架]   多版本 + 灰度发布 + A/B测试
                        └─ L24 交付物生命周期  DRAFT→REVIEWING→APPROVED→PUBLISHED
                        └─ L25 事件总线  异步治理事件 + 审计日志
                        └─ L26 安全防护  循环检测 + 工具结果分级 + Token预算
@@ -90,10 +96,10 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
 | 工具 | 类 | 用途 |
 |------|----|------|
 | 联网搜索 | `WebSearchTool` | 实时职场案例 / 法律条款（SearchAPI） |
-| 网页抓取 | `WebScrapingTool` | Jsoup 解析网页正文 |
+| 网页抓取 | `WebScrapingTool` | Jsoup 解析网页正文（`UrlSafetyGuard` SSRF 防护） |
 | 文件操作 | `FileOperationTool` | 读写本地文件 |
-| 资源下载 | `ResourceDownloadTool` | 下载网络资源 |
-| 终端操作 | `TerminalOperationTool` | 执行命令行 |
+| 资源下载 | `ResourceDownloadTool` | 下载网络资源（`UrlSafetyGuard` SSRF 防护 + 路径穿越校验） |
+| 终端操作 | `TerminalOperationTool` | 执行命令行（沙箱执行 + HITL 人工审批网关） |
 | PDF 生成 | `PDFGenerationTool` | 生成定制化职场生存手册（iText + 亚洲字体） |
 | 终止 | `TerminateTool` | 供 Agent 主动结束任务 |
 
@@ -174,6 +180,8 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 **智能提取**：姓名（"我叫X"→X）、联系方式（从自然语言搜索手机号/邮箱）、时间（中文数字"三点"→15:00，忽略无关文字）。
 
 **确认阶段灵活性**：用户在确认阶段提问时，LLM 回答问题后再引导确认/修改。
+
+**HITL 人工审批**：`app.hitl.calendar-require-approval=true`（默认开启）时，创建日历事件前需人工审批。`ConsultationAgent` 在进入 `CREATING_APPOINTMENT` 时检查 `HumanApprovalService`；未获批准则返回待审批提示（含 `approvalId`），调用方需 `POST /api/hitl/approve?approvalId=...` 确认后重新触发确认流程。终端工具（`TerminalOperationTool`）同样受 `app.hitl.terminal-require-approval` 网关保护。
 
 ---
 
@@ -526,17 +534,19 @@ YAML 声明式 Agent 描述符，支持 Agent Marketplace 场景。
 
 ---
 
-## L22 · 评测中心（Eval Center）
+## L22 · 评测中心（Eval Center）[部分]
 
-Agent 质量评测框架。当前实现：评测报告模型 + 路由准确率集成测试。
+Agent 质量评测框架：YAML 用例加载 → 执行 → 评分 → 回归检测。
 
 **评测报告**：`EvalReport`（reportId、overallScore、passRate、regression、caseResults）
 
-**路由评测测试**：
-- `AgentRoutingEvalTest` — 路由准确率 + 快速路径覆盖率 + 响应时间
-- `FastPathRoutingTest` — 快速路径规则匹配验证
+**路由套件（`[闭环]`）**：`routing-suite` 用 `KeywordRouter` 零 LLM 实跑评分，作为 CI/发版门禁（`POST /eval/gate/{suiteId}`，passRate < 0.8 或相对上次回归即失败）。
 
-**待实现**：`EvalCenter` 服务（用例加载 → Agent 调用 → 评分 → 回归检测），当前由集成测试覆盖。
+**内容套件（`[部分]`）**：默认 `POST /eval/run/{suiteId}` 仅做 `NOT_RUN` 占位（避免误触发 LLM 调用）；需要真实闭环时调用 `POST /eval/run/{suiteId}/live`（`EvalAppService.runContentLive` → 真实调用 `OrchestratorAgent.chat` → `EvalScorer.scoreContent` 关键词重叠评分），会消耗 LLM 配额。
+
+**鉴权**：除 `/eval/suites` 外全部端点需登录（`AuthService.authenticate`），避免评测接口被滥用触发资源消耗。
+
+**关键类**：`EvalCenter`（套件加载/执行/评分/回归）、`EvalAppService`（内容套件 live 闭环编排）、`EvalScorer`（路由/关键词重叠评分）、`EvalController`（REST API）。
 
 ---
 
@@ -759,4 +769,6 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 | 用量 | GET | `/api/usage/stats`（JWT） |
 | 导入导出 | GET/POST | `/api/export/all` · `/api/export/import`（JWT） |
 | 轨迹 | GET | `/api/trace/{id}` · `/api/trace/chat/{chatId}` · `/api/trace/user/{userId}` |
+| 人工审批（HITL） | GET/POST | `/api/hitl/{approvalId}` · `/api/hitl/approve` · `/api/hitl/reject`（JWT） |
+| 评测中心 | GET/POST | `/api/eval/suites` · `/api/eval/run/{suiteId}` · `/api/eval/run/{suiteId}/live` · `/api/eval/gate/{suiteId}`（除 suites 外需 JWT） |
 | 健康 | GET | `/api/health` |

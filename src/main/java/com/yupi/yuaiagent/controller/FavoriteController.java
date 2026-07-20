@@ -5,7 +5,11 @@ import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.dto.AddFavoriteRequest;
 import com.yupi.yuaiagent.favorite.Favorite;
 import com.yupi.yuaiagent.service.FavoriteAppService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +22,8 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/favorite")
+@Validated
+@Tag(name = "收藏", description = "消息收藏管理")
 public class FavoriteController {
 
     @Resource
@@ -27,8 +33,9 @@ public class FavoriteController {
     private AuthService authService;
 
     @PostMapping
+    @Operation(summary = "添加收藏", description = "收藏一条消息")
     public Response<Favorite> addFavorite(
-            @RequestBody AddFavoriteRequest request,
+            @Valid @RequestBody AddFavoriteRequest request,
             @RequestParam(value = "token", required = false) String token,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String userId = authService.authenticate(token, authHeader);
@@ -36,6 +43,7 @@ public class FavoriteController {
     }
 
     @DeleteMapping("/{favoriteId}")
+    @Operation(summary = "取消收藏", description = "移除一条收藏")
     public Response<Void> removeFavorite(
             @PathVariable String favoriteId,
             @RequestParam(value = "token", required = false) String token,
@@ -46,6 +54,7 @@ public class FavoriteController {
     }
 
     @GetMapping("/list")
+    @Operation(summary = "收藏列表", description = "获取当前用户的收藏列表")
     public Response<List<Favorite>> listFavorites(
             @RequestParam(value = "token", required = false) String token,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {

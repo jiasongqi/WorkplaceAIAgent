@@ -1,26 +1,21 @@
 package com.yupi.yuaiagent.agent.reflexion;
 
-import lombok.Data;
+import com.yupi.yuaiagent.repository.entity.ReflexionMemoryEntity;
+import com.yupi.yuaiagent.repository.jpa.ReflexionMemoryJpaRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Reflexion Memory — records failure trajectories to avoid repeated mistakes.
+ * Reflexion Memory — JPA persistence for failure trajectories.
  *
  * <p>Based on the Reflexion paper: agents learn from failures by storing
  * episodic memories of what went wrong and how it was resolved.</p>
- *
- * <p>Features:</p>
- * <ul>
- *     <li>Records failure trajectories (task + error + resolution)</li>
- *     <li>Provides relevant failure memories for similar tasks</li>
- *     <li>Supports per-user and global failure tracking</li>
- *     <li>Automatic expiration of old memories</li>
- * </ul>
  *
  * @author jsq
  * @since 2026-06-26
@@ -29,95 +24,65 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ReflexionMemory {
 
-    /** Maximum memories per user */
     private static final int MAX_MEMORIES_PER_USER = 50;
 
-    /** Memory expiration time (7 days) */
-    private static final long EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000L;
+    private final ReflexionMemoryJpaRepository jpaRepo;
 
-    /** userId → list of failure memories */
-    private final ConcurrentHashMap<String, List<FailureMemory>> userMemories = new ConcurrentHashMap<>();
+    @Value("${reflexion.expiration-days:7}")
+    private int expirationDays;
 
-    /** Global failure memories (shared across users) */
-    private final List<FailureMemory> globalMemories = Collections.synchronizedList(new ArrayList<>());
+    public ReflexionMemory(ReflexionMemoryJpaRepository jpaRepo) {
+        this.jpaRepo = jpaRepo;
+    }
 
     /**
      * Record a failure memory.
-     *
-     * @param userId    user ID (nullable for global)
-     * @param taskType  type of task that failed
-     * @param error     error message
-     * @param resolution how the error was resolved (nullable)
      */
     public void recordFailure(String userId, String taskType, String error, String resolution) {
-        FailureMemory memory = new FailureMemory(
-            UUID.randomUUID().toString(),
-            taskType,
-            error,
-            resolution,
-            Instant.now()
-        );
+        ReflexionMemoryEntity entity = new ReflexionMemoryEntity();
+        entity.setUserId(userId);
+        entity.setFailureType(taskType);
+        entity.setError(error);
+        entity.setResolution(resolution);
+        entity.setExpiresAt(OffsetDateTime.now().plusDays(expirationDays));
+        jpaRepo.save(entity);
 
-        // Record per-user
+        // Trim per-user to max size
         if (userId != null && !userId.isBlank()) {
-            List<FailureMemory> memories = userMemories.computeIfAbsent(userId, k -> new ArrayList<>());
-            memories.add(memory);
-
-            // Trim to max size
-            while (memories.size() > MAX_MEMORIES_PER_USER) {
-                memories.remove(0);
+            List<ReflexionMemoryEntity> userMemories = jpaRepo.findByUserId(userId);
+            if (userMemories.size() > MAX_MEMORIES_PER_USER) {
+                // Delete oldest
+                List<ReflexionMemoryEntity> toDelete = userMemories.subList(0, userMemories.size() - MAX_MEMORIES_PER_USER);
+                jpaRepo.deleteAll(toDelete);
             }
-
-            log.debug("[Reflexion] Recorded failure for user={}: taskType={}, error={}",
-                    userId, taskType, error.substring(0, Math.min(50, error.length())));
         }
 
-        // Record global
-        globalMemories.add(memory);
-        while (globalMemories.size() > MAX_MEMORIES_PER_USER * 10) {
-            globalMemories.remove(0);
-        }
+        log.debug("[Reflexion] Recorded failure for user={}: taskType={}", userId, taskType);
     }
 
     /**
      * Get relevant failure memories for a task.
-     *
-     * @param userId   user ID
-     * @param taskType type of task
-     * @return list of relevant failure memories (most recent first)
      */
     public List<FailureMemory> getRelevantMemories(String userId, String taskType) {
-        List<FailureMemory> result = new ArrayList<>();
+        List<ReflexionMemoryEntity> entities;
 
-        // Get user-specific memories
         if (userId != null && !userId.isBlank()) {
-            List<FailureMemory> userMem = userMemories.getOrDefault(userId, Collections.emptyList());
-            for (FailureMemory mem : userMem) {
-                if (isRelevant(mem, taskType)) {
-                    result.add(mem);
-                }
-            }
+            entities = jpaRepo.findByUserIdOrUserIdIsNull(userId);
+        } else {
+            entities = jpaRepo.findByUserIdIsNull();
         }
 
-        // Get global memories
-        for (FailureMemory mem : globalMemories) {
-            if (isRelevant(mem, taskType)) {
-                result.add(mem);
-            }
-        }
+        List<FailureMemory> result = entities.stream()
+                .filter(e -> isRelevant(e, taskType))
+                .sorted(Comparator.comparing((ReflexionMemoryEntity e) -> e.getCreatedAt()).reversed())
+                .map(this::toDomain)
+                .toList();
 
-        // Sort by time (most recent first)
-        result.sort(Comparator.comparing(FailureMemory::timestamp).reversed());
-
-        // Return top 5
         return result.size() > 5 ? result.subList(0, 5) : result;
     }
 
     /**
      * Format failure memories for injection into prompt.
-     *
-     * @param memories list of failure memories
-     * @return formatted string for prompt injection
      */
     public String formatForPrompt(List<FailureMemory> memories) {
         if (memories == null || memories.isEmpty()) {
@@ -145,20 +110,8 @@ public class ReflexionMemory {
      * Clean up expired memories.
      */
     public void cleanupExpired() {
-        Instant cutoff = Instant.now().minusMillis(EXPIRATION_MS);
-        int cleaned = 0;
-
-        // Clean user memories
-        for (List<FailureMemory> memories : userMemories.values()) {
-            cleaned += memories.removeIf(mem -> mem.timestamp().isBefore(cutoff)) ? 1 : 0;
-        }
-
-        // Clean global memories
-        cleaned += globalMemories.removeIf(mem -> mem.timestamp().isBefore(cutoff)) ? 1 : 0;
-
-        if (cleaned > 0) {
-            log.info("[Reflexion] Cleaned up {} expired memories", cleaned);
-        }
+        jpaRepo.deleteByExpiresAtBefore(OffsetDateTime.now());
+        log.info("[Reflexion] Cleaned up expired memories");
     }
 
     /**
@@ -166,26 +119,27 @@ public class ReflexionMemory {
      */
     public Map<String, Object> getStats() {
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("userCount", userMemories.size());
-        stats.put("globalCount", globalMemories.size());
-
-        int totalUserMemories = userMemories.values().stream()
-                .mapToInt(List::size)
-                .sum();
-        stats.put("totalUserMemories", totalUserMemories);
-
+        long total = jpaRepo.count();
+        stats.put("totalMemories", total);
         return stats;
     }
 
-    /**
-     * Check if a memory is relevant to a task type.
-     */
-    private boolean isRelevant(FailureMemory memory, String taskType) {
+    private boolean isRelevant(ReflexionMemoryEntity entity, String taskType) {
         if (taskType == null || taskType.isBlank()) {
-            return true; // Return all if no filter
+            return true;
         }
-        return memory.taskType().equalsIgnoreCase(taskType) ||
-               memory.error().contains(taskType);
+        return (entity.getFailureType() != null && entity.getFailureType().equalsIgnoreCase(taskType)) ||
+               (entity.getError() != null && entity.getError().contains(taskType));
+    }
+
+    private FailureMemory toDomain(ReflexionMemoryEntity e) {
+        return new FailureMemory(
+                e.getId() != null ? e.getId().toString() : null,
+                e.getFailureType(),
+                e.getError(),
+                e.getResolution(),
+                e.getCreatedAt() != null ? e.getCreatedAt().toInstant() : null
+        );
     }
 
     /**

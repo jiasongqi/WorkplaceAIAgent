@@ -4,6 +4,8 @@ import com.yupi.yuaiagent.auth.JwtUtil;
 import com.yupi.yuaiagent.common.Response;
 import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.profile.model.UserProfile;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/profile")
 @Slf4j
+@Tag(name = "用户画像", description = "用户画像查看与管理")
 public class ProfileController {
 
     @Resource
@@ -34,6 +37,7 @@ public class ProfileController {
      * 无有效 JWT 返回未授权（Req 13.5）。
      */
     @GetMapping("/me")
+    @Operation(summary = "查看用户画像", description = "查看当前用户的画像信息")
     public Response<UserProfile> getMyProfile(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String userId = extractUserId(authHeader);
@@ -46,6 +50,7 @@ public class ProfileController {
      * 无有效 JWT 返回未授权（Req 13.5）。
      */
     @DeleteMapping("/me")
+    @Operation(summary = "清空用户画像", description = "清空并删除当前用户的画像数据")
     public Response<String> clearMyProfile(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String userId = extractUserId(authHeader);

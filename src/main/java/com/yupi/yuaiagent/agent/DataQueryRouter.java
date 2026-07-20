@@ -5,10 +5,17 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
 /**
- * Data query handler — Phase 1: formats extracted slots as structured response.
- * Phase 2: connects to MCP data tools for actual data retrieval.
+ * Data query handler — currently NOT connected to any real business data source.
+ * Formats NLU-extracted slots into an honest fallback response that recommends
+ * career-general alternatives (manual stats, query criteria, dashboard steps)
+ * instead of pretending to have queried real data.
  *
  * <p>NOT an LLM agent — no model call. Takes RouteHint and produces Flux response directly.
+ *
+ * <p>In the main chat path, {@code OrchestratorAgent} maps DATA_QUERY → GENERAL with an
+ * injected note (see {@code OrchestratorAgent#DATA_QUERY_FALLBACK_NOTE}) so the specialist
+ * itself states the limitation to the user. This class remains as a standalone fallback
+ * for callers that invoke DATA_QUERY routing directly.
  *
  * @author jsq
  */
@@ -42,10 +49,11 @@ public class DataQueryRouter {
             }
 
             sb.append("：\n\n");
-            sb.append("📊 数据查询功能正在建设中，目前可以为您提供以下支持：\n");
-            sb.append("1. 数据趋势分析建议\n");
-            sb.append("2. 指标异常排查思路\n");
-            sb.append("3. 竞品对比分析框架\n\n");
+            sb.append("当前未接入真实业务数据源，我无法为您提供已查到的真实数据，不能替您编造数字。");
+            sb.append("以职场顾问的角度，我可以帮您：\n");
+            sb.append("1. 设计手工统计方法：如何从现有报表/表格中整理出这个指标\n");
+            sb.append("2. 明确问数口径：这个指标的定义、统计周期、对比维度应该如何界定\n");
+            sb.append("3. 仪表盘建设步骤：如果要长期跟踪，可以怎样搭建一个简单看板\n\n");
             sb.append("请问您想从哪个角度开始？");
 
         } else {

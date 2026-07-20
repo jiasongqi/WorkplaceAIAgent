@@ -2,43 +2,32 @@ package com.yupi.yuaiagent.auth;
 
 import com.yupi.yuaiagent.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Centralized authentication service.
- * <p>
- * Resolves JWT from either URL query parameter ({@code token}) or
- * {@code Authorization: Bearer xxx} header, validates it, and returns the userId.
- * Throws {@link BusinessException} on failure so callers don't need null-checks.
- *
- * @author jsq
+ * Resolves JWT access token from query param or Bearer header.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
     private final JwtUtil jwtUtil;
 
-    /**
-     * Authenticates the request and returns the userId.
-     *
-     * @param tokenParam  JWT from URL query parameter (may be null)
-     * @param authHeader  JWT from Authorization header (may be null)
-     * @return the authenticated userId
-     * @throws BusinessException(401) if token is missing or invalid
-     */
     public String authenticate(String tokenParam, String authHeader) {
+        return authenticatePrincipal(tokenParam, authHeader).userId();
+    }
+
+    public AuthPrincipal authenticatePrincipal(String tokenParam, String authHeader) {
         String token = resolveToken(tokenParam, authHeader);
         if (token == null || token.isBlank()) {
             throw BusinessException.notLoggedIn();
         }
-        String userId = jwtUtil.validateToken(token);
-        if (userId == null) {
+        AuthPrincipal principal = jwtUtil.validateAccessToken(token);
+        if (principal == null) {
             throw BusinessException.notLoggedIn();
         }
-        return userId;
+        return principal;
     }
 
     private String resolveToken(String tokenParam, String authHeader) {

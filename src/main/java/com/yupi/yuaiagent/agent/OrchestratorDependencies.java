@@ -67,6 +67,10 @@ public record OrchestratorDependencies(
         AccessDecisionService accessDecisionService,
         Executor agentExecutor,
         MemoryCoordinator memoryCoordinator,
-        com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector
+        com.yupi.yuaiagent.guard.PromptInjectionDetector promptInjectionDetector,
+        com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator collaborationCoordinator,
+        com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
+        com.yupi.yuaiagent.metrics.AgentExecutionMetrics agentExecutionMetrics,
+        com.yupi.yuaiagent.hitl.HumanApprovalService humanApprovalService
 ) {
 }

@@ -95,6 +95,7 @@ import { ref, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { chatWithManus } from '../api'
 
 useHead({ title: 'AI超级智能体 - 职场生存智囊' })
@@ -138,28 +139,45 @@ const sendMessage = () => {
   const aiMsgIndex = messages.value.length - 1
 
   eventSource = chatWithManus(msg)
+  let streamFinished = false
+
+  const finishStream = () => {
+    if (streamFinished) return
+    streamFinished = true
+    isThinking.value = false
+    isStreaming.value = false
+    if (eventSource) eventSource.close()
+  }
 
   eventSource.onmessage = (e) => {
     isThinking.value = false
     const data = e.data
     if (!data || data === '[DONE]') {
-      isStreaming.value = false
-      eventSource.close()
+      finishStream()
       return
     }
     // 解析步骤信息（格式：Step N: ...）
-    const stepMatch = data.match(/^Step (\d+): (.+)/)
+    const stepMatch = data.match(/^Step (\d+):\s*([\s\S]*)/)
     if (stepMatch) {
       const stepNum = parseInt(stepMatch[1]) - 1
-      const summary = stepMatch[2].slice(0, 60)
+      const detail = stepMatch[2].trim()
+      const summary = detail.slice(0, 60)
       if (steps.value[stepNum]) {
         steps.value[stepNum].status = 'done'
-        steps.value[stepNum].detail = stepMatch[2]
+        steps.value[stepNum].detail = detail
       } else {
-        steps.value.push({ summary, detail: stepMatch[2], status: 'done', tool: '' })
+        steps.value.push({ summary, detail, status: 'done', tool: '' })
       }
       scrollSteps()
-      // Don't append step markers to chat content — they show in the panel
+      // 同步写入聊天区，避免只更新步骤面板导致消息空白
+      if (detail && detail !== '思考完成 - 无需行动') {
+        if (messages.value[aiMsgIndex].content) {
+          messages.value[aiMsgIndex].content += '\n\n' + detail
+        } else {
+          messages.value[aiMsgIndex].content = detail
+        }
+        scrollToBottom()
+      }
       return
     }
     // 解析工具调用信息
@@ -170,6 +188,7 @@ const sendMessage = () => {
       // Don't show raw tool markers in chat
       if (toolMatch[2]?.trim()) {
         messages.value[aiMsgIndex].content += toolMatch[2].trim() + '\n'
+        scrollToBottom()
       }
       return
     }
@@ -182,12 +201,22 @@ const sendMessage = () => {
   }
 
   eventSource.onerror = () => {
-    isThinking.value = false
-    isStreaming.value = false
-    eventSource.close()
-    if (!messages.value[aiMsgIndex].content) {
-      messages.value[aiMsgIndex].content = '连接出现问题，请重试。'
+    // SSE 正常结束后浏览器也会触发 onerror；有内容或已收到 [DONE] 时不当成失败
+    const hasContent = !!messages.value[aiMsgIndex]?.content
+    const hasSteps = steps.value.length > 0
+    if (streamFinished || hasContent || hasSteps) {
+      if (!hasContent && hasSteps) {
+        const last = steps.value[steps.value.length - 1]
+        if (last?.detail) {
+          messages.value[aiMsgIndex].content = last.detail
+        }
+      }
+      finishStream()
+      return
     }
+    finishStream()
+    messages.value[aiMsgIndex].content =
+      '连接出现问题，请重试。若持续失败，请检查后端是否启动，以及 DashScope API 额度是否充足。'
   }
 }
 
@@ -216,7 +245,7 @@ const renderMarkdown = (text) => {
     .replace(/\n{3,}/g, '\n\n')           // collapse 3+ newlines to 2
     .replace(/^[\s\n]+/, '')               // trim leading whitespace
     .replace(/[\s\n]+$/, '')               // trim trailing whitespace
-  return marked.parse(cleaned)
+  return DOMPurify.sanitize(marked.parse(cleaned))
 }
 
 onBeforeUnmount(() => { if (eventSource) eventSource.close() })
