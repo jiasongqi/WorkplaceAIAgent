@@ -3,8 +3,9 @@
 > 本文档按"能力由浅入深"的顺序梳理项目功能，每一层都建立在前一层之上。
 > 适用于：个人学习复盘、作品集讲解、面试技术亮点串讲。
 >
-> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0（Alibaba DashScope）+ Ollama + PgVector。
+> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0（Alibaba DashScope）+ Ollama + PostgreSQL/PgVector（`STORAGE_TYPE=jdbc` 可选）。
 > 品牌名：WorkPilot
+> 文档同步：2026-07-20 · java-v3-db（双存储 · Auth refresh/quota · HITL · Manus SSE）
 
 ---
 
@@ -51,7 +52,7 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L31 工具注册机制  动态注册表 + 能力发现 + 健康监控
                        └─ L32 Reflexion 失败记忆  失败轨迹记录 + 自动注入提示词
                        └─ L33 RAG Rerank  关键词重叠 + 文档质量评分 + 位置偏差
-横切关注点：JWT 鉴权 · 会话三态生命周期 · 归档/回收站 · AppService 业务编排层 · 全局异常处理 · 结构化输出
+横切关注点：JWT 鉴权（access/refresh）· 日配额 · HITL · 会话三态 · 双存储（file/jdbc）· AppService 编排 · 全局异常处理
 ```
 
 ---
@@ -125,6 +126,8 @@ BaseAgent  →  ReActAgent（思考-行动循环）  →  ToolCallAgent（工具
 
 - `AgentState`：智能体状态机
 - `YuManus`：组合全部工具 + DashScope 模型，支持 `runStream` 流式输出执行过程
+- **SSE 协议**：每步推送 `Step N: ...`；无工具调用时回传模型正文（不再只返回「思考完成」）；结束发送 `[DONE]`，前端避免把正常关流误报为连接错误
+- DashScope 额度不足时返回可读中文错误（`AllocationQuota.FreeTierOnly`）
 
 **入口**：`GET /api/ai/manus/chat`。
 
@@ -343,10 +346,16 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 | 组件 | 职责 |
 |------|------|
 | `PersistentChatMessage` | 消息实体（ULID messageId + chatId + role + content + timestamp + source） |
-| `PersistentMessageRepository` | 双索引持久化（chatIndex + messageIdIndex） |
-| `ChatMemoryAdapter` | Truth ↔ ChatMemory 桥接（写入先持久化再同步缓存，读取先检查一致性） |
+| `MessageStore` | 抽象存储；`FileMessageStore` / `JpaMessageStore` 按 `app.storage.type` 切换 |
+| `PersistentMessageRepository` | 兼容门面（委托 MessageStore） |
+| `ChatMemoryAdapter` | Truth ↔ ChatMemory 桥接 |
 
-**存储**：`{session.storage.dir}/messages/{chatId}.json`，每个会话一个文件。
+**存储模式**（`app.storage.type` / 环境变量 `STORAGE_TYPE`）：
+
+| 模式 | 说明 |
+|------|------|
+| `file`（默认） | `{session.storage.dir}/messages/{chatId}.json`，适合本地演示 |
+| `jdbc` | PostgreSQL 表 `messages`（Flyway `V1__init_schema.sql` + JPA `MessageEntity`） |
 
 **压缩支持**：`replaceWithSummary(chatId, summary, keepRecent)` — 压缩时替换旧消息为摘要 + 最近 N 条。
 
@@ -672,8 +681,11 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 
 | 关注点 | 实现 | 说明 |
 |--------|------|------|
-| 鉴权 | `JwtUtil` + `AuthService` | JWT 校验；SSE 接口 token 走 URL 参数，兼容 `Authorization` 头 |
-| 会话三态 | `SessionManager` | ACTIVE / ARCHIVED / DELETED（软删除，30 天物理清理）；`chatOwner` 反向索引防越权 |
+| 鉴权 | `JwtUtil` + `AuthService` + `AccountService` | Access JWT + Refresh Token；SSE 的 token 走 URL 参数；注册/登录/刷新 |
+| 日配额 | `UserQuotaService` | 按 GUEST/USER/ADMIN 限制每日 chats 与 tokens |
+| HITL | `HumanApprovalService` | 终端命令、日历创建等高危副作用需人工审批 |
+| 双存储 | `app.storage.type=file\|jdbc` | 消息/轨迹可落文件或 PostgreSQL |
+| 会话三态 | `SessionManager` | ACTIVE / ARCHIVED / DELETED（软删除）；`chatOwner` 反向索引防越权 |
 | AppService 编排 | `OrchestratorAppService` 等 | 输入校验、归属检查、用量追踪、编排 Agent/Repository |
 | 异常处理 | `GlobalExceptionHandler` | 全局统一异常响应 |
 | 统一响应 | `common/Response` + `ResultCode` | 标准化返回结构 |
@@ -683,26 +695,20 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 
 ---
 
-## 数据存储一览（文件持久化 / "表")
+## 数据存储一览（file / jdbc 双模式）
 
-项目当前以**文件 + JSON/Kryo** 作为持久层（统一范式：`ObjectMapper + JavaTimeModule` / `ConcurrentHashMap` 内存索引 / `ReadWriteLock` / `@PostConstruct` 加载 / `@Value` 配置目录）。PgVector 用于向量检索。
+默认 **`app.storage.type=file`**：以文件 + JSON/Kryo 作为演示持久层。生产可切 **`jdbc`**：PostgreSQL + Flyway + Spring Data JPA（见 `repository/entity`、`repository/jpa`、`db/migration/V1__init_schema.sql`）。可用 `docker-compose.yml` 一键起 `pgvector/pgvector:pg16`。
 
-| 逻辑"表" | 存储位置（默认） | 负责组件 | 关键字段 |
-|----------|-----------------|----------|----------|
-| 会话 sessions | `./tmp/sessions/sessions.json` | `SessionManager` | chatId、userId、title、status、createdAt、lastActiveAt、archivedAt、deletedAt；`chatOwner` 反向索引 |
-| 消息 messages | `./tmp/sessions/messages/{chatId}.json` | `PersistentMessageRepository` | messageId(ULID)、chatId、role、content、timestamp、sourceType、sourceId、sourceName；双索引 chatIndex + messageIdIndex |
-| 预约 appointments | `./tmp/appointments/` | `AppointmentRepository` | name、contact、appointmentTime、calendarEventId、calendarUrl、provider、status、chatId、createdAt |
-| 交付物 artifacts | `./tmp/artifacts/artifacts.json` | `ArtifactRepository` | artifactId、userId、chatId、type、producer、title、content、status(DRAFT/REVIEWING/APPROVED/PUBLISHED/ARCHIVED)、scope、createdAt、updatedAt |
-| 用户画像 user-profiles | `./tmp/user-profiles/` | `UserProfileRepository` | userId、communicationPreference、tonePreference、focusAreas[]、knownBackground、historicalDemands[]、createdAt、updatedAt |
-| 收藏 favorites | `./tmp/artifacts/favorites.json` | `FavoriteRepository` | favoriteId、userId、chatId、messageId、contentSnapshot、sessionTitleSnapshot、role、orphaned |
-| 质量审查 quality-reviews | `./tmp/artifacts/quality-reviews.json` | `QualityReviewRepository` | reviewId、chatId、mode、5 维评分、riskLevel、issues[]、suggestions[]（仅 HIGH/CRITICAL） |
-| 用量事件 usage-events | `./tmp/artifacts/usage-events.json` | `UsageTracker` | eventId、userId、type、agentType、durationMs、timestamp（append-only） |
-| 对话记忆 chat-memory | 文件（Kryo） | `FileBasedChatMemory` | chatId → List<Message>（按 agent 类型隔离） |
-| 工作流实例 | 内存 | `WorkflowRepository` | instanceId、workflowId、status、nodes、context、history |
-| Agent 描述符 | `classpath:agents/*.yaml` | `AgentRegistry` | agentCode、capabilities、intentKeywords、permissionProfile |
-| 权限画像 | `classpath:permissions/*.yaml` | `PermissionProfileRegistry` | agentCode、allowedToolPatterns、minMcpTrustScore、admin |
-| 评测用例 | `classpath:eval/*.yaml` | `EvalCenter` | caseId、input、expectedIntent、expectedAgent、assertions |
-| 向量库 | PgVector / 内存 | `*VectorStoreConfig` | 文档 embedding + 元数据（filename、status） |
+| 逻辑"表" | file 位置（默认） | jdbc 表 / 组件 | 关键字段 |
+|----------|------------------|----------------|----------|
+| 会话 sessions | `./tmp/sessions/sessions.json` | `chat_sessions` / `ChatSessionEntity` | chatId、userId、title、status |
+| 消息 messages | `./tmp/sessions/messages/{chatId}.json` | `messages` / `JpaMessageStore` | messageId、chatId、role、content、status |
+| 轨迹 traces | `./tmp/traces/` | `traces` / `JpaTraceStore` | traceId、spans、userId、chatId |
+| 用户 accounts | `./tmp/auth/` | `users` / `UserEntity` | userId、username、role、passwordHash |
+| 预约 appointments | `./tmp/appointments/` | `appointments` | name、contact、appointmentTime |
+| 交付物 artifacts | `./tmp/artifacts/artifacts.json` | `artifacts` | artifactId、type、status |
+| 用户画像 user-profiles | `./tmp/user-profiles/` | `user_profiles` | userId、preferences、focusAreas |
+| 向量库 | PgVector / 内存 | PostgreSQL / SimpleVectorStore | embedding + 元数据 |
 
 ### 枚举类型
 
@@ -754,8 +760,11 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 
 | 分类 | 方法 | 路径 |
 |------|------|------|
+| 注册/登录 | POST | `/api/session/register` · `/api/session/login` · `/api/session/refresh` · `/api/session/logout` |
+| 当前用户 | GET | `/api/session/me`（JWT） |
 | 基础对话 | GET | `/api/ai/ai_chat/chat/sync` · `/sse` · `/server_sent_event` · `/sse_emitter` |
-| 智能路由 | GET | `/api/ai/orchestrator/chat`（JWT） |
+| 智能路由 | GET | `/api/ai/orchestrator/chat`（JWT，SSE token 走 query） |
+| 续传 | GET | `/api/ai/orchestrator/chat/resume`（JWT） |
 | Manus | GET | `/api/ai/manus/chat` |
 | RAG | GET | `/api/ai/ai_chat/rag/sync` |
 | 工具 | GET | `/api/ai/ai_chat/tools/sync` |

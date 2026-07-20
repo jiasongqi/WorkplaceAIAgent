@@ -1,8 +1,8 @@
 # WorkPilot 项目功能 Wiki
 
-> 更新日期：2026-06-26 (v1.6 — 编译修复完成)  
+> 更新日期：2026-07-20 (v1.6 — java-v3-db：PostgreSQL/JPA · Auth refresh/quota · HITL · SuperAgent SSE)  
 > 品牌名：WorkPilot（职场生存智囊）  
-> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope
+> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope + PostgreSQL（可选）
 
 ---
 
@@ -88,11 +88,14 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 |----|------|
 | 后端框架 | Java 21, Spring Boot 3.4, Spring AI 1.0 |
 | AI 模型 | DashScope (deepseek-v4-flash / qwen 系列), Ollama (本地) |
+| 关系库 | PostgreSQL 16 + Flyway + Spring Data JPA（`STORAGE_TYPE=jdbc`） |
 | 向量数据库 | PgVector / 内存 SimpleVectorStore |
-| 流式通信 | SSE (SseEmitter + Reactor Flux) |
-| 前端 | Vue 3, Vite, Vue Router, Axios, marked.js |
+| 缓存 | Redis（docker-compose 可选） |
+| 流式通信 | SSE (SseEmitter + Reactor Flux)；SSE token 走 URL 参数 |
+| 前端 | Vue 3, Vite, Vue Router, Axios, marked.js（含 Login） |
 | 序列化 | Jackson (JSON), Kryo (ChatMemory 高性能) |
-| 安全 | JWT, 投票式访问决策, MCP 信任分级 |
+| 安全 | JWT access/refresh、日配额、投票式访问决策、HITL、MCP 信任分级 |
+| 部署 | Docker Compose（postgres + redis + app） |
 
 ---
 
@@ -459,9 +462,11 @@ APPROVED → PUBLISHED（发布）
 
 ### 9.1 认证授权
 
-- JWT 无状态认证
-- SSE 接口 token 走 URL 参数（EventSource 限制）
-- 游客模式自动登录
+- JWT Access Token + Refresh Token（`AccountService` / `RefreshTokenStore`）
+- 注册 · 登录 · 刷新 · 登出；默认关闭游客（`app.auth.guest-enabled=false`）
+- SSE 接口 token 走 URL 参数（EventSource 不支持自定义 Header）
+- 日配额：`UserQuotaService` 按 GUEST / USER / ADMIN 限制 chats 与 tokens
+- 前端 `Login.vue`：密码登录 / 注册入口
 
 ### 9.2 访问控制 (L20)
 
@@ -491,9 +496,10 @@ APPROVED → PUBLISHED（发布）
 
 | 页面 | 路由 | 说明 |
 |------|------|------|
+| 登录/注册 | `/login` | 账号密码登录、注册（默认强制登录） |
 | 工作台 | `/` | 温暖首页，快捷场景入口 |
 | 职场顾问 | `/chat/career` | 多 Agent 智能对话（主页面） |
-| 超级智能体 | `/chat/super` | Manus 独立界面 + 执行进度 |
+| 超级智能体 | `/chat/super` | Manus 独立界面 + 执行进度（SSE `[DONE]` + 正文回传） |
 | 知识库 | `/knowledge` | 文档管理（上传/删除） |
 | 交付物 | `/artifacts` | 交付物浏览 |
 | 收藏 | `/favorites` | 收藏消息管理 |
@@ -520,7 +526,10 @@ APPROVED → PUBLISHED（发布）
 
 | 分类 | 方法 | 路径 | 鉴权 |
 |------|------|------|------|
+| 注册/登录/刷新 | POST | `/session/register` · `/login` · `/refresh` · `/logout` | - |
+| 当前用户 | GET | `/session/me` | JWT |
 | 智能路由对话 | GET | `/ai/orchestrator/chat` | JWT |
+| 对话续传 | GET | `/ai/orchestrator/chat/resume` | JWT |
 | Manus 超级智能体 | GET | `/ai/manus/chat` | - |
 | 基础对话 | GET | `/ai/ai_chat/chat/sync\|sse\|sse_emitter` | - |
 | RAG 对话 | GET | `/ai/ai_chat/rag/sync` | - |
@@ -534,6 +543,8 @@ APPROVED → PUBLISHED（发布）
 | 轨迹查询 | GET | `/trace/*` | JWT |
 | 用量统计 | GET | `/usage/stats` | JWT |
 | 导入导出 | GET/POST | `/export/*` | JWT |
+| HITL 审批 | GET/POST | `/hitl/*` | JWT |
+| 评测 | GET/POST | `/eval/*` | JWT（suites 除外） |
 | 健康检查 | GET | `/health` | - |
 | 用户反馈 | POST | `/feedback` | - |
 | 反馈统计 | GET | `/feedback/stats` | - |
@@ -542,22 +553,26 @@ APPROVED → PUBLISHED（发布）
 
 ## 十二、数据存储
 
-| 数据 | 存储方式 | 位置 |
-|------|---------|------|
-| 会话列表 | JSON | `./tmp/sessions/sessions.json` |
-| 消息 | JSON (per chatId) | `./tmp/sessions/messages/{chatId}.json` |
-| 对话记忆 | Kryo | `./tmp/chat-memory/{agent}/{chatId}.kryo` |
-| 预约 | JSON | `./tmp/appointments/` |
-| 交付物 | JSON | `./tmp/artifacts/artifacts.json` |
-| 用户画像 | JSON | `./tmp/user-profiles/` |
-| 收藏 | JSON | `./tmp/artifacts/favorites.json` |
-| 质量审查 | JSON | `./tmp/artifacts/quality-reviews.json` |
-| 用量事件 | JSON (append-only) | `./tmp/artifacts/usage-events.json` |
-| 执行轨迹 | JSON | `./tmp/traces/` |
+通过 `app.storage.type`（环境变量 `STORAGE_TYPE`）切换：
+
+| 模式 | 说明 |
+|------|------|
+| `file`（默认） | JSON/Kryo 落盘 `./tmp/**`，适合本地演示 |
+| `jdbc` | PostgreSQL + Flyway `V1__init_schema.sql` + JPA Entity/Repository |
+
+一键起库：`docker compose up -d postgres`（镜像 `pgvector/pgvector:pg16`）。
+
+| 数据 | file 位置 | jdbc |
+|------|-----------|------|
+| 会话列表 | `./tmp/sessions/sessions.json` | `chat_sessions` |
+| 消息 | `./tmp/sessions/messages/{chatId}.json` | `messages`（MessageStore） |
+| 执行轨迹 | `./tmp/traces/` | `traces`（TraceStore） |
+| 账号/刷新令牌 | `./tmp/auth/` | `users` + refresh store |
+| 对话记忆 | Kryo `./tmp/chat-memory/` | 仍可文件 / 按配置 |
+| 预约 | `./tmp/appointments/` | `appointments` |
+| 交付物 | `./tmp/artifacts/artifacts.json` | `artifacts` |
+| 用户画像 | `./tmp/user-profiles/` | `user_profiles` |
 | 向量库 | PgVector / 内存 | PostgreSQL / SimpleVectorStore |
-| 用户反馈 | JSON | `./tmp/feedback/feedback.json` |
-| 程序性记忆 | 内存 | `ProceduralMemory`（ConcurrentHashMap） |
-| MCP 审计日志 | 内存（环形缓冲） | `McpAuditLog`（最近 1000 条） |
 | Agent 描述符 | YAML | `classpath:agents/*.yaml` |
 | 权限画像 | YAML | `classpath:permissions/*.yaml` |
 | 评测用例 | YAML | `classpath:eval/*.yaml` |
@@ -571,16 +586,16 @@ APPROVED → PUBLISHED（发布）
 | `spring.ai.dashscope.chat.options.model` | deepseek-v4-flash | 主模型 |
 | `server.port` | 8123 | 服务端口 |
 | `jwt.secret` | 环境变量 | JWT 密钥 |
+| `jwt.access-expire-ms` | 1800000 | Access Token 30 分钟 |
+| `jwt.refresh-expire-ms` | 1209600000 | Refresh Token 14 天 |
+| `app.storage.type` | `file` | `file` 或 `jdbc` |
+| `app.auth.guest-enabled` | `false` | 是否允许游客 |
+| `app.auth.quota.*` | 见 application.yml | 角色日配额 |
+| `app.hitl.*` | true | 终端/日历是否需人工审批 |
 | `calendar.provider` | FEISHU | 日历服务商 |
 | `chat.memory.compression.token-threshold` | 4000 | 压缩阈值 |
-| `chat.memory.compression.turn-threshold` | 20 | 轮数阈值 |
 | `sandbox.require-docker` | false | Docker 强制 |
-| `agent.guard.loop-detector.similarity-threshold` | 0.88 | 循环检测阈值 |
-| `workpilot.quality.model` | qwen3.7-plus | 质检模型 |
-| `trace.max-spans-per-trace` | 200 | 轨迹 span 上限 |
 | `memory.coordinator.enabled` | true | 分层记忆开关 |
-| `memory.coordinator.timeout-ms` | 2000 | 记忆层查询超时 |
-| `memory.coordinator.total-token-budget` | 6000 | 记忆总 Token 预算 |
 
 ---
 
