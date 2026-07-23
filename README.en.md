@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="./README.md">🇨🇳 中文</a>
+  &nbsp;|&nbsp;
+  <b>🇺🇸 English</b>
+</p>
+
 # WorkPilot · All-Scenario AI Career Coach
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
@@ -6,8 +12,6 @@
 [![Vue.js](https://img.shields.io/badge/Vue.js-3-brightgreen?logo=vuedotjs)](https://vuejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-
-**中文文档:** [README.md](README.md)
 
 > An AI career coach covering the full lifecycle: job seeking → negotiation → on-the-job growth → consultation booking → resignation planning.  
 > Multi-agent routing, 4-layer memory, HITL approval, and optional PostgreSQL persistence.

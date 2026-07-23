@@ -1,3 +1,9 @@
+<p align="center">
+  <b>🇨🇳 中文</b>
+  &nbsp;|&nbsp;
+  <a href="./README.en.md">🇺🇸 English</a>
+</p>
+
 # WorkPilot · 全场景职场 AI 智囊
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
@@ -6,8 +12,6 @@
 [![Vue.js](https://img.shields.io/badge/Vue.js-3-brightgreen?logo=vuedotjs)](https://vuejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-
-**English:** [README.en.md](README.en.md)
 
 > 覆盖求职 → 谈判 → 在职成长 → 预约咨询 → 离职规划的全生命周期职场 AI 助手。  
 > Multi-Agent 路由 + 四层记忆 + HITL 审批 + 可选 PostgreSQL 持久化。
