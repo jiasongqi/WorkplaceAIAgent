@@ -1,412 +1,265 @@
-# 🚀 WorkPilot / 全场景职场生存智囊
+# WorkPilot · 全场景职场 AI 智囊
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-green?logo=springboot)](https://spring.io/projects/spring-boot)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0-blue)](https://docs.spring.io/spring-ai/reference/)
 [![Vue.js](https://img.shields.io/badge/Vue.js-3-brightgreen?logo=vuedotjs)](https://vuejs.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.6-blue)]()
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-> **全场景职场 AI 智囊平台，覆盖从求职到离职的全生命周期。**  
-> **An all-scenario AI career coach platform covering the full lifecycle from job seeking to resignation.**
+**English:** [README.en.md](README.en.md)
 
----
-
-## ✨ Features / 功能亮点
-
-### 核心能力 (L0-L27)
-
-| Feature / 功能 | Description / 说明 | Agent |
-|----------------|-------------------|-------|
-| 🎯 Multi-Agent Routing / 多Agent智能路由 | NLU intent recognition → 5 professional sub-agents / 意图识别 → 5个专业子Agent | OrchestratorAgent |
-| 🧠 4-Layer Memory / 四层记忆系统 | Sliding window + Facts + Summary + Vector experience / 滑动窗口 + 事实存储 + 摘要 + 向量化经验 | MemoryCoordinator |
-| 🔍 NLU Pipeline / 意图理解管道 | Single LLM call for intent + slots + routing / 单次LLM调用完成意图+槽位+路由 | NluPipeline |
-| ⚡ Fast Path / 快速路径 | Keyword router skips LLM for simple messages / 简单消息跳过LLM调用 | KeywordRouter |
-| 🛡️ Voting Access Control / 投票式访问控制 | Agent + MCP + Quota voters, one-vote veto / 三维投票，一票否决 | AccessDecisionService |
-| 🔧 Tool Calling / 工具调用 | 7 built-in tools + MCP external services / 7个内置工具 + MCP外部服务 | ToolCallAgent |
-| 📋 Workflow Engine / 工作流引擎 | 6 node types: Agent/Tool/Condition/Parallel/Loop/Approval / 6种节点类型 | WorkflowRuntime |
-| 🏖️ Sandbox Execution / 沙箱执行 | 3-level strategy: None/Process/Docker / 三级策略：无/进程/Docker | SandboxFactory |
-| 📊 Quality Guard / 质量守护 | 5-dimension scoring + Red Team mode / 5维评分 + 红队对抗 | QualityGuardAgent |
-| 📝 Trace System / 执行轨迹 | 10+ step types, real-time SSE visualization / 10+步骤类型，实时SSE可视化 | TraceRecorder |
-| 🎓 Eval Center / 评测中心 | YAML test suites + regression detection / YAML评测套件 + 回归检测 | EvalCenter |
-| 💾 Blackboard Pattern / 黑板模式 | Data employees produce artifacts on shelf / 数据员工通过货架协作 | ArtifactShelf |
-
-### Hello-Agents 优化 (L28-L33)
-
-| Feature / 功能 | Description / 说明 | Component |
-|----------------|-------------------|-----------|
-| 📈 Performance Metrics / 性能指标 | Actuator + Micrometer + Prometheus / 指标监控 | AgentMetrics |
-| 🔄 Classic Paradigms / 经典范式 | ReAct / Plan-and-Solve / Reflection / 三种推理范式 | ParadigmService |
-| 🎯 Context Engineering / 上下文工程 | Relevance scoring + Dynamic budget / 相关性评分+动态预算 | ContextEngineer |
-| 📦 Tool Registry / 工具注册 | Dynamic registration + Capability discovery / 动态注册+能力发现 | ToolRegistryService |
-| 🧠 Reflexion Memory / 失败记忆 | Learn from failures / 从失败中学习 | ReflexionMemory |
-| 🔀 RAG Rerank / 重排序 | Keyword overlap + Document quality / 关键词重叠+文档质量 | RerankService |
-| 🔌 Circuit Breaker / 断路器 | Auto timeout protection / 超时自动降级 | AgentCircuitBreaker |
-| 🔍 Diagnostics / 诊断 | Per-agent metrics + Health assessment / Agent指标+健康评估 | AgentDiagnosticsEndpoint |
-
-### Persistence & Auth (v1.6+) / 持久化与鉴权
-
-| Feature / 功能 | Description / 说明 | Component |
-|----------------|-------------------|-----------|
-| 🗄️ Dual Storage / 双存储后端 | `file` (demo) or `jdbc` (PostgreSQL JPA) via `app.storage.type` / 文件演示或 PostgreSQL，配置切换 | MessageStore · TraceStore |
-| 🧬 Flyway Schema / 数据库迁移 | Init schema for users/messages/traces/... / 用户·消息·轨迹等表结构 | `db/migration/V1__init_schema.sql` |
-| 🔐 Account Auth / 账号鉴权 | Register · login · refresh token · roles / 注册登录·刷新令牌·角色 | AccountService · JwtUtil |
-| 📊 Daily Quota / 日配额 | Per-role chat & token limits / 按角色限制每日对话与 Token | UserQuotaService |
-| 🙋 HITL Approval / 人工审批 | Terminal & calendar need approval / 终端与日历高危操作需审批 | HumanApprovalService |
-| 🤝 Multi-Agent Debate / 多专家协作 | Parallel expert opinions + synthesize / 并行专家意见并综合 | AgentCollaborationCoordinator |
-| 🐳 Docker Compose / 一键编排 | Postgres(pgvector) + Redis + App / 数据库·缓存·应用一键起 | `docker-compose.yml` |
+> 覆盖求职 → 谈判 → 在职成长 → 预约咨询 → 离职规划的全生命周期职场 AI 助手。  
+> Multi-Agent 路由 + 四层记忆 + HITL 审批 + 可选 PostgreSQL 持久化。
 
 ---
 
-## 🏗️ Architecture / 系统架构
+## 60 秒看懂产品
 
+| 你想做什么 | 去哪用 | 背后是谁 |
+|-----------|--------|---------|
+| 聊职场困惑、求职、薪资、离职 | **职场顾问** `/chat/career` | Orchestrator → 5 个子 Agent |
+| 让 AI 自己规划并调用工具 | **超级智能体** `/chat/super` | YuManus（ReAct） |
+| 检索内置职场知识 | **知识库** `/knowledge` | RAG + 向量检索 |
+| 看一次对话怎么被路由/执行 | Trace / 用量面板 | TraceRecorder · Usage |
+
+**专业子 Agent：** Resume（求职）· Negotiation（谈薪）· Escape（离职）· Consultation（预约）· General（通用职场）
+
+---
+
+## 产品截图
+
+<p align="center">
+  <img src="docs/assets/screenshot-login.png" width="720" alt="登录页" />
+</p>
+<p align="center"><sub>登录 / 注册 / 游客联调</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-home.png" width="720" alt="工作台首页" />
+</p>
+<p align="center"><sub>工作台：快捷场景入口</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-career.png" width="720" alt="职场顾问" />
+</p>
+<p align="center"><sub>职场顾问：SSE 流式对话 + 多 Agent 路由</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-super.png" width="48%" alt="超级智能体" />
+  <img src="docs/assets/screenshot-knowledge.png" width="48%" alt="知识库" />
+</p>
+<p align="center"><sub>左：超级智能体 · 右：知识库</sub></p>
+
+---
+
+## 架构一览
+
+<p align="center">
+  <img src="docs/assets/architecture-overview.png" width="820" alt="系统架构图" />
+</p>
+
+```mermaid
+flowchart TB
+  subgraph FE["Frontend · Vue 3"]
+    Login[Login]
+    Home[Home]
+    Career[CareerAdvisor]
+    Super[SuperAgent]
+    KB[KnowledgeBase]
+  end
+
+  subgraph API["API · Spring Boot"]
+    Ctrl[Controllers]
+    App[AppServices]
+  end
+
+  subgraph CORE["Agent Core"]
+    Orch[OrchestratorAgent]
+    KR[KeywordRouter]
+    NLU[NluPipeline]
+    R[ResumeAgent]
+    N[NegotiationAgent]
+    E[EscapeAgent]
+    C[ConsultationAgent]
+    G[GeneralCareerAgent]
+  end
+
+  subgraph INFRA["Infrastructure"]
+    Mem[4-Layer Memory]
+    Trace[Trace / HITL / Quota]
+    Store[(file 或 PostgreSQL)]
+    LLM[DashScope / Ollama]
+  end
+
+  FE -->|SSE / REST + JWT| Ctrl --> App --> Orch
+  Orch --> KR
+  Orch --> NLU
+  Orch --> R & N & E & C & G
+  Orch --> Mem & Trace & Store & LLM
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Frontend (Vue 3)                                  │
-│  Login · CareerAdvisor · SuperAgent · Knowledge · Artifacts                 │
-│  Favorites · Usage · TraceDetail · CompareView · LoveMaster                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │ SSE / REST (JWT Access + Refresh)
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           API Layer                                         │
-│  AiController · SessionController · HitlController · EvalController · ...   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                           AppService Layer                                  │
-│  OrchestratorAppService · SessionAppService · EvalAppService                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                           Agent Core                                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  OrchestratorAgent (主控)                                            │   │
-│  │    ├─ KeywordRouter / NluPipeline / CollaborationCoordinator        │   │
-│  │    ├─ ContextInjection · QualityReview · ResultAggregator           │   │
-│  │    └─ 5 Sub-Agents + Data Employees + YuManus                       │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                           Infrastructure                                    │
-│  Memory · Trace · HITL · Quota · Access · Sandbox · Workflow               │
-│  Storage: file (./tmp)  OR  jdbc (PostgreSQL + Flyway + JPA)               │
-└─────────────────────────────────────────────────────────────────────────────┘
+
+### Agent 路由
+
+<p align="center">
+  <img src="docs/assets/architecture-routing.png" width="820" alt="Agent 路由图" />
+</p>
+
+```mermaid
+flowchart LR
+  U[用户消息] --> KR{KeywordRouter<br/>0 LLM}
+  KR -->|命中| SA[子 Agent]
+  KR -->|未命中| NLU[NLU Pipeline<br/>1 LLM]
+  NLU -->|需澄清| Ask[追问]
+  NLU -->|明确| SA
+  SA --> Out[SSE 流式回复]
 ```
 
-### Tech Stack / 技术栈
+### 技术栈
 
-| Layer / 层 | Technology / 技术 |
-|------------|------------------|
-| Backend / 后端 | Java 21, Spring Boot 3.4, Spring AI 1.0 |
-| AI Model / AI模型 | DashScope (deepseek-v4-flash / qwen), Ollama |
-| Database / 数据库 | PostgreSQL 16 + Flyway + Spring Data JPA（`STORAGE_TYPE=jdbc`） |
-| Vector DB / 向量数据库 | PgVector / SimpleVectorStore |
-| Cache / 缓存 | Redis（docker-compose 可选） |
-| Streaming / 流式通信 | SSE (SseEmitter + Reactor Flux)；token 走 URL 参数 |
-| Frontend / 前端 | Vue 3, Vite, Vue Router, Axios, marked.js |
-| Serialization / 序列化 | Jackson (JSON), Kryo (ChatMemory) |
-| Security / 安全 | JWT access/refresh, Daily quota, Voting Access, HITL, MCP Trust |
-| Monitoring / 监控 | Actuator, Micrometer, Prometheus |
-| Deploy / 部署 | Docker · docker-compose（app + postgres + redis） |
+| 层 | 技术 |
+|----|------|
+| 后端 | Java 21 · Spring Boot 3.4 · Spring AI 1.0 |
+| 模型 | DashScope（默认 `qwen3.7-max`）· 可选 Ollama |
+| 前端 | Vue 3 · Vite · Axios · marked |
+| 存储 | `file`（本地 `./tmp`）或 `jdbc`（PostgreSQL + Flyway） |
+| 通信 | SSE（token 走 URL 参数）· REST + JWT refresh |
 
 ---
 
-## 🚀 Quick Start / 快速开始
+## 快速开始
 
-### Prerequisites / 前置条件
+### 1. 前置条件
 
-- JDK 21+
-- Node.js 18+
-- DashScope API Key ([申请地址](https://dashscope.aliyun.com/))
-- （可选 / Optional）Docker Desktop — 用于 PostgreSQL / 一键编排
+- JDK **21+**（Windows 若默认是 17，请设置 `JAVA_HOME` 指向 JDK 21）
+- Node.js **18+**
+- [DashScope API Key](https://dashscope.aliyun.com/)（关闭「仅免费额度」或确保账户有余额）
 
-### Environment / 环境变量
+### 2. 环境变量（PowerShell 示例）
+
+```powershell
+$env:DASHSCOPE_API_KEY = "your-dashscope-key"
+$env:JWT_SECRET = "change-me-to-a-long-random-string"
+# 可选
+# $env:STORAGE_TYPE = "file"   # 默认本地文件；jdbc 需 PostgreSQL
+# $env:SEARCH_API_KEY = "..."
+```
+
+> API Key / 数据库密码请用环境变量注入，**不要**写进仓库。
+
+### 3. 启动后端
 
 ```bash
-# Required / 必填
-set DASHSCOPE_API_KEY=your-dashscope-key
-set JWT_SECRET=change-me-to-a-long-random-string
-
-# Optional / 可选
-set SEARCH_API_KEY=your-searchapi-key
-set STORAGE_TYPE=file          # file = 本地 ./tmp；jdbc = PostgreSQL
-set GUEST_ENABLED=false       # 默认关闭游客，强制注册/登录
-```
-
-### Option A: Local demo (file storage) / 本地演示（文件存储）
-
-```bash
-# Clone / 克隆
 git clone https://github.com/jiasongqi/WorkplaceAIAgent.git
 cd WorkplaceAIAgent
-git checkout java-v3-db
+git checkout java-v3-db                  # 或 feat/consultation-chat-ux 等目标分支
 
-# Backend / 后端（默认 app.storage.type=file）
-mvn spring-boot:run
-# Server: http://localhost:8123/api
+# Windows 建议显式指定 JDK 21
+# $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21..."
+
+mvn spring-boot:run -DskipTests
+# → http://localhost:8123/api
+# 健康检查: curl http://localhost:8123/api/health
 ```
 
-### Option B: Docker Compose (PostgreSQL) / Docker 一键起库
-
-```bash
-# Start Postgres + Redis + App / 启动数据库、缓存与应用
-docker compose up -d
-
-# Or only DB for local Java process / 仅起数据库，本地跑 Java
-docker compose up -d postgres
-set STORAGE_TYPE=jdbc
-set DB_URL=jdbc:postgresql://localhost:5432/workpilot
-set DB_USERNAME=workpilot
-set DB_PASSWORD=workpilot123
-mvn spring-boot:run
-```
-
-### Frontend / 前端
+### 4. 启动前端
 
 ```bash
 cd yu-ai-agent-frontend
 npm install
 npm run dev
-# Frontend: http://localhost:3000  →  Login / 登录页后进入工作台
+# → http://localhost:3000
 ```
 
-### Monitoring / 监控
+### 5. 第一次登录
+
+1. 打开 http://localhost:3000/login  
+2. 点 **注册** 创建账号，或  
+3. 本地联调：用户名 `游客` / 密码 `workpilot-local`，或点「一键游客登录」  
+4. 进入首页 → **职场顾问**，发送例如：`帮我优化一段 Java 后端简历亮点`
+
+### 可选：Docker 起 PostgreSQL
 
 ```bash
-# Health check / 健康检查
-curl http://localhost:8123/api/health
+docker compose up -d postgres
+$env:STORAGE_TYPE = "jdbc"
+$env:DB_URL = "jdbc:postgresql://localhost:5432/workpilot"
+$env:DB_USERNAME = "workpilot"
+$env:DB_PASSWORD = "workpilot123"
+mvn spring-boot:run -DskipTests
+```
 
-# Agent diagnostics / Agent诊断
-curl http://localhost:8123/api/actuator/agent-diagnostics
+一键编排（库 + Redis + App）：
 
-# Prometheus metrics / Prometheus指标
-curl http://localhost:8123/api/actuator/prometheus
+```bash
+docker compose up -d
 ```
 
 ---
 
-## 📦 Project Structure / 项目结构
+## 核心功能（精简）
+
+| 能力 | 说明 |
+|------|------|
+| Multi-Agent 路由 | Keyword 快路径 + NLU；5 个专业子 Agent |
+| 四层记忆 | 滑动窗口 · 事实 · 摘要 · 向量经验 |
+| 工具调用 | 搜索 / 抓取 / 文件 / 终端 / PDF + MCP |
+| HITL 审批 | 终端、日历等高危操作需确认 |
+| 预约咨询 | 槽位收集 → 确认 → 创建（可接飞书/钉钉日历） |
+| Trace | 执行轨迹可视化，便于联调与答辩 |
+| 双存储 | `file` 演示 / `jdbc` 生产向 PostgreSQL |
+| 质量与监控 | QualityGuard · Actuator · Prometheus |
+
+完整分层（L0–L33）见 [docs/FEATURES.md](docs/FEATURES.md)。
+
+---
+
+## 目录结构
 
 ```
 agent_product/
 ├── src/main/java/com/yupi/yuaiagent/
-│   ├── agent/                    # Agent Layer / Agent层
-│   │   ├── OrchestratorAgent.java    # Main orchestrator / 主控编排
-│   │   ├── collaboration/            # Multi-expert debate / 多专家协作
-│   │   ├── paradigm/ · reflexion/ · runner/ · data/
-│   ├── auth/                     # Account · JWT · Quota / 账号鉴权与配额
-│   ├── hitl/                     # Human-in-the-loop approval / 人工审批
-│   ├── message/                  # MessageStore (file|jdbc) / 消息存储
-│   ├── repository/               # JPA entities + repositories / JPA实体与仓库
-│   ├── nlu/ · memory/ · metrics/ · tools/ · rag/
-│   ├── workflow/ · sandbox/ · access/ · quality/
-│   ├── eval/ · trace/ · artifact/ · prompt/ · registry/
-│   ├── controller/ · service/
+│   ├── agent/          # Orchestrator + 子 Agent + 范式
+│   ├── nlu/ memory/    # 意图理解 · 四层记忆
+│   ├── hitl/ auth/     # 人工审批 · JWT/配额
+│   ├── tools/ rag/     # 工具 · 知识库
+│   ├── controller/ service/
 ├── src/main/resources/
-│   ├── db/migration/             # Flyway SQL / 数据库迁移
-│   ├── skills/ · agents/ · permissions/ · eval/
-│   └── application.yml
-├── docker-compose.yml            # Postgres + Redis + App / 一键编排
-├── yu-ai-agent-frontend/         # Vue 3 Frontend（含 Login）
-└── docs/                         # Documentation / 文档
+│   ├── application.yml · skills/ · permissions/ · db/migration/
+├── yu-ai-agent-frontend/
+├── docker-compose.yml
+└── docs/               # WIKI · FEATURES · assets 截图
 ```
 
 ---
 
-## 🤖 Agent System / Agent 体系
+## 文档索引
 
-### Routing Flow / 路由流程
-
-```
-User Message / 用户消息
-  │
-  ├─→ KeywordRouter (fast path, 0 LLM) / 快速路径
-  │     ├─ Match → Route directly / 命中 → 直接路由
-  │     └─ No match → NLU Pipeline / 未命中 → NLU管道
-  │
-  ├─→ SkillExecutor (YAML skills) / 技能匹配
-  │
-  ├─→ NluPipeline (1 LLM call) / 意图理解
-  │     ├─ Needs clarification → Ask / 需要澄清 → 追问
-  │     └─ Clear intent → Route / 明确意图 → 路由
-  │
-  ├─→ ParadigmSelector / 范式选择
-  │     ├─ REACT → ToolCallAgent (default / 默认)
-  │     ├─ PLAN_AND_SOLVE → PlanAndSolveAgent (complex tasks / 复杂任务)
-  │     └─ REFLECTION → ReflectionAgent (high quality / 高质量)
-  │
-  └─→ Sub-Agent Execution / 子Agent执行
-        ├─ ResumeAgent      (Job seeking / 求职)
-        ├─ NegotiationAgent (Salary negotiation / 薪资谈判)
-        ├─ EscapeAgent      (Resignation / 离职规划)
-        ├─ ConsultationAgent(Appointment / 预约咨询)
-        └─ GeneralCareerAgent(Career advice / 通用职场)
-```
-
-### Classic Paradigms / 经典范式
-
-| Paradigm / 范式 | Use Case / 适用场景 | Flow / 流程 |
-|-----------------|---------------------|-------------|
-| REACT | Interactive tasks, tool calling / 交互式任务 | Think → Act → Observe → Loop |
-| PLAN_AND_SOLVE | Complex multi-step tasks / 复杂多步骤任务 | Plan → Execute → Verify |
-| REFLECTION | High quality output / 高质量输出 | Generate → Evaluate → Reflect → Revise |
+| 文档 | 内容 |
+|------|------|
+| [README.en.md](README.en.md) | English README |
+| [docs/WIKI.md](docs/WIKI.md) | 完整 Wiki |
+| [docs/FEATURES.md](docs/FEATURES.md) | 功能分层 L0–L33 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构设计 |
+| [docs/INTERVIEW-DEFENSE.md](docs/INTERVIEW-DEFENSE.md) | 面试答辩 |
+| [docs/nlu-layer-design-v4.2.md](docs/nlu-layer-design-v4.2.md) | NLU 设计 |
 
 ---
 
-## 🧠 Memory System / 记忆系统
+## 常见问题
 
-```
-MemoryCoordinator.assembleContext(userId, chatId, agentType)
-  │
-  ├─ L1 SlidingWindowLayer  — Recent messages / 最近消息
-  ├─ L2 FactStoreLayer      — User facts (KV) / 用户事实
-  ├─ L3 SummaryLayer        — Conversation summary / 对话摘要
-  └─ L4 ExperienceStoreLayer — Vector experience / 向量经验
+**聊天没有回复？**  
+看后端日志是否出现 `AllocationQuota.FreeTierOnly`：DashScope 免费额度耗尽。关闭「仅免费额度」或充值后重试。
 
-  Token Budget: 6000 tokens, priority L1 > L2 > L3 > L4
-  Query: CompletableFuture parallel, 2000ms timeout per layer
-  Extraction: Async post-conversation (single LLM call)
-  
-  Context Engineering / 上下文工程:
-  - Relevance scoring: Keyword overlap + Density / 相关性评分
-  - Dynamic budget: By query type (CONVERSATIONAL/FACTUAL/ANALYTICAL)
-  - Key info extraction: Entities + Topics + Intent
-```
+**编译报「不支持发行版本 21」？**  
+当前 `JAVA_HOME` 不是 JDK 21，请切换后重启后端。
+
+**SSE 鉴权失败？**  
+EventSource 不能带 Header，前端已把 token 放在 URL 参数；请确认已登录且 token 未过期。
 
 ---
 
-## 📡 Monitoring / 监控
+## License
 
-### Endpoints / 端点
+MIT · See [LICENSE](LICENSE)
 
-| Endpoint / 端点 | Description / 说明 |
-|-----------------|-------------------|
-| `/actuator/health` | Health check / 健康检查 |
-| `/actuator/agent-metrics` | Custom agent metrics / 自定义Agent指标 |
-| `/actuator/agent-diagnostics` | Per-agent diagnostics / Agent诊断 |
-| `/actuator/prometheus` | Prometheus metrics / Prometheus指标 |
-
-### Key Metrics / 关键指标
-
-| Metric / 指标 | Type / 类型 | Description / 说明 |
-|---------------|-------------|-------------------|
-| `agent_execution_duration` | Timer | Agent execution duration / Agent执行耗时 |
-| `agent_execution_success` | Counter | Successful executions / 成功执行次数 |
-| `agent_execution_failure` | Counter | Failed executions / 失败执行次数 |
-| `agent_execution_timeout` | Counter | Timeout count / 超时次数 |
-| `agent_token_consumption` | Summary | Token usage per execution / Token消耗 |
-| `agent_active_count` | Gauge | Currently active agents / 活跃Agent数 |
-
-### Circuit Breaker / 断路器
-
-| State / 状态 | Condition / 条件 |
-|--------------|-----------------|
-| CLOSED | Normal operation / 正常运行 |
-| OPEN | Failure rate > 50% or Timeout rate > 30% / 失败率>50%或超时率>30% |
-| HALF_OPEN | Auto recovery after 30s / 30秒后自动恢复 |
-
----
-
-## 🔧 Tools & MCP / 工具与MCP
-
-### Tool Registry / 工具注册
-
-```java
-// Dynamic registration / 动态注册
-toolRegistryService.register("myTool", "Description", Set.of("search"), callback);
-
-// Capability discovery / 能力发现
-ToolCallback[] tools = toolRegistryService.getToolCallbacksByCapability("search");
-
-// Auto discovery from Spring Context / 从Spring Context自动发现
-// All ToolCallback beans are auto-registered
-```
-
-### Built-in Tools / 内置工具
-
-| Tool / 工具 | Class / 类 | Description / 说明 |
-|-------------|-----------|-------------------|
-| Web Search / 联网搜索 | `WebSearchTool` | SearchAPI powered / SearchAPI驱动 |
-| Web Scraping / 网页抓取 | `WebScrapingTool` | Jsoup extraction / Jsoup正文提取 |
-| File Operations / 文件操作 | `FileOperationTool` | Local file R/W / 本地文件读写 |
-| Resource Download / 资源下载 | `ResourceDownloadTool` | HTTP download / HTTP资源获取 |
-| Terminal / 终端命令 | `TerminalOperationTool` | Shell execution / Shell执行 |
-| PDF Generation / PDF生成 | `PDFGenerationTool` | iText + Asian fonts / iText+亚洲字体 |
-| Terminate / 终止 | `TerminateTool` | Agent self-stop / Agent主动结束 |
-
----
-
-## 🧪 Testing / 测试
-
-```bash
-# Run all tests / 运行所有测试
-mvn test
-
-# Run specific test / 运行指定测试
-mvn test -Dtest=MemoryCoordinatorTest
-mvn test -Dtest=AgentRoutingEvalTest
-
-# Stress test / 压测
-k6 run --vus 10 --duration 30s stress-test.js
-./stress-test.sh 5 20
-```
-
-### Test Coverage / 测试覆盖
-
-| Category / 类别 | Files / 文件数 | Coverage / 覆盖范围 |
-|----------------|---------------|-------------------|
-| Memory System / 记忆系统 | 9 | L1-L4 + Coordinator + Extraction |
-| Execution Trace / 执行轨迹 | 10 | Model + Recorder + Repository + Controller |
-| Appointment / 预约咨询 | 5 | Agent + Repository + Calendar + Validator |
-| Agent Routing / Agent路由 | 3 | Routing eval + Fast path + Orchestrator |
-| Tools / 工具 | 5 | Web search + Scraping + Download + PDF + File |
-| RAG | 3 | VectorStore + DocumentLoader + MultiQuery |
-| Other / 其他 | 6 | YuManus + AiChatAgent + App startup |
-| **Total / 合计** | **41** | |
-
----
-
-## 📄 Documentation / 文档
-
-| Document / 文档 | Description / 说明 |
-|----------------|-------------------|
-| [WIKI.md](docs/WIKI.md) | Full project wiki (L0-L33) / 完整项目Wiki |
-| [FEATURES.md](docs/FEATURES.md) | Feature layers / 功能分层文档 |
-| [INTERVIEW-DEFENSE.md](docs/INTERVIEW-DEFENSE.md) | Interview defense notes / 面试答辩话术 |
-| [plan-auth-sse-storage.md](docs/plan-auth-sse-storage.md) | Auth · SSE · storage plan / 鉴权与存储方案 |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture design / 架构设计 |
-| [NLU Design v4.2](docs/nlu-layer-design-v4.2.md) | NLU pipeline design / NLU管道设计 |
-| [Multi-Agent Architecture](docs/multi-agent-runtime-architecture.md) | Multi-agent runtime / 多Agent运行时架构 |
-
----
-
-## 📊 Capability Layers / 能力层级
-
-```
-L0-L27: Core capabilities / 核心能力
-L28: Performance monitoring / 性能监控
-L29: Classic paradigms / 经典范式
-L30: Context engineering / 上下文工程
-L31: Tool registry / 工具注册
-L32: Reflexion memory / 失败记忆
-L33: RAG rerank / 重排序
-Cross-cutting / 横切: JWT refresh · Daily quota · HITL · Dual storage (file|jdbc)
-```
-
----
-
-## 🆕 What's New in java-v3-db / 本分支更新
-
-| Area / 领域 | Change / 变更 |
-|-------------|--------------|
-| Storage / 存储 | `MessageStore` / `TraceStore` 支持 `file` 与 `jdbc` 双后端；Flyway `V1__init_schema.sql` |
-| Auth / 鉴权 | 注册登录、Refresh Token、角色配额；前端 `Login.vue` |
-| Safety / 安全 | HITL 审批网关；`UrlSafetyGuard` SSRF 防护 |
-| Agents / 智能体 | 多专家协作；Manus SSE 回传真实回复 + `[DONE]`，避免误报连接错误 |
-| Ops / 运维 | `docker-compose.yml`（Postgres pgvector + Redis + App） |
-
----
-
-## 📄 License / 许可证
-
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-> **Built with ❤️ by jsq** · Powered by Java 21 + Spring AI + Vue 3 + PostgreSQL
+> Built by jsq · Java 21 + Spring AI + Vue 3 + PostgreSQL
