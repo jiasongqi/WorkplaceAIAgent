@@ -59,40 +59,16 @@
 ## 架构一览
 
 <p align="center">
-  <img src="docs/assets/architecture-overview.png" width="820" alt="系统架构图" />
+  <img src="docs/assets/architecture-overview.png" width="900" alt="系统架构图" />
 </p>
-
-```mermaid
-flowchart TD
-  FE[Frontend Vue3]
-  API[Controllers and AppServices]
-  Orch[OrchestratorAgent]
-  Route[KeywordRouter and NLU]
-  Agents[Resume Negotiation Escape Consultation General]
-  Infra[Memory Trace HITL Store LLM]
-
-  FE -->|SSE REST JWT| API
-  API --> Orch
-  Orch --> Route
-  Orch --> Agents
-  Orch --> Infra
-```
+<p align="center"><sub>Frontend Vue3 → API / AppService → OrchestratorAgent → 子 Agent + Memory / Trace / HITL / Store / LLM</sub></p>
 
 ### Agent 路由
 
 <p align="center">
-  <img src="docs/assets/architecture-routing.png" width="820" alt="Agent 路由图" />
+  <img src="docs/assets/architecture-routing.png" width="900" alt="Agent 路由图" />
 </p>
-
-```mermaid
-flowchart TD
-  U[User Message] --> KR{KeywordRouter}
-  KR -->|hit| SA[Sub Agent]
-  KR -->|miss| NLU[NLU Pipeline]
-  NLU -->|clarify| Ask[Ask Follow-up]
-  NLU -->|clear| SA
-  SA --> Out[SSE Stream]
-```
+<p align="center"><sub>用户消息 → KeywordRouter（快路径）→ NLU Pipeline → ReAct / Plan-and-Solve / Reflection → 五个专业子 Agent</sub></p>
 
 ### 技术栈
 

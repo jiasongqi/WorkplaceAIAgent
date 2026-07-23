@@ -59,40 +59,16 @@
 ## Architecture
 
 <p align="center">
-  <img src="docs/assets/architecture-overview.png" width="820" alt="System architecture" />
+  <img src="docs/assets/architecture-overview.png" width="900" alt="System architecture" />
 </p>
-
-```mermaid
-flowchart TD
-  FE[Frontend Vue3]
-  API[Controllers and AppServices]
-  Orch[OrchestratorAgent]
-  Route[KeywordRouter and NLU]
-  Agents[Resume Negotiation Escape Consultation General]
-  Infra[Memory Trace HITL Store LLM]
-
-  FE -->|SSE REST JWT| API
-  API --> Orch
-  Orch --> Route
-  Orch --> Agents
-  Orch --> Infra
-```
+<p align="center"><sub>Frontend Vue3 → API / AppService → OrchestratorAgent → sub-agents + Memory / Trace / HITL / Store / LLM</sub></p>
 
 ### Agent routing
 
 <p align="center">
-  <img src="docs/assets/architecture-routing.png" width="820" alt="Agent routing" />
+  <img src="docs/assets/architecture-routing.png" width="900" alt="Agent routing" />
 </p>
-
-```mermaid
-flowchart TD
-  U[User Message] --> KR{KeywordRouter}
-  KR -->|hit| SA[Sub Agent]
-  KR -->|miss| NLU[NLU Pipeline]
-  NLU -->|clarify| Ask[Ask Follow-up]
-  NLU -->|clear| SA
-  SA --> Out[SSE Stream]
-```
+<p align="center"><sub>User message → KeywordRouter (fast path) → NLU Pipeline → ReAct / Plan-and-Solve / Reflection → five specialist agents</sub></p>
 
 ### Tech stack
 
