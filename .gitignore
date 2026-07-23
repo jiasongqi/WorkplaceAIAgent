@@ -35,3 +35,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local AI / IDE tooling (keep out of repo) ###
+.cursor/
+.hermes/
+.kiro/
+.qoder/
+.workbuddy/

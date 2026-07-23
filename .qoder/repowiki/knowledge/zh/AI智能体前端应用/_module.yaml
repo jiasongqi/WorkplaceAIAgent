@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: frontend
-title: AI智能体前端应用
-scope:
-    - yu-ai-agent-frontend/
-source_files: []
-depends_on: []
-related_to: []
