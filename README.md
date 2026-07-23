@@ -59,43 +59,19 @@
 </p>
 
 ```mermaid
-flowchart TB
-  subgraph FE["Frontend · Vue 3"]
-    Login[Login]
-    Home[Home]
-    Career[CareerAdvisor]
-    Super[SuperAgent]
-    KB[KnowledgeBase]
-  end
+flowchart TD
+  FE[Frontend Vue3]
+  API[Controllers and AppServices]
+  Orch[OrchestratorAgent]
+  Route[KeywordRouter and NLU]
+  Agents[Resume Negotiation Escape Consultation General]
+  Infra[Memory Trace HITL Store LLM]
 
-  subgraph API["API · Spring Boot"]
-    Ctrl[Controllers]
-    App[AppServices]
-  end
-
-  subgraph CORE["Agent Core"]
-    Orch[OrchestratorAgent]
-    KR[KeywordRouter]
-    NLU[NluPipeline]
-    R[ResumeAgent]
-    N[NegotiationAgent]
-    E[EscapeAgent]
-    C[ConsultationAgent]
-    G[GeneralCareerAgent]
-  end
-
-  subgraph INFRA["Infrastructure"]
-    Mem[4-Layer Memory]
-    Trace[Trace / HITL / Quota]
-    Store[(file 或 PostgreSQL)]
-    LLM[DashScope / Ollama]
-  end
-
-  FE -->|SSE / REST + JWT| Ctrl --> App --> Orch
-  Orch --> KR
-  Orch --> NLU
-  Orch --> R & N & E & C & G
-  Orch --> Mem & Trace & Store & LLM
+  FE -->|SSE REST JWT| API
+  API --> Orch
+  Orch --> Route
+  Orch --> Agents
+  Orch --> Infra
 ```
 
 ### Agent 路由
@@ -105,13 +81,13 @@ flowchart TB
 </p>
 
 ```mermaid
-flowchart LR
-  U[用户消息] --> KR{KeywordRouter<br/>0 LLM}
-  KR -->|命中| SA[子 Agent]
-  KR -->|未命中| NLU[NLU Pipeline<br/>1 LLM]
-  NLU -->|需澄清| Ask[追问]
-  NLU -->|明确| SA
-  SA --> Out[SSE 流式回复]
+flowchart TD
+  U[User Message] --> KR{KeywordRouter}
+  KR -->|hit| SA[Sub Agent]
+  KR -->|miss| NLU[NLU Pipeline]
+  NLU -->|clarify| Ask[Ask Follow-up]
+  NLU -->|clear| SA
+  SA --> Out[SSE Stream]
 ```
 
 ### 技术栈

@@ -59,43 +59,19 @@
 </p>
 
 ```mermaid
-flowchart TB
-  subgraph FE["Frontend · Vue 3"]
-    Login[Login]
-    Home[Home]
-    Career[CareerAdvisor]
-    Super[SuperAgent]
-    KB[KnowledgeBase]
-  end
+flowchart TD
+  FE[Frontend Vue3]
+  API[Controllers and AppServices]
+  Orch[OrchestratorAgent]
+  Route[KeywordRouter and NLU]
+  Agents[Resume Negotiation Escape Consultation General]
+  Infra[Memory Trace HITL Store LLM]
 
-  subgraph API["API · Spring Boot"]
-    Ctrl[Controllers]
-    App[AppServices]
-  end
-
-  subgraph CORE["Agent Core"]
-    Orch[OrchestratorAgent]
-    KR[KeywordRouter]
-    NLU[NluPipeline]
-    R[ResumeAgent]
-    N[NegotiationAgent]
-    E[EscapeAgent]
-    C[ConsultationAgent]
-    G[GeneralCareerAgent]
-  end
-
-  subgraph INFRA["Infrastructure"]
-    Mem[4-Layer Memory]
-    Trace[Trace / HITL / Quota]
-    Store[(file or PostgreSQL)]
-    LLM[DashScope / Ollama]
-  end
-
-  FE -->|SSE / REST + JWT| Ctrl --> App --> Orch
-  Orch --> KR
-  Orch --> NLU
-  Orch --> R & N & E & C & G
-  Orch --> Mem & Trace & Store & LLM
+  FE -->|SSE REST JWT| API
+  API --> Orch
+  Orch --> Route
+  Orch --> Agents
+  Orch --> Infra
 ```
 
 ### Agent routing
@@ -105,13 +81,13 @@ flowchart TB
 </p>
 
 ```mermaid
-flowchart LR
-  U[User message] --> KR{KeywordRouter<br/>0 LLM}
-  KR -->|hit| SA[Sub-agent]
-  KR -->|miss| NLU[NLU Pipeline<br/>1 LLM]
-  NLU -->|clarify| Ask[Ask follow-up]
+flowchart TD
+  U[User Message] --> KR{KeywordRouter}
+  KR -->|hit| SA[Sub Agent]
+  KR -->|miss| NLU[NLU Pipeline]
+  NLU -->|clarify| Ask[Ask Follow-up]
   NLU -->|clear| SA
-  SA --> Out[SSE stream]
+  SA --> Out[SSE Stream]
 ```
 
 ### Tech stack
