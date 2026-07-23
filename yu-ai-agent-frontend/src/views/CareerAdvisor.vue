@@ -141,6 +141,10 @@
             <div>
               <div v-if="msg.agentName" class="agent-label">{{ msg.agentName }}</div>
               <div class="msg-bub" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.hitlApprovalId && !msg.hitlResolved" class="hitl-card">
+                <button class="hitl-btn ok" :disabled="isStreaming || msg.hitlBusy" @click="handleHitlApprove(msg)">确认创建</button>
+                <button class="hitl-btn no" :disabled="isStreaming || msg.hitlBusy" @click="handleHitlReject(msg)">取消</button>
+              </div>
               <button v-if="msg.type === 'error'" class="retry-btn" @click="retrySendMessage">
                 🔄 重试
               </button>
@@ -645,7 +649,53 @@ const scrollToBottom = async () => {
   await nextTick()
   if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
 }
-const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
+const renderMarkdown = (text) => {
+  if (!text) return ''
+  // ATX 标题需「# 后空格」；模型常写成 ###🔍，否则会原样露出 ###
+  const cleaned = text
+    .replace(/<!--\s*hitl:[^>]+-->/gi, '')
+    .replace(/^(#{1,6})([^\s#])/gm, '$1 $2')
+  return DOMPurify.sanitize(marked.parse(cleaned))
+}
+
+const extractHitlId = (text) => {
+  if (!text) return null
+  const m = text.match(/<!--\s*hitl:([a-f0-9-]+)\s*-->/i)
+  return m ? m[1] : null
+}
+
+const handleHitlApprove = async (msg) => {
+  if (!msg?.hitlApprovalId || isStreaming.value) return
+  msg.hitlBusy = true
+  try {
+    // 只发聊天「确认创建」，由后端统一 approve + 创建，避免按钮先 approve 再重复报错
+    msg.hitlResolved = true
+    inputMessage.value = '确认创建'
+    await nextTick()
+    await sendMessage()
+  } catch (e) {
+    msg.hitlResolved = false
+    addMessage(`审批失败：${e.response?.data?.message || e.message || '请重试'}`, false, 'error')
+  } finally {
+    msg.hitlBusy = false
+  }
+}
+
+const handleHitlReject = async (msg) => {
+  if (!msg?.hitlApprovalId || isStreaming.value) return
+  msg.hitlBusy = true
+  try {
+    msg.hitlResolved = true
+    inputMessage.value = '取消'
+    await nextTick()
+    await sendMessage()
+  } catch (e) {
+    msg.hitlResolved = false
+    addMessage(`取消失败：${e.response?.data?.message || e.message || '请重试'}`, false, 'error')
+  } finally {
+    msg.hitlBusy = false
+  }
+}
 const formatTimeAgo = (val) => {
   if (!val) return ''
   const d = new Date(val); if (isNaN(d.getTime())) return ''
@@ -829,6 +879,13 @@ const sendMessage = async () => {
         isStreaming.value = false; traceVisible.value = false; es.close()
         if (aiMsgIndex >= 0 && messages.value[aiMsgIndex]?.status === 'STREAMING') {
           messages.value[aiMsgIndex].status = 'COMPLETE'
+        }
+        if (aiMsgIndex >= 0 && messages.value[aiMsgIndex]) {
+          const hitlId = extractHitlId(messages.value[aiMsgIndex].content)
+          if (hitlId) {
+            messages.value[aiMsgIndex].hitlApprovalId = hitlId
+            messages.value[aiMsgIndex].hitlResolved = false
+          }
         }
         if (!isResume) autoNameSession(msg)
         return
@@ -1109,6 +1166,23 @@ const handleClearProfile = async () => {
   border-color: rgba(245,158,11,0.5);
 }
 
+.hitl-card {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.hitl-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hitl-btn:disabled { opacity: .55; cursor: not-allowed; }
+.hitl-btn.ok { background: #059669; color: #fff; }
+.hitl-btn.no { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+
 /* Routing badge */
 .routing-badge {
   text-align: center; padding: 8px 16px; margin: 8px auto;
@@ -1319,6 +1393,15 @@ const handleClearProfile = async () => {
 /* Markdown content in messages */
 .msg-bub :deep(p) { margin: 0 0 8px; }
 .msg-bub :deep(p:last-child) { margin: 0; }
+.msg-bub :deep(h1), .msg-bub :deep(h2), .msg-bub :deep(h3), .msg-bub :deep(h4) {
+  margin: 12px 0 6px; font-weight: 600; color: var(--t1); line-height: 1.4;
+}
+.msg-bub :deep(h1:first-child), .msg-bub :deep(h2:first-child), .msg-bub :deep(h3:first-child), .msg-bub :deep(h4:first-child) {
+  margin-top: 0;
+}
+.msg-bub :deep(h1) { font-size: 1.15em; }
+.msg-bub :deep(h2) { font-size: 1.08em; }
+.msg-bub :deep(h3), .msg-bub :deep(h4) { font-size: 1em; }
 .msg-bub :deep(strong), .msg-bub :deep(b) { color: var(--t1); font-weight: 600; }
 .msg-bub :deep(em) { color: var(--t2); font-style: italic; }
 .msg-bub :deep(code) { font-family: var(--mono); font-size: 12px; padding: 2px 6px; background: var(--layer2); border-radius: 4px; }

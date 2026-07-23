@@ -43,7 +43,8 @@ public class ConsultationAgent {
             3. 确认预约信息并创建预约
             
             回答要求：
-            - 使用 Markdown 格式，善用标题、列表、粗体
+            - 使用 Markdown 格式，优先列表与 **粗体**，少用 ### 大标题
+            - 若使用标题，# 后必须空一格（正确：### 标题；错误：###标题）
             - 信息分点列出，层次清晰
             - 关键信息（时间、联系方式）用 **粗体** 标注
             - 回复简洁专业，避免冗长
@@ -123,6 +124,8 @@ public class ConsultationAgent {
     private final Map<String, String> currentQuestionFields = new ConcurrentHashMap<>();
     // 已发起过 AI 智能追问的非核心字段（chatId -> 字段集合），避免重复追问导致死循环
     private final Map<String, Set<String>> optionalAskedFields = new ConcurrentHashMap<>();
+    /** 待人工确认的审批单（chatId -> approvalId），支持聊天内二次确认 */
+    private final Map<String, String> pendingApprovalIds = new ConcurrentHashMap<>();
 
     /**
      * 构造函数
@@ -191,15 +194,18 @@ public class ConsultationAgent {
     private static final String SERVICE_CATALOG = """
             ### 可以预约的咨询服务
 
-            WorkPilot 目前支持一对一预约以下方向（约 30–60 分钟）：
+            说明：目前是**一对一专家咨询**（约 30–60 分钟），不是录播课/培训班。
 
-            1. **简历与求职咨询** — 简历优化、投递策略、面试准备
-            2. **薪资谈判咨询** — 谈薪话术、报价区间、涨薪路径
-            3. **离职规划咨询** — 辞职节奏、交接、竞业与补偿风险
-            4. **通用职场咨询** — 晋升、沟通、团队协作等一对一答疑
+            WorkPilot 目前支持预约以下方向：
+
+            1. **职业方向梳理** — 迷茫期定位、转行评估、发展路径
+            2. **简历与求职咨询** — 简历优化、投递策略、面试准备
+            3. **薪资谈判咨询** — 谈薪话术、报价区间、涨薪路径
+            4. **离职规划咨询** — 辞职节奏、交接、竞业与补偿风险
+            5. **通用职场咨询** — 晋升、沟通、团队协作等一对一答疑
 
             想预约的话，直接说方向 + 时间即可，例如：
-            「预约简历咨询，明天下午 3 点」
+            「预约职业方向梳理，明天下午 3 点」
             """;
 
     /**
@@ -225,66 +231,52 @@ public class ConsultationAgent {
             return "好的，已取消本次预约流程。之后想约随时说「我想预约咨询」即可。";
         }
 
-        // 「有什么可以预约」：先介绍目录，不要当成姓名/时间等槽位答案
+        // 「有什么可以预约」：先介绍目录，并进入预约会话锁定，避免下一句「选3」被路由到通用顾问
         if (isServiceCatalogInquiry(message)) {
             String catalog = SERVICE_CATALOG.trim();
             if (state == ConsultationState.INITIAL || state == ConsultationState.COMPLETED) {
-                // 仅介绍，不进入填表，避免把闲聊锁进预约状态机
-                return catalog;
+                sessionStates.put(chatId, ConsultationState.COLLECTING_INFO);
+                currentQuestionFields.put(chatId, "topic");
+                return catalog + "\n\n请回复**序号**（如「3」）或直接说出方向；也可以一并告诉我时间，例如：「选择3，明天下午两点」。";
             }
             String pending = currentQuestionFields.get(chatId);
             if (pending != null) {
                 return catalog + "\n\n---\n若继续刚才的预约，请补充您的**" + renderFieldName(pending) + "**。";
             }
-            return catalog + "\n\n若要继续预约，请告诉我您想约的方向与时间。";
+            currentQuestionFields.put(chatId, "topic");
+            return catalog + "\n\n请回复序号选择方向，或直接说出想预约的内容。";
         }
         
-        // 如果是初始状态，先检测意图
+        // 如果是初始状态：已由 Orchestrator 路由到本 Agent，禁止再串行打 3～4 次 LLM
+        // （旧逻辑：detectIntent + 历史抽取 + 消息抽取 + 打招呼，合计约 15～25s）
         if (state == ConsultationState.INITIAL) {
-            if (!detectConsultationIntent(message)) {
-                return SERVICE_CATALOG.trim() + "\n\n如果您需要预约，请告诉我希望咨询的方向与时间。";
-            }
             state = ConsultationState.COLLECTING_INFO;
             sessionStates.put(chatId, state);
-            // 从整个对话历史中提取已有信息（不只是当前消息）
-            extractInfoFromHistory(chatId, info);
-            // 从当前消息也提取
-            extractInfoFromMessage(message, info);
+
+            // 仅用本地规则抽取（姓名/手机/邮箱/时间），不调用 LLM
+            extractInfoLocally(message, info);
 
             String missingHint = firstMissingCoreField(info);
-
-            // 用 LLM 生成自然的首条回复（回答用户问题 + 引导提供缺失信息）
-            try {
-                String missingDesc = missingHint != null
-                        ? "接下来需要收集预约信息。请自然地回答用户的问题（如有），然后引导用户提供" + renderFieldName(missingHint) + "。"
-                        : "核心预约信息已完整。请简短回答用户的问题（如有），然后请用户确认预约信息。回复要简洁。";
-                String aiGreeting = chatClient.prompt()
-                        .system("你是一位专业的预约咨询助手。用户想预约咨询服务。" + missingDesc)
-                        .user(message)
-                        .call()
-                        .content();
-                // 如果还有缺失字段，设置当前追问字段
-                if (missingHint != null) {
-                    currentQuestionFields.put(chatId, missingHint);
-                } else {
-                    // 核心信息完整，进入确认阶段
-                    sessionStates.put(chatId, ConsultationState.CONFIRMING);
-                }
-                // 追加确认信息（如果有）
-                if (missingHint == null) {
-                    return aiGreeting + "\n\n" + renderConfirmation(info);
-                }
-                return aiGreeting;
-            } catch (Exception e) {
-                log.warn("LLM 首条回复失败，使用模板", e);
-                if (missingHint != null) {
-                    currentQuestionFields.put(chatId, missingHint);
-                    return renderCoreQuestion(missingHint);
-                } else {
-                    sessionStates.put(chatId, ConsultationState.CONFIRMING);
-                    return renderConfirmation(info);
-                }
+            if (missingHint == null) {
+                sessionStates.put(chatId, ConsultationState.CONFIRMING);
+                return "已根据您的描述整理预约信息：\n\n" + renderConfirmation(info);
             }
+
+            currentQuestionFields.put(chatId, missingHint);
+            String topicHint = "";
+            if (info.getTopic() != null && !info.getTopic().isBlank()) {
+                topicHint = "（主题：**" + info.getTopic() + "**）";
+            } else if (message != null && (message.contains("方向") || message.contains("简历")
+                    || message.contains("薪资") || message.contains("离职"))) {
+                // 轻量记下话题，后续确认页可用
+                if (message.contains("方向") || message.contains("职业")) {
+                    info.setTopic("职业方向梳理");
+                }
+                topicHint = info.getTopic() != null ? "（主题：**" + info.getTopic() + "**）" : "";
+            }
+
+            return "好的，开始为您预约一对一咨询" + topicHint + "。\n\n"
+                    + renderCoreQuestion(missingHint);
         }
         
         // 根据状态处理
@@ -329,6 +321,10 @@ public class ConsultationAgent {
         // 获取当前追问的字段
         String currentField = currentQuestionFields.get(chatId);
 
+        // 同一句里可能带「选择3 + 明天下午两点」：先本地抽时间/联系方式/序号主题
+        extractInfoLocally(message, info);
+        applyCatalogChoice(message, info);
+
         if (currentField != null) {
             // 用户在追问中途改口问「能约什么」已在 chat() 入口处理；
             // 明显不是在答当前槽位时，不要用「请提供具体时间」之类校验文案怼回去
@@ -338,24 +334,39 @@ public class ConsultationAgent {
                         + "\n\n---\n若继续预约，请直接回复您的**"
                         + renderFieldName(currentField) + "**。";
             }
-            if (isCoreField(currentField)) {
-                // 核心字段：校验用户回答（Req 5.6）
-                String validationMessage = validateAnswer(currentField, message);
-                if (validationMessage != null) {
-                    // 校验失败，重新追问（保持 currentField 不变）
-                    return templateConfig.renderValidationFailed(validationMessage);
+            if ("topic".equals(currentField)) {
+                if (!isSkipResponse(message) && (info.getTopic() == null || info.getTopic().isBlank())) {
+                    info.setTopic(message.trim());
                 }
-                saveAnswer(currentField, message, info);
+                markOptionalAsked(chatId, currentField);
+                currentQuestionFields.remove(chatId);
+            } else if (isCoreField(currentField)) {
+                // 核心字段：校验用户回答（Req 5.6）
+                // 若本轮本地已抽到该字段（例如时间），则不再用整句做失败校验
+                boolean alreadyFilled = switch (currentField) {
+                    case "name" -> info.getName() != null && !info.getName().isBlank();
+                    case "contact" -> info.getContact() != null && !info.getContact().isBlank();
+                    case "appointmentTime" -> info.getAppointmentTime() != null;
+                    default -> false;
+                };
+                if (!alreadyFilled) {
+                    String validationMessage = validateAnswer(currentField, message);
+                    if (validationMessage != null) {
+                        return templateConfig.renderValidationFailed(validationMessage);
+                    }
+                    saveAnswer(currentField, message, info);
+                }
+                currentQuestionFields.remove(chatId);
             } else {
-                // 非核心字段：允许用户跳过
+                // 其他非核心字段：允许用户跳过
                 if (!isSkipResponse(message)) {
                     saveAnswer(currentField, message, info);
                 }
                 markOptionalAsked(chatId, currentField);
+                currentQuestionFields.remove(chatId);
             }
-            currentQuestionFields.remove(chatId);
         } else {
-            // 无待回答字段，尝试从自由文本中抽取信息
+            // 无待回答字段，尝试从自由文本中抽取信息（本地不够再 LLM）
             extractInfoFromMessage(message, info);
         }
 
@@ -363,7 +374,9 @@ public class ConsultationAgent {
         String missingCoreField = firstMissingCoreField(info);
         if (missingCoreField != null) {
             currentQuestionFields.put(chatId, missingCoreField);
-            return renderCoreQuestion(missingCoreField);
+            String topicLine = (info.getTopic() != null && !info.getTopic().isBlank())
+                    ? "已选方向：**" + info.getTopic() + "**。\n\n" : "";
+            return topicLine + renderCoreQuestion(missingCoreField);
         }
 
         // 核心信息已完整，AI 智能追问非核心信息（Req 5.4）
@@ -392,12 +405,14 @@ public class ConsultationAgent {
             return false;
         }
         String m = message.trim();
-        return m.matches("(?s).*(有什么|有哪些|哪些服务|能约什么|可以预约什么|先告诉我|介绍一下).*(预约|咨询).*")
-                || m.matches("(?s).*(预约|咨询).*(什么|哪些|哪些服务|能约什么).*")
+        return m.matches("(?s).*(有什么|有哪些|哪些服务|能约什么|可以预约什么|先告诉我|介绍一下).*(预约|咨询|课程).*")
+                || m.matches("(?s).*(预约|咨询).*(什么|哪些|哪些服务|能约什么|课程).*")
                 || m.contains("可以预约什么")
                 || m.contains("有什么可以预约")
                 || m.contains("能预约什么")
-                || m.contains("预约什么服务");
+                || m.contains("预约什么服务")
+                || m.contains("可预约的课程")
+                || m.contains("预约的课程");
     }
 
     static boolean isCancelBooking(String message) {
@@ -416,15 +431,19 @@ public class ConsultationAgent {
         if (isServiceCatalogInquiry(message) || isCancelBooking(message)) {
             return true;
         }
-        // 等时间时，整句在问「什么/哪些」且不含日期特征 → 不当作时间答案
-        if ("appointmentTime".equals(currentField)) {
-            String m = message == null ? "" : message;
-            boolean askingWhat = m.contains("什么") || m.contains("哪些") || m.contains("介绍");
-            boolean looksLikeTime = m.matches(".*\\d.*") || m.contains("点") || m.contains("号")
-                    || m.contains("明天") || m.contains("后天") || m.contains("周") || m.contains("月");
-            return askingWhat && !looksLikeTime;
-        }
-        return false;
+            // 等时间时，整句在问「什么/哪些」且不含日期特征 → 不当作时间答案
+            // 「选择3」是目录选项，不是跑题
+            if (message != null && message.matches("(?s).*(?:选择|选)\\s*[1-5].*")) {
+                return false;
+            }
+            if ("appointmentTime".equals(currentField)) {
+                String m = message == null ? "" : message;
+                boolean askingWhat = m.contains("什么") || m.contains("哪些") || m.contains("介绍");
+                boolean looksLikeTime = m.matches(".*\\d.*") || m.contains("点") || m.contains("号")
+                        || m.contains("明天") || m.contains("后天") || m.contains("周") || m.contains("月");
+                return askingWhat && !looksLikeTime;
+            }
+            return false;
     }
 
     /**
@@ -647,21 +666,71 @@ public class ConsultationAgent {
         // HITL 网关：日历创建为高危副作用操作，需人工审批（Req: HITL calendar create）
         if (approvalService != null
                 && approvalService.requiresApproval(HumanApprovalService.ActionType.CALENDAR_CREATE)) {
-            String appointmentSummary = String.format("姓名=%s, 联系方式=%s, 时间=%s, 主题=%s",
+            String appointmentSummary = String.format(
+                    "- **姓名**：%s\n- **联系方式**：%s\n- **时间**：%s\n- **主题**：%s",
+                    info.getName(), info.getContact(),
+                    infoValidator.formatDateTime(info.getAppointmentTime()),
+                    info.getTopic() != null ? info.getTopic() : "一对一咨询");
+            String payloadHint = String.format("姓名=%s, 联系方式=%s, 时间=%s, 主题=%s",
                     info.getName(), info.getContact(),
                     infoValidator.formatDateTime(info.getAppointmentTime()), info.getTopic());
             AgentRequestContext.Holder ctx = AgentRequestContext.get();
-            String approvalId = ctx != null ? ctx.approvalId() : null;
+            String userId = ctx != null ? ctx.userId() : null;
+
+            String approvalId = pendingApprovalIds.get(chatId);
+            if (approvalId == null && ctx != null) {
+                approvalId = ctx.approvalId();
+            }
+
+            // 聊天内二次确认：用户回复「确认创建」→ 批准并继续创建
+            // 前端按钮可能已先 approve，此处对 APPROVED 幂等，避免「approval not pending」
+            if (isHitlConfirmMessage(message) && approvalId != null) {
+                try {
+                    var existing = approvalService.get(approvalId);
+                    if (existing.isEmpty()) {
+                        return "确认单已失效，请再回复「确认」重新发起预约。";
+                    }
+                    var status = existing.get().getStatus();
+                    if (status == HumanApprovalService.Status.PENDING) {
+                        approvalService.approve(approvalId, userId);
+                    } else if (status == HumanApprovalService.Status.APPROVED) {
+                        // 已批准（例如点了前端按钮），继续往下 consume + 创建
+                        log.info("HITL 已是 APPROVED，跳过重复 approve: {}", approvalId);
+                    } else if (status == HumanApprovalService.Status.CONSUMED) {
+                        // 理论上不应再到这里；若已消费则直接走创建会重复，提示用户
+                        return "该预约确认已处理过。如需新预约，请说「我想预约咨询」。";
+                    } else {
+                        return "确认单状态为 " + status + "，无法继续。请回复「确认」重新发起，或「取消」放弃。";
+                    }
+                } catch (Exception e) {
+                    log.warn("HITL 聊天确认失败: {}", e.getMessage());
+                    return "确认失败：" + e.getMessage() + "\n\n请重新回复「确认」发起预约，或「取消」放弃。";
+                }
+            }
+
+            // 取消
+            if (isHitlCancelMessage(message) && approvalId != null) {
+                try {
+                    approvalService.reject(approvalId, userId);
+                } catch (Exception ignored) {}
+                pendingApprovalIds.remove(chatId);
+                sessionStates.put(chatId, ConsultationState.CONFIRMING);
+                return "已取消日历创建。如仍需预约，请再回复「确认」；或回复「修改」重新填写信息。";
+            }
+
             boolean approved = approvalService.consumeIfApproved(
-                    approvalId, HumanApprovalService.ActionType.CALENDAR_CREATE, appointmentSummary);
+                    approvalId, HumanApprovalService.ActionType.CALENDAR_CREATE, payloadHint);
             if (!approved) {
-                String userId = ctx != null ? ctx.userId() : null;
-                HumanApprovalService.ApprovalRequest req = approvalService.requestApproval(
-                        userId, chatId, HumanApprovalService.ActionType.CALENDAR_CREATE,
-                        "创建日历预约：" + appointmentSummary, appointmentSummary);
-                // 保持在 CREATING_APPOINTMENT 状态，等待人工审批后重新触发确认
+                // 复用同会话未过期审批，避免每次「确认」都新开一张单
+                var existing = approvalService.findPendingByChatId(chatId);
+                HumanApprovalService.ApprovalRequest req = existing.orElseGet(() ->
+                        approvalService.requestApproval(
+                                userId, chatId, HumanApprovalService.ActionType.CALENDAR_CREATE,
+                                appointmentSummary, payloadHint));
+                pendingApprovalIds.put(chatId, req.getApprovalId());
                 return approvalService.pendingMessage(req);
             }
+            pendingApprovalIds.remove(chatId);
         }
 
         try {
@@ -702,6 +771,19 @@ public class ConsultationAgent {
         }
     }
 
+    private boolean isHitlConfirmMessage(String message) {
+        if (message == null) return false;
+        String t = message.trim();
+        return t.contains("确认创建") || t.contains("同意创建") || t.contains("批准")
+                || "确认".equals(t) || "确定".equals(t) || "同意".equals(t);
+    }
+
+    private boolean isHitlCancelMessage(String message) {
+        if (message == null) return false;
+        String t = message.trim();
+        return t.contains("取消") || t.contains("放弃") || t.contains("拒绝");
+    }
+
     /**
      * 处理完成阶段
      */
@@ -719,6 +801,16 @@ public class ConsultationAgent {
      * 从消息中提取信息
      */
     private void extractInfoFromMessage(String message, CoreInformation info) {
+        // 先本地规则，避免每轮追问都打 LLM
+        extractInfoLocally(message, info);
+        // 本地已抽到核心字段则不再调 LLM
+        if (firstMissingCoreField(info) == null) {
+            return;
+        }
+        // 消息看起来不像在填槽（无手机/邮箱/日期特征）时跳过 LLM
+        if (!looksLikeSlotPayload(message)) {
+            return;
+        }
         try {
             String context = String.format("当前已收集：姓名=%s, 联系方式=%s, 时间=%s",
                     info.getName(), info.getContact(), info.getAppointmentTime());
@@ -735,6 +827,92 @@ public class ConsultationAgent {
         } catch (Exception e) {
             log.warn("信息提取失败", e);
         }
+    }
+
+    /** 本地规则抽取：手机/邮箱/时间/简短姓名，0 LLM */
+    private void extractInfoLocally(String message, CoreInformation info) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        String contact = infoValidator.extractContact(message);
+        if (contact != null && (info.getContact() == null || info.getContact().isBlank())) {
+            var vr = infoValidator.validateContact(contact);
+            if (vr.isValid()) {
+                info.setContact(contact);
+            }
+        }
+        LocalDateTime time = infoValidator.extractDateTime(message);
+        if (time != null && info.getAppointmentTime() == null) {
+            info.setAppointmentTime(time);
+        }
+        // 仅当整句很短、像在报名字时才当姓名
+        String trimmed = message.trim();
+        if ((info.getName() == null || info.getName().isBlank())
+                && trimmed.length() >= 2 && trimmed.length() <= 8
+                && !trimmed.contains("预约") && !trimmed.contains("咨询")
+                && !trimmed.matches(".*\\d.*")) {
+            String name = infoValidator.extractName(trimmed);
+            if (name != null) {
+                var vr = infoValidator.validateName(name);
+                if (vr.isValid()) {
+                    info.setName(name);
+                }
+            }
+        }
+        if ((info.getTopic() == null || info.getTopic().isBlank())) {
+            if (message.contains("职业方向") || message.contains("方向迷茫") || message.contains("不确定方向")) {
+                info.setTopic("职业方向梳理");
+            } else if (message.contains("简历")) {
+                info.setTopic("简历与求职");
+            } else if (message.contains("谈薪") || message.contains("薪资") || message.contains("涨薪")) {
+                info.setTopic("薪资谈判");
+            } else if (message.contains("离职") || message.contains("辞职")) {
+                info.setTopic("离职规划");
+            }
+        }
+        applyCatalogChoice(message, info);
+    }
+
+    /** 解析「选择3 / 选3 / 3」到目录主题 */
+    private void applyCatalogChoice(String message, CoreInformation info) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        if (info.getTopic() != null && !info.getTopic().isBlank()) {
+            // 已有主题时，仅当明确「选择N」才覆盖
+            if (!message.matches("(?s).*(?:选择|选)\\s*[1-5].*")) {
+                return;
+            }
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?:选择|选)\\s*([1-5])|^\\s*([1-5])\\s*$")
+                .matcher(message.trim());
+        if (!m.find()) {
+            return;
+        }
+        String n = m.group(1) != null ? m.group(1) : m.group(2);
+        String topic = switch (n) {
+            case "1" -> "职业方向梳理";
+            case "2" -> "简历与求职咨询";
+            case "3" -> "薪资谈判咨询";
+            case "4" -> "离职规划咨询";
+            case "5" -> "通用职场咨询";
+            default -> null;
+        };
+        if (topic != null) {
+            info.setTopic(topic);
+        }
+    }
+
+    private boolean looksLikeSlotPayload(String message) {
+        if (message == null) return false;
+        return message.matches(".*\\d{5,}.*")
+                || message.contains("@")
+                || message.contains("点")
+                || message.contains("号")
+                || message.contains("明天")
+                || message.contains("后天")
+                || message.contains("周");
     }
 
     /**
@@ -846,6 +1024,7 @@ public class ConsultationAgent {
         sessionInfos.remove(chatId);
         optionalAskedFields.remove(chatId);
         currentQuestionFields.remove(chatId);
+        pendingApprovalIds.remove(chatId);
         log.info("清理会话状态：{}", chatId);
     }
 

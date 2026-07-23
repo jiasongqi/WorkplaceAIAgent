@@ -213,5 +213,11 @@ export const importData = (formData) =>
   request.post('/export/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const getUsageStats = () => request.get('/usage/stats')
 
+export const approveHitl = (approvalId) =>
+  request.post('/hitl/approve', null, { params: { approvalId } })
+
+export const rejectHitl = (approvalId) =>
+  request.post('/hitl/reject', null, { params: { approvalId } })
+
 export { saveAuth, clearAuth, API_BASE_URL }
 export default request

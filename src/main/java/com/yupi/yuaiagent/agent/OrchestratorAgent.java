@@ -222,58 +222,68 @@ public class OrchestratorAgent {
                     return;
                 }
 
-                // 1. 先尝试技能匹配
+                // 1. 技能匹配：先规则命中（0 LLM），未命中立刻走 Agent 路由
+                // 旧实现把 userMessage 当成 skillName 查，虽多数会 miss，但语义错误且易误伤
                 TraceSpan skillSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SKILL_MATCH, "技能匹配");
-                Flux<String> skillFlux = skillExecutor.executeStream(message, chatId, null);
-                
-                // 收集技能结果判断是否有匹配
-                StringBuilder skillResult = new StringBuilder();
-                skillFlux
-                    .doOnNext(skillResult::append)
-                    .doOnComplete(() -> {
-                        try {
-                            if (skillResult.length() > 0 && !skillResult.toString().startsWith("未找到技能")) {
-                                // 技能匹配成功
-                                traceRecorder.endSpan(traceCtx, skillSpan);
-                                traceRecorder.endTrace(traceCtx);
-                                persistTrace(traceCtx);
+                emitter.send(SseEmitter.event().name("routing").data("[正在理解你的问题...]"));
 
-                                chatMemoryAdapter.addUserMessage(chatId, message, MessageSource.USER, null, null);
-                                var skillMsg = chatMemoryAdapter.startAssistantStream(
-                                        chatId, MessageSource.AGENT, "SKILL", "技能");
-                                emitter.send(SseEmitter.event().name("message-start")
-                                        .data("{\"assistantMessageId\":\"" + skillMsg.getMessageId() + "\"}"));
-                                emitter.send(SseEmitter.event()
-                                        .name("routing")
-                                        .data("[技能匹配]"));
-                                emitter.send(SseEmitter.event().name("message").data(skillResult.toString()));
-                                chatMemoryAdapter.completeAssistant(skillMsg.getMessageId(), skillResult.toString());
-                                emitter.send(SseEmitter.event().data("[DONE]"));
-                                emitter.complete();
-                            } else {
-                                // 2. 技能未匹配，走原有路由逻辑
-                                traceRecorder.skipSpan(traceCtx, skillSpan);
-                                routeToAgent(message, chatId, userId, emitter, traceCtx);
+                List<com.yupi.yuaiagent.skill.SkillDefinition> matchedSkills =
+                        skillRegistry.findByIntent(message);
+                // 技能匹配过宽时不要抢占主路由：仅在强意图词命中时走技能 LLM
+                boolean strongSkillHit = !matchedSkills.isEmpty()
+                        && isStrongSkillTrigger(message, matchedSkills.get(0));
+                if (strongSkillHit) {
+                    var skill = matchedSkills.get(0);
+                    log.info("技能规则命中: {}", skill.getName());
+                    Flux<String> skillFlux = skillExecutor.executeStream(skill.getName(), message, null);
+                    StringBuilder skillResult = new StringBuilder();
+                    skillFlux
+                        .doOnNext(skillResult::append)
+                        .doOnComplete(() -> {
+                            try {
+                                if (skillResult.length() > 0 && !skillResult.toString().startsWith("未找到技能")) {
+                                    traceRecorder.endSpan(traceCtx, skillSpan);
+                                    traceRecorder.endTrace(traceCtx);
+                                    persistTrace(traceCtx);
+
+                                    chatMemoryAdapter.addUserMessage(chatId, message, MessageSource.USER, null, null);
+                                    var skillMsg = chatMemoryAdapter.startAssistantStream(
+                                            chatId, MessageSource.AGENT, "SKILL", "技能");
+                                    emitter.send(SseEmitter.event().name("message-start")
+                                            .data("{\"assistantMessageId\":\"" + skillMsg.getMessageId() + "\"}"));
+                                    emitter.send(SseEmitter.event()
+                                            .name("routing")
+                                            .data("[技能匹配: " + skill.getName() + "]"));
+                                    emitter.send(SseEmitter.event().name("message").data(skillResult.toString()));
+                                    chatMemoryAdapter.completeAssistant(skillMsg.getMessageId(), skillResult.toString());
+                                    emitter.send(SseEmitter.event().data("[DONE]"));
+                                    emitter.complete();
+                                } else {
+                                    traceRecorder.skipSpan(traceCtx, skillSpan);
+                                    routeToAgent(message, chatId, userId, emitter, traceCtx);
+                                }
+                            } catch (IOException e) {
+                                traceRecorder.failTrace(traceCtx);
+                                persistTrace(traceCtx);
+                                emitter.completeWithError(e);
                             }
-                        } catch (IOException e) {
-                            traceRecorder.failTrace(traceCtx);
-                            persistTrace(traceCtx);
-                            emitter.completeWithError(e);
-                        }
-                    })
-                    .doOnError(e -> {
-                        log.error("技能执行出错，降级到原有路由", e);
-                        traceRecorder.failSpan(traceCtx, skillSpan, e.getMessage());
-                        try {
-                            routeToAgent(message, chatId, userId, emitter, traceCtx);
-                        } catch (Exception ex) {
-                            traceRecorder.failTrace(traceCtx);
-                            persistTrace(traceCtx);
-                            emitter.completeWithError(ex);
-                        }
-                    })
-                    .subscribe();
-                    
+                        })
+                        .doOnError(e -> {
+                            log.error("技能执行出错，降级到原有路由", e);
+                            traceRecorder.failSpan(traceCtx, skillSpan, e.getMessage());
+                            try {
+                                routeToAgent(message, chatId, userId, emitter, traceCtx);
+                            } catch (Exception ex) {
+                                traceRecorder.failTrace(traceCtx);
+                                persistTrace(traceCtx);
+                                emitter.completeWithError(ex);
+                            }
+                        })
+                        .subscribe();
+                } else {
+                    traceRecorder.skipSpan(traceCtx, skillSpan);
+                    routeToAgent(message, chatId, userId, emitter, traceCtx);
+                }
             } catch (Exception e) {
                 log.error("OrchestratorAgent 执行出错", e);
                 traceRecorder.failTrace(traceCtx);
@@ -377,44 +387,44 @@ public class OrchestratorAgent {
             return;
         }
 
-        // Fast-path: short/simple messages skip NLU LLM call → go directly to GENERAL agent
-        // This avoids 3-8s DashScope latency for simple greetings or vague messages
-        boolean fastPath = !KeywordRouter.containsCareerKeyword(message);
+        // Fast-path: keyword 规则优先（0 LLM）；仅多域冲突 / 槽位抽取 / 无规则命中且像复杂问句时才打 NLU
+        // 旧逻辑：只要含「预约」就跳过规则直打 NLU，导致「有什么可以预约」白白等 3–8s
         List<AgentIntent> intents = List.of(AgentIntent.GENERAL);
         RouteHint routeHint = new RouteHint(AgentIntent.GENERAL.name(), null, 0.0, null, null, null);
 
-        if (fastPath) {
-            // Try rule-based keyword routing first (no LLM call)
-            AgentIntent keywordIntent = KeywordRouter.keywordRouteIntent(message);
-            if (keywordIntent != null) {
-                TraceSpan nluSpan = traceRecorder.startSpan(traceCtx, TraceStepType.NLU, "NLU 快速路径（规则匹配）");
-                traceRecorder.putMetadata(nluSpan, "intent", keywordIntent.name());
-                traceRecorder.putMetadata(nluSpan, "confidence", "1.00");
-                traceRecorder.putMetadata(nluSpan, "fastPath", "true");
-                traceRecorder.endSpan(traceCtx, nluSpan);
-                intents = List.of(keywordIntent);
-                routeHint = new RouteHint(keywordIntent.name(), null, 1.0, null, null, null);
-            } else {
-                // No keyword match — fall through to full NLU
-                fastPath = false;
-            }
-        }
+        AgentIntent keywordIntent = KeywordRouter.keywordRouteIntent(message);
+        boolean multiDomain = KeywordRouter.hasMultiDomainConflict(message);
+        boolean needsSlots = KeywordRouter.needsSlotExtraction(message);
+        boolean fastPath = keywordIntent != null && !multiDomain && !needsSlots;
 
-        if (!fastPath) {
-            // Complex query with career keywords — needs full NLU Pipeline (single LLM call)
+        if (fastPath) {
+            TraceSpan nluSpan = traceRecorder.startSpan(traceCtx, TraceStepType.NLU, "NLU 快速路径（规则匹配）");
+            traceRecorder.putMetadata(nluSpan, "intent", keywordIntent.name());
+            traceRecorder.putMetadata(nluSpan, "confidence", "1.00");
+            traceRecorder.putMetadata(nluSpan, "fastPath", "true");
+            traceRecorder.endSpan(traceCtx, nluSpan);
+            intents = List.of(keywordIntent);
+            routeHint = new RouteHint(keywordIntent.name(), null, 1.0, null, null, null);
+            log.info("路由快速路径：keyword={} message={}", keywordIntent, message);
+        } else if (multiDomain || needsSlots || KeywordRouter.containsCareerKeyword(message)) {
+            // Complex query — full NLU Pipeline (single LLM call)
             // Send progress feedback immediately so user doesn't stare at blank screen
             emitter.send(SseEmitter.event().name("routing").data("[正在分析你的问题...]"));
 
             TraceSpan nluSpan = traceRecorder.startSpan(traceCtx, TraceStepType.NLU, "NLU 意图理解");
+            long nluStart = System.currentTimeMillis();
             NluPipeline.NluResult nluResult = nluPipeline.process(message, chatId);
+            long nluMs = System.currentTimeMillis() - nluStart;
             traceRecorder.putMetadata(nluSpan, "intent", nluResult.getRouteHint().intent());
             traceRecorder.putMetadata(nluSpan, "confidence",
                 String.format("%.2f", nluResult.getRouteHint().confidence()));
             traceRecorder.putMetadata(nluSpan, "entity", nluResult.getState().getEntity());
+            traceRecorder.putMetadata(nluSpan, "nluLatencyMs", String.valueOf(nluMs));
             if (nluResult.getRouteHint().specificRoute() != null) {
                 traceRecorder.putMetadata(nluSpan, "routeHint", nluResult.getRouteHint().specificRoute());
             }
             traceRecorder.endSpan(traceCtx, nluSpan);
+            log.info("NLU 完整路径耗时 {}ms intent={}", nluMs, nluResult.getRouteHint().intent());
 
             // Clarification
             if (nluResult.isNeedsClarification()) {
@@ -426,6 +436,11 @@ public class OrchestratorAgent {
             // Resolve multi-intents from NLU Pipeline
             intents = AgentIntent.fromMultiIntent(nluResult.getRerankedIntents());
             routeHint = nluResult.getRouteHint();
+        } else {
+            TraceSpan nluSpan = traceRecorder.startSpan(traceCtx, TraceStepType.NLU, "NLU 快速路径（默认通用）");
+            traceRecorder.putMetadata(nluSpan, "intent", AgentIntent.GENERAL.name());
+            traceRecorder.putMetadata(nluSpan, "fastPath", "true");
+            traceRecorder.endSpan(traceCtx, nluSpan);
         }
 
         // DATA_QUERY → treat as GENERAL with honest injection (no fake data)
@@ -735,6 +750,25 @@ public class OrchestratorAgent {
             case CONSULTATION -> "consultation";
             case DATA_QUERY -> "data_query";
             default -> "general";
+        };
+    }
+
+    /**
+     * 技能标签匹配很宽，避免「职业方向/预约」等普通问句误进技能 LLM。
+     * 仅当用户话里出现该技能的核心中文触发词时才执行技能。
+     */
+    private boolean isStrongSkillTrigger(String message, com.yupi.yuaiagent.skill.SkillDefinition skill) {
+        if (message == null || skill == null) {
+            return false;
+        }
+        String m = message.toLowerCase();
+        return switch (skill.getName()) {
+            case "interview-prep" -> m.contains("面试") || m.contains("面经") || m.contains("模拟面试");
+            case "salary-research" -> m.contains("薪资调研") || m.contains("谈薪") || m.contains("涨薪")
+                    || m.contains("薪水") || m.contains("薪酬");
+            case "resignation-letter" -> m.contains("离职信") || m.contains("辞职信") || m.contains("交接清单")
+                    || (m.contains("离职") && (m.contains("写") || m.contains("申请") || m.contains("邮件")));
+            default -> false;
         };
     }
 

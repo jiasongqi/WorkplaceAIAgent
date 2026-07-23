@@ -28,6 +28,10 @@ class ConsultationCatalogInquiryTest {
                 .isEqualTo(AgentIntent.CONSULTATION);
         assertThat(KeywordRouter.keywordRouteIntent("有什么可以预约"))
                 .isEqualTo(AgentIntent.CONSULTATION);
+        assertThat(KeywordRouter.keywordRouteIntent("我不确定自己的职业方向 有什么可以预约的课程"))
+                .isEqualTo(AgentIntent.CONSULTATION);
+        assertThat(KeywordRouter.hasMultiDomainConflict("我不确定自己的职业方向 有什么可以预约的课程"))
+                .isFalse();
         // 单独「咨询一下」不再硬路由到预约填表
         assertThat(KeywordRouter.keywordRouteIntent("想咨询一下怎么涨薪"))
                 .isEqualTo(AgentIntent.NEGOTIATION);

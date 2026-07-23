@@ -50,6 +50,11 @@ public class GeneralCareerAgent {
             - 再分析，帮助用户看清问题的本质
             - 最后给出具体、可行的建议
             - 语气温暖、真诚，像一位值得信赖的朋友
+            
+            排版要求（聊天气泡）：
+            - 小节标题优先用 **加粗**，少用 ### 大标题
+            - 若使用 Markdown 标题，# 后必须空一格（正确：### 标题；错误：###标题 或 ###🔍）
+            - 不要把 emoji 紧贴在 # 后面
             """;
 
     private final ChatClient chatClient;

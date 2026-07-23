@@ -29,7 +29,7 @@ spring:
       api-key: ${DASHSCOPE_API_KEY:}
       chat:
         options:
-          model: deepseek-v4-flash
+          model: qwen3.7-max
     ollama:
       base-url: http://localhost:11434
       chat:

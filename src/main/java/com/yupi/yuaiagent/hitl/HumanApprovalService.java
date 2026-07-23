@@ -129,12 +129,36 @@ public class HumanApprovalService {
     }
 
     public String pendingMessage(ApprovalRequest req) {
+        String actionLabel = switch (req.getActionType()) {
+            case CALENDAR_CREATE -> "创建日历预约";
+            case TERMINAL_COMMAND -> "执行终端命令";
+            case FILE_WRITE -> "写入文件";
+        };
         return """
-                【需要人工确认】操作类型：%s
-                说明：%s
-                审批 ID：%s
-                请调用 POST /api/hitl/approve?approvalId=%s 确认后再执行。
-                """.formatted(req.getActionType(), req.getSummary(), req.getApprovalId(), req.getApprovalId());
+                ### 需要您确认：%s
+
+                %s
+
+                这是高风险操作，需您本人确认后才会执行。
+
+                - 回复 **确认创建** 继续
+                - 回复 **取消** 放弃本次操作
+
+                <!--hitl:%s-->
+                """.formatted(actionLabel, req.getSummary(), req.getApprovalId());
+    }
+
+    /** 按会话查找仍有效的待审批单（聊天二次确认用） */
+    public Optional<ApprovalRequest> findPendingByChatId(String chatId) {
+        if (chatId == null || chatId.isBlank()) {
+            return Optional.empty();
+        }
+        return store.values().stream()
+                .map(this::refreshExpiry)
+                .filter(r -> r != null
+                        && r.getStatus() == Status.PENDING
+                        && chatId.equals(r.getChatId()))
+                .findFirst();
     }
 
     private ApprovalRequest requireOwned(String approvalId, String userId) {
