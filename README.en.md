@@ -143,12 +143,12 @@ docker compose up -d
 <p align="center">
   <img src="docs/assets/screenshot-login.png" width="720" alt="Login" />
 </p>
-<p align="center"><sub>Login / Register / Guest for local demo</sub></p>
+<p align="center"><sub>Dark login · Sign in / Register / Guest</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-home.png" width="720" alt="Home" />
 </p>
-<p align="center"><sub>Home: quick scenario entry</sub></p>
+<p align="center"><sub>Home: stroke SVG icons · quick scenario entry</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-career.png" width="720" alt="Career Advisor" />

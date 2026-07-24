@@ -2,7 +2,7 @@
   <div class="fav-layout">
     <div class="header">
       <div class="back-button" @click="goBack">← 返回</div>
-      <h1 class="title">⭐ 我的收藏</h1>
+      <h1 class="title"><WpIcon name="star" :size="20" class="title-icon" /> 我的收藏</h1>
       <div class="fav-count">{{ favorites.length }} 条</div>
     </div>
 
@@ -32,6 +32,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { listFavorites, removeFavorite } from '../api'
+import WpIcon from '../components/WpIcon.vue'
 
 const router = useRouter()
 const favorites = ref([])
@@ -84,7 +85,8 @@ onMounted(loadFavorites)
 }
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; }
 .back-button:hover { opacity: 1; }
-.title { font-size: 18px; font-weight: bold; margin: 0; text-align: center; }
+.title { font-size: 18px; font-weight: bold; margin: 0; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.title-icon { color: var(--gold-text); }
 .fav-count { justify-self: end; font-size: 13px; opacity: 0.8; }
 
 .content { flex: 1; overflow-y: auto; padding: 20px; max-width: 720px; margin: 0 auto; width: 100%; }

@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="header">
       <div class="back-button" @click="goBack">← 返回</div>
-      <h1 class="title">📚 知识库管理</h1>
+      <h1 class="title"><WpIcon name="knowledge" :size="20" class="title-icon" /> 知识库管理</h1>
       <div class="doc-count">{{ documents.length }} 个文档</div>
     </div>
 
@@ -13,7 +13,7 @@
         <div class="upload-zone" @dragover.prevent @drop.prevent="onDrop"
              :class="{ dragging: isDragging }"
              @dragenter="isDragging = true" @dragleave="isDragging = false">
-          <div class="upload-icon">📄</div>
+          <div class="upload-icon"><WpIcon name="resume" :size="32" /></div>
           <p class="upload-text">拖拽 Markdown 文件到此处，或</p>
           <label class="upload-btn">
             选择文件
@@ -90,6 +90,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import WpIcon from '../components/WpIcon.vue'
 
 const router = useRouter()
 const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:8123/api'
@@ -243,7 +244,8 @@ border: 0.5px solid var(--border); box-shadow: none;
 }
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; }
 .back-button:hover { opacity: 1; }
-.title { font-size: 18px; font-weight: bold; margin: 0; text-align: center; }
+.title { font-size: 18px; font-weight: bold; margin: 0; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.title-icon { color: var(--gold-text); }
 .doc-count { justify-self: end; font-size: 13px; opacity: 0.8; }
 
 .content { flex: 1; overflow-y: auto; padding: 20px; max-width: 800px; margin: 0 auto; width: 100%; }
@@ -259,7 +261,7 @@ border: 0.5px solid var(--border); box-shadow: none;
   background: var(--surface);
 }
 .upload-zone.dragging { border-color: #059669; background: rgba(5,150,105,0.05); }
-.upload-icon { font-size: 32px; margin-bottom: 8px; }
+.upload-icon { margin-bottom: 8px; color: var(--gold-text); display: flex; justify-content: center; }
 .upload-text { color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
 .upload-btn {
   display: inline-block;

@@ -12,7 +12,7 @@
 
       <template v-if="!sidebarCollapsed">
         <div class="side-search">
-          <span class="s-icon">🔍</span>
+          <WpIcon class="s-icon" name="search" :size="14" />
           <input v-model="searchKeyword" placeholder="搜索对话…" @input="onSearchInput" />
           <button v-if="searchKeyword" class="search-clear" @click="clearSearch">×</button>
         </div>
@@ -44,8 +44,8 @@
               <div class="c-meta">
                 <span>{{ formatTimeAgo(session.createTime) }}</span>
                 <div class="c-actions" @click.stop>
-                  <button class="c-act" @click="startRename(session)" title="重命名">✏️</button>
-                  <button class="c-act" @click="handleArchive(session.chatId)" title="归档">📦</button>
+                  <button class="c-act" @click="startRename(session)" title="重命名"><WpIcon name="edit" :size="13" /></button>
+                  <button class="c-act" @click="handleArchive(session.chatId)" title="归档"><WpIcon name="archive" :size="13" /></button>
                   <button class="c-act" @click="removeSession(session.chatId)" title="删除">×</button>
                 </div>
               </div>
@@ -91,16 +91,16 @@
           <div class="agent-tag">{{ currentAgent.name }}</div>
         </div>
         <div class="chat-top-actions">
-          <button class="tb-btn" @click="openProfile" title="画像">👤</button>
+          <button class="tb-btn" @click="openProfile" title="画像"><WpIcon name="user" :size="16" /></button>
           <div class="more-menu-wrap">
             <button class="tb-btn" @click="showMoreMenu = !showMoreMenu" title="更多功能">⋯</button>
             <div v-if="showMoreMenu" class="more-menu" @click="showMoreMenu = false">
-              <div class="menu-item" @click="openProfile">👤 我的画像</div>
-              <div class="menu-item" @click="$router.push('/favorites')">⭐ 我的收藏</div>
-              <div class="menu-item" @click="$router.push('/usage')">📊 使用统计</div>
-              <div class="menu-item" @click="$router.push('/artifacts')">📦 交付物</div>
-              <div class="menu-item" @click="$router.push('/knowledge')">📚 知识库</div>
-              <div class="menu-item" @click="$router.push('/chat/super')">🤖 超级智能体</div>
+              <div class="menu-item" @click="openProfile"><WpIcon name="user" :size="15" /> 我的画像</div>
+              <div class="menu-item" @click="$router.push('/favorites')"><WpIcon name="star" :size="15" /> 我的收藏</div>
+              <div class="menu-item" @click="$router.push('/usage')"><WpIcon name="usage" :size="15" /> 使用统计</div>
+              <div class="menu-item" @click="$router.push('/artifacts')"><WpIcon name="artifact" :size="15" /> 交付物</div>
+              <div class="menu-item" @click="$router.push('/knowledge')"><WpIcon name="knowledge" :size="15" /> 知识库</div>
+              <div class="menu-item" @click="$router.push('/chat/super')"><WpIcon name="agent" :size="15" /> 超级智能体</div>
             </div>
           </div>
         </div>
@@ -117,7 +117,7 @@
               不管是想聊聊工作上的烦恼，还是需要具体的建议，<br>
               <b>你可以放心说真话</b>。<br><br>
               我会帮你<span class="hl">慢慢理一下思路</span>，不急。
-              <div class="presence-privacy">🔒 对话仅存储在本地，不会分享给第三方</div>
+              <div class="presence-privacy"><WpIcon name="lock" :size="12" /> 对话仅存储在本地，不会分享给第三方</div>
             </div>
           </div>
         </div>
@@ -256,7 +256,7 @@
     <div v-if="profileVisible" class="overlay" @click.self="closeProfile">
       <div class="overlay-panel">
         <div class="overlay-header">
-          <h2>👤 我的画像</h2>
+          <h2><WpIcon name="user" :size="18" /> 我的画像</h2>
           <button class="overlay-close" @click="closeProfile">×</button>
         </div>
         <div class="overlay-body">
@@ -297,6 +297,7 @@ import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import TraceTimelineView from '../components/TraceTimelineView.vue'
+import WpIcon from '../components/WpIcon.vue'
 import { login, getMe, createSession, listSessions, deleteSession, chatWithOrchestrator, resumeOrchestratorChat, getMyProfile, clearMyProfile, getChatMessages, renameSession, archiveSession, listArchivedSessions, searchSessions, uploadDocument, addFavorite, removeFavorite, unarchiveSession } from '../api'
 
 useHead({ title: '职场顾问 - WorkPilot' })
@@ -1028,7 +1029,7 @@ const handleClearProfile = async () => {
 }
 .side-search input:focus { border-color: rgba(255,255,255,0.1); }
 .side-search input::placeholder { color: var(--t4); }
-.side-search .s-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--t4); font-size: 13px; }
+.side-search .s-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--t4); }
 .search-clear {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   background: none; border: none; color: var(--t4); cursor: pointer; font-size: 14px;
@@ -1098,6 +1099,7 @@ const handleClearProfile = async () => {
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
 .menu-item {
+  display: flex; align-items: center; gap: 10px;
   padding: 10px 16px; font-size: 13px; color: var(--t2); cursor: pointer;
   transition: background 0.15s;
 }
@@ -1130,7 +1132,10 @@ const handleClearProfile = async () => {
 }
 .presence-text b { color: var(--t1); font-weight: 600; }
 .presence-text .hl { color: var(--gold-text); font-weight: 500; }
-.presence-privacy { margin-top: 16px; font-size: 11px; color: var(--t4); opacity: 0.7; }
+.presence-privacy {
+  margin-top: 16px; font-size: 11px; color: var(--t4); opacity: 0.7;
+  display: inline-flex; align-items: center; gap: 6px;
+}
 
 /* Message rows */
 .msg-wrapper { margin-bottom: 6px; }
@@ -1371,6 +1376,8 @@ const handleClearProfile = async () => {
   padding: 20px 24px; border-bottom: 1px solid var(--glass-border);
 }
 .overlay-header h2 { font-size: 16px; font-weight: 600; color: var(--t1); }
+.overlay-title { display: inline-flex; align-items: center; gap: 8px; }
+.overlay-title .wp-icon { color: var(--gold-text); }
 .overlay-close { background: none; border: none; color: var(--t3); font-size: 20px; cursor: pointer; }
 .overlay-body { padding: 24px; flex: 1; overflow-y: auto; }
 .overlay-loading, .overlay-empty { text-align: center; color: var(--t3); font-size: 13px; padding: 20px; }

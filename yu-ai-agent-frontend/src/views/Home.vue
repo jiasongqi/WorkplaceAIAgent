@@ -30,14 +30,17 @@
     <!-- Quick chips -->
     <div class="quick-chips">
       <span class="chip" v-for="chip in quickChips" :key="chip.text" @click="quickStart(chip.text)">
-        <span class="chip-icon">{{ chip.icon }}</span>{{ chip.text }}
+        <WpIcon class="chip-icon" :name="chip.icon" :size="14" />
+        {{ chip.text }}
       </span>
     </div>
 
     <!-- Bento grid -->
     <div class="bento-grid">
       <div class="bento-card" v-for="card in bentoCards" :key="card.title" @click="quickStart(card.prompt)">
-        <span class="card-emoji">{{ card.emoji }}</span>
+        <div class="icon-well">
+          <WpIcon :name="card.icon" :size="22" />
+        </div>
         <h3>{{ card.title }}</h3>
         <p>{{ card.desc }}</p>
         <span class="card-action">{{ card.action }} →</span>
@@ -50,13 +53,14 @@
     </div>
     <div class="caps-grid" v-if="capsExpanded">
       <span class="cap-tag" v-for="cap in moreCaps" :key="cap.text" @click="quickStart(cap.prompt)">
-        <span class="cap-icon">{{ cap.icon }}</span>{{ cap.text }}
+        <WpIcon class="cap-icon" :name="cap.icon" :size="14" />
+        {{ cap.text }}
       </span>
     </div>
 
     <!-- Privacy trust -->
     <div class="privacy-strip">
-      <span class="privacy-icon">🔒</span>
+      <WpIcon class="privacy-icon" name="lock" :size="14" />
       <span class="privacy-text">对话仅存储在本地，不会分享给任何第三方。你可以随时导出或删除。</span>
     </div>
 
@@ -79,6 +83,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { listSessions } from '../api'
+import WpIcon from '../components/WpIcon.vue'
 
 const router = useRouter()
 const taskInput = ref('')
@@ -126,26 +131,26 @@ const greeting = computed(() => {
 })
 
 const quickChips = [
-  { icon: '💬', text: '我不知道该不该提涨薪' },
-  { icon: '💬', text: '想离职但怕后悔' },
-  { icon: '💬', text: '总觉得简历写不好' },
-  { icon: '💬', text: '同事关系让我很累' },
-  { icon: '💬', text: '面试前的慌张怎么克服' },
+  { icon: 'salary', text: '我不知道该不该提涨薪' },
+  { icon: 'path', text: '想离职但怕后悔' },
+  { icon: 'resume', text: '总觉得简历写不好' },
+  { icon: 'manage', text: '同事关系让我很累' },
+  { icon: 'interview', text: '面试前的慌张怎么克服' },
 ]
 
 const bentoCards = [
-  { emoji: '💰', title: '不知道怎么谈涨薪？', desc: '害怕谈崩、不知道要多少合适、老板说你表现不够好怎么回应', action: '聊聊这件事', prompt: '我想跟公司谈涨薪，但不知道怎么开口' },
-  { emoji: '🛤️', title: '该不该离职？', desc: '什么时候走最安全、竞业限制怎么绕、交接时怎么保护自己', action: '一起分析一下', prompt: '我在纠结要不要离职' },
-  { emoji: '🧭', title: '好像迷路了', desc: '不知道自己擅长什么、35岁以后怎么办、换行业怎么找突破口', action: '理一理方向', prompt: '我不确定自己的职业方向' },
+  { icon: 'salary', title: '不知道怎么谈涨薪？', desc: '害怕谈崩、不知道要多少合适、老板说你表现不够好怎么回应', action: '聊聊这件事', prompt: '我想跟公司谈涨薪，但不知道怎么开口' },
+  { icon: 'path', title: '该不该离职？', desc: '什么时候走最安全、竞业限制怎么绕、交接时怎么保护自己', action: '一起分析一下', prompt: '我在纠结要不要离职' },
+  { icon: 'compass', title: '好像迷路了', desc: '不知道自己擅长什么、35岁以后怎么办、换行业怎么找突破口', action: '理一理方向', prompt: '我不确定自己的职业方向' },
 ]
 
 const moreCaps = [
-  { icon: '📝', text: '面试模拟', prompt: '帮我模拟一次面试，我在准备后端开发岗位' },
-  { icon: '📊', text: 'Offer 对比', prompt: '我收到两个offer，帮我分析该选哪个' },
-  { icon: '📄', text: '简历诊断', prompt: '帮我看看简历有什么问题' },
-  { icon: '📅', text: '预约咨询', prompt: '我想预约一次职场咨询' },
-  { icon: '🎯', text: '绩效复盘', prompt: '帮我复盘这个季度的绩效表现' },
-  { icon: '🤝', text: '向上管理', prompt: '怎么跟领导汇报工作成果' },
+  { icon: 'interview', text: '面试模拟', prompt: '帮我模拟一次面试，我在准备后端开发岗位' },
+  { icon: 'compare', text: 'Offer 对比', prompt: '我收到两个offer，帮我分析该选哪个' },
+  { icon: 'resume', text: '简历诊断', prompt: '帮我看看简历有什么问题' },
+  { icon: 'calendar', text: '预约咨询', prompt: '我想预约一次职场咨询' },
+  { icon: 'target', text: '绩效复盘', prompt: '帮我复盘这个季度的绩效表现' },
+  { icon: 'manage', text: '向上管理', prompt: '怎么跟领导汇报工作成果' },
 ]
 
 const autoResize = () => {
@@ -313,6 +318,9 @@ const goToSession = (chatId) => {
 }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 20px;
   border-radius: var(--r-full);
   background: var(--glass);
@@ -334,7 +342,8 @@ const goToSession = (chatId) => {
 }
 
 .chip-icon {
-  margin-right: 3px;
+  color: var(--gold-text);
+  opacity: 0.85;
 }
 
 /* Bento grid */
@@ -375,10 +384,16 @@ const goToSession = (chatId) => {
   box-shadow: 0 12px 36px rgba(0,0,0,0.3);
 }
 
-.card-emoji {
-  font-size: 28px;
+.icon-well {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--gold-soft);
+  border: 1px solid rgba(245,158,11,0.12);
   margin-bottom: 14px;
-  display: block;
+  color: var(--gold-text);
 }
 
 .bento-card h3 {
@@ -477,13 +492,14 @@ const goToSession = (chatId) => {
   max-width: 620px; animation: rise 0.4s var(--ease) both;
 }
 .cap-tag {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 16px; border-radius: var(--r-full);
   background: var(--glass); border: 1px solid var(--glass-border);
   color: var(--t3); font-size: 12px; cursor: pointer;
   transition: all 0.25s var(--ease); user-select: none;
 }
 .cap-tag:hover { background: var(--glass-hover); color: var(--t1); transform: translateY(-1px); }
-.cap-icon { margin-right: 4px; }
+.cap-icon { color: var(--gold-text); opacity: 0.8; }
 
 /* Privacy strip */
 .privacy-strip {
@@ -492,6 +508,6 @@ const goToSession = (chatId) => {
   background: rgba(52, 211, 153, 0.05); border: 1px solid rgba(52, 211, 153, 0.12);
   animation: rise 0.8s 0.75s var(--ease) both;
 }
-.privacy-icon { font-size: 14px; }
+.privacy-icon { color: var(--ok); flex-shrink: 0; }
 .privacy-text { font-size: 11px; color: var(--t3); line-height: 1.4; }
 </style>

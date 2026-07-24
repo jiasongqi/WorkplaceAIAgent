@@ -2,7 +2,7 @@
   <div class="usage-layout">
     <div class="header">
       <div class="back-button" @click="goBack">← 返回</div>
-      <h1 class="title">📊 用量统计</h1>
+      <h1 class="title"><WpIcon name="usage" :size="20" class="title-icon" /> 用量统计</h1>
       <div class="total-events">{{ stats.totalEvents || 0 }} 次操作</div>
     </div>
 
@@ -29,7 +29,7 @@
 
         <!-- Daily trend -->
         <div class="section">
-          <h2 class="section-title">📈 近 7 天趋势</h2>
+          <h2 class="section-title"><WpIcon name="usage" :size="16" /> 近 7 天趋势</h2>
           <div class="daily-chart">
             <div v-for="(count, date) in stats.dailyCounts" :key="date" class="daily-bar-wrapper">
               <div class="daily-bar" :style="{ height: barHeight(count) + 'px' }">
@@ -42,7 +42,7 @@
 
         <!-- By type -->
         <div class="section">
-          <h2 class="section-title">📋 按类型分布</h2>
+          <h2 class="section-title"><WpIcon name="compare" :size="16" /> 按类型分布</h2>
           <div class="type-list">
             <div v-for="(count, name) in stats.eventsByType" :key="name" class="type-row">
               <span class="type-name">{{ name }}</span>
@@ -56,7 +56,7 @@
 
         <!-- By agent -->
         <div v-if="stats.eventsByAgent && Object.keys(stats.eventsByAgent).length > 0" class="section">
-          <h2 class="section-title">🤖 按 Agent 分布</h2>
+          <h2 class="section-title"><WpIcon name="agent" :size="16" /> 按 Agent 分布</h2>
           <div class="type-list">
             <div v-for="(count, name) in stats.eventsByAgent" :key="name" class="type-row">
               <span class="type-name">{{ name }}</span>
@@ -76,6 +76,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getUsageStats } from '../api'
+import WpIcon from '../components/WpIcon.vue'
 
 const router = useRouter()
 const stats = ref({})
@@ -149,7 +150,8 @@ onMounted(loadStats)
 }
 .back-button { cursor: pointer; font-size: 15px; opacity: 0.85; }
 .back-button:hover { opacity: 1; }
-.title { font-size: 18px; font-weight: bold; margin: 0; text-align: center; }
+.title { font-size: 18px; font-weight: bold; margin: 0; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.title-icon { color: var(--gold-text); }
 .total-events { justify-self: end; font-size: 13px; opacity: 0.8; }
 
 .content { flex: 1; overflow-y: auto; padding: 20px; max-width: 800px; margin: 0 auto; width: 100%; }
@@ -166,7 +168,11 @@ onMounted(loadStats)
 .card-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 
 .section { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 0.5px solid var(--border); box-shadow: none; }
-.section-title { font-size: 15px; font-weight: 600; margin: 0 0 16px; color: var(--text, #e5e7eb); }
+.section-title {
+  font-size: 15px; font-weight: 600; margin: 0 0 16px; color: var(--text, #e5e7eb);
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title .wp-icon { color: var(--gold-text); }
 
 .daily-chart { display: flex; align-items: flex-end; gap: 8px; height: 160px; padding-top: 20px; }
 .daily-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }

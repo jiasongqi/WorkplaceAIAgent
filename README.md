@@ -143,12 +143,12 @@ docker compose up -d
 <p align="center">
   <img src="docs/assets/screenshot-login.png" width="720" alt="登录页" />
 </p>
-<p align="center"><sub>登录 / 注册 / 游客联调</sub></p>
+<p align="center"><sub>深色登录页 · 登录 / 注册 / 一键游客</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-home.png" width="720" alt="工作台首页" />
 </p>
-<p align="center"><sub>工作台：快捷场景入口</sub></p>
+<p align="center"><sub>工作台：细线 SVG 图标 · 快捷场景入口</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-career.png" width="720" alt="职场顾问" />

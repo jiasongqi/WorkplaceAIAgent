@@ -8,10 +8,12 @@
     <div class="noise"></div>
 
     <!-- App content -->
-    <div class="app-content">
-      <!-- Topbar -->
-      <header class="topbar">
-        <button class="hamburger-btn" @click="mobileNavOpen = !mobileNavOpen" aria-label="Toggle menu">☰</button>
+    <div class="app-content" :class="{ 'auth-only': isAuthPage }">
+      <!-- Topbar (hidden on login) -->
+      <header v-if="!isAuthPage" class="topbar">
+        <button class="hamburger-btn" @click="mobileNavOpen = !mobileNavOpen" aria-label="Toggle menu">
+          <WpIcon name="menu" :size="18" />
+        </button>
         <div class="logo-area" @click="$router.push('/')">
           <div class="logo-orb"></div>
           <span class="logo-text">WorkPilot</span>
@@ -24,23 +26,27 @@
             class="nav-link"
             :class="{ active: isActive(item.path) }"
           >
-            <span class="nav-icon">{{ item.icon }}</span>
+            <WpIcon class="nav-icon" :name="item.icon" :size="16" :active="isActive(item.path)" />
             <span>{{ item.label }}</span>
           </router-link>
         </nav>
         <div class="topbar-r">
-          <button class="tb-btn" @click="$router.push('/knowledge')" title="知识库">📚</button>
-          <button class="tb-btn" @click="$router.push('/artifacts')" title="交付物">📦</button>
-          <button class="tb-btn" @click="$router.push('/favorites')" title="收藏">⭐</button>
-          <button class="tb-btn" @click="$router.push('/usage')" title="用量">📊</button>
-          <button class="tb-btn" @click="$router.push('/admin')" title="管理">⚙️</button>
+          <button
+            v-for="tool in toolItems"
+            :key="tool.path"
+            class="tb-btn"
+            :title="tool.label"
+            @click="$router.push(tool.path)"
+          >
+            <WpIcon :name="tool.icon" :size="18" />
+          </button>
           <div class="user-orb">{{ userInitial }}</div>
         </div>
       </header>
 
       <!-- Mobile nav drawer -->
       <Transition name="drawer">
-        <div v-if="mobileNavOpen" class="mobile-drawer-overlay" @click.self="mobileNavOpen = false">
+        <div v-if="mobileNavOpen && !isAuthPage" class="mobile-drawer-overlay" @click.self="mobileNavOpen = false">
           <nav class="mobile-drawer">
             <div class="drawer-header">
               <div class="logo-area">
@@ -57,24 +63,19 @@
               :class="{ active: isActive(item.path) }"
               @click="mobileNavOpen = false"
             >
-              <span class="nav-icon">{{ item.icon }}</span>
+              <WpIcon class="nav-icon" :name="item.icon" :size="18" :active="isActive(item.path)" />
               <span>{{ item.label }}</span>
             </router-link>
             <div class="drawer-divider"></div>
-            <router-link class="drawer-link" to="/knowledge" @click="mobileNavOpen = false">
-              <span class="nav-icon">📚</span><span>知识库</span>
-            </router-link>
-            <router-link class="drawer-link" to="/artifacts" @click="mobileNavOpen = false">
-              <span class="nav-icon">📦</span><span>交付物</span>
-            </router-link>
-            <router-link class="drawer-link" to="/favorites" @click="mobileNavOpen = false">
-              <span class="nav-icon">⭐</span><span>收藏</span>
-            </router-link>
-            <router-link class="drawer-link" to="/usage" @click="mobileNavOpen = false">
-              <span class="nav-icon">📊</span><span>用量</span>
-            </router-link>
-            <router-link class="drawer-link" to="/admin" @click="mobileNavOpen = false">
-              <span class="nav-icon">⚙️</span><span>管理</span>
+            <router-link
+              v-for="tool in toolItems"
+              :key="tool.path"
+              class="drawer-link"
+              :to="tool.path"
+              @click="mobileNavOpen = false"
+            >
+              <WpIcon class="nav-icon" :name="tool.icon" :size="18" />
+              <span>{{ tool.label }}</span>
             </router-link>
           </nav>
         </div>
@@ -95,16 +96,26 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import WpIcon from './WpIcon.vue'
 
 const route = useRoute()
 const mobileNavOpen = ref(false)
 const username = ref(localStorage.getItem('username') || '用户')
 const userInitial = computed(() => (username.value || 'U').charAt(0).toUpperCase())
+const isAuthPage = computed(() => route.path === '/login' || route.name === 'Login')
 
 const navItems = [
-  { path: '/', icon: '◈', label: '首页' },
-  { path: '/chat/career', icon: '💬', label: '职场顾问' },
-  { path: '/chat/super', icon: '🤖', label: '超级智能体' },
+  { path: '/', icon: 'home', label: '首页' },
+  { path: '/chat/career', icon: 'career', label: '职场顾问' },
+  { path: '/chat/super', icon: 'agent', label: '超级智能体' },
+]
+
+const toolItems = [
+  { path: '/knowledge', icon: 'knowledge', label: '知识库' },
+  { path: '/artifacts', icon: 'artifact', label: '交付物' },
+  { path: '/favorites', icon: 'star', label: '收藏' },
+  { path: '/usage', icon: 'usage', label: '用量' },
+  { path: '/admin', icon: 'admin', label: '管理' },
 ]
 
 const isActive = (path) => {
@@ -197,7 +208,7 @@ const isActive = (path) => {
 }
 
 .nav-icon {
-  font-size: 14px;
+  flex-shrink: 0;
 }
 
 /* Right side */
@@ -266,7 +277,6 @@ const isActive = (path) => {
   border: none;
   background: transparent;
   color: var(--t2);
-  font-size: 20px;
   cursor: pointer;
   margin-right: 8px;
   transition: background 0.2s var(--ease);

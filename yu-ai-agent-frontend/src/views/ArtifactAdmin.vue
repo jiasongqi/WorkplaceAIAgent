@@ -4,7 +4,7 @@
     <div class="header">
       <div class="back-button" @click="goBack">← 返回</div>
       <div class="header-center">
-        <h1 class="title">📦 交付物管理</h1>
+        <h1 class="title"><WpIcon name="artifact" :size="20" class="title-icon" /> 交付物管理</h1>
         <div class="admin-badge" :class="{ active: isAdmin }">
           {{ isAdmin ? '管理员已登录' : '未登录管理员' }}
         </div>
@@ -128,6 +128,7 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { login, listArtifacts, getArtifactDetail } from '../api'
+import WpIcon from '../components/WpIcon.vue'
 
 useHead({ title: '交付物管理 - 职场生存智囊' })
 
@@ -313,7 +314,8 @@ border: 0.5px solid var(--border);
 
 .header-center { display: flex; align-items: center; gap: 12px; }
 
-.title { font-size: 18px; font-weight: bold; margin: 0; }
+.title { font-size: 18px; font-weight: bold; margin: 0; display: inline-flex; align-items: center; gap: 8px; }
+.title-icon { color: var(--gold-text); }
 
 .admin-badge {
   font-size: 12px;

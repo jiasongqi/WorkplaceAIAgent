@@ -2,7 +2,7 @@
   <div class="super-agent-container">
     <div class="header">
       <div class="back-button" @click="goBack">← 返回</div>
-      <h1 class="title">🤖 超级智能体</h1>
+      <h1 class="title"><WpIcon name="agent" :size="20" class="title-icon" /> 超级智能体</h1>
       <div class="placeholder"></div>
     </div>
 
@@ -97,6 +97,7 @@ import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { chatWithManus } from '../api'
+import WpIcon from '../components/WpIcon.vue'
 
 useHead({ title: 'AI超级智能体 - 职场生存智囊' })
 
@@ -269,7 +270,8 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 
 .back-button { cursor: pointer; font-size: 15px; color: var(--t3); transition: color 0.2s; }
 .back-button:hover { color: var(--t1); }
-.title { font-size: 16px; font-weight: 600; margin: 0; text-align: center; color: var(--t1); }
+.title { font-size: 16px; font-weight: 600; margin: 0; text-align: center; color: var(--t1); display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.title-icon { color: var(--gold-text); }
 .placeholder { justify-self: end; }
 
 .content-wrapper {

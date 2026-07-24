@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WorkPilot · Icon System Prototype</title>
+  <style>
+    :root {
+      --abyss: #05060d;
+      --deep: #0a0c16;
+      --layer1: #0f111d;
+      --layer2: #161824;
+      --layer3: #1c1f2e;
+      --t1: #f2f2f8;
+      --t2: #a0a3b8;
+      --t3: #60637a;
+      --t4: #383b50;
+      --gold: #f59e0b;
+      --gold-text: #fbbf24;
+      --gold-glow: rgba(245,158,11,0.25);
+      --gold-soft: rgba(245,158,11,0.08);
+      --gold-dim: rgba(245,158,11,0.03);
+      --glass-border: rgba(255,255,255,0.06);
+      --glass-hover: rgba(255,255,255,0.05);
+      --ok: #34d399;
+      --danger: #f87171;
+      --r-sm: 10px;
+      --r-md: 16px;
+      --r-lg: 24px;
+      --ease: cubic-bezier(0.4, 0, 0.2, 1);
+      --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --mono: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--abyss);
+      color: var(--t1);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .ambient {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    }
+    .ambient .a {
+      position: absolute; top: -30%; left: 0; width: 60%; height: 80%;
+      background: radial-gradient(ellipse, rgba(245,158,11,0.05), transparent 70%);
+    }
+    .ambient .b {
+      position: absolute; bottom: -20%; right: -5%; width: 50%; height: 70%;
+      background: radial-gradient(ellipse, rgba(96,165,250,0.03), transparent 70%);
+    }
+
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 28px 80px;
+    }
+
+    /* Header */
+    .hero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 48px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .hero-left { max-width: 520px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold-text);
+      margin-bottom: 12px;
+    }
+    .eyebrow::before {
+      content: '';
+      width: 16px; height: 1px;
+      background: var(--gold);
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 650;
+      letter-spacing: -0.6px;
+      background: linear-gradient(180deg, var(--t1) 30%, rgba(242,242,248,0.5));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      margin-top: 10px;
+      color: var(--t3);
+      font-size: 14px;
+    }
+    .legend {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--t3);
+      font-family: var(--mono);
+    }
+    .legend span { display: flex; align-items: center; gap: 10px; }
+    .legend i {
+      width: 10px; height: 10px; border-radius: 2px;
+      display: inline-block;
+    }
+    .swatch-idle { background: var(--t3); }
+    .swatch-active { background: var(--gold); box-shadow: 0 0 8px var(--gold-glow); }
+    .swatch-soft { background: var(--gold-soft); border: 1px solid rgba(245,158,11,0.2); }
+
+    section { margin-bottom: 52px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .sec-head h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--t2);
+      letter-spacing: -0.2px;
+    }
+    .sec-head .note {
+      font-size: 12px;
+      color: var(--t4);
+      font-family: var(--mono);
+    }
+
+    /* ——— Icon primitive ——— */
+    .wp-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--t3);
+      flex-shrink: 0;
+    }
+    .wp-icon svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .wp-icon.size-16 { width: 16px; height: 16px; }
+    .wp-icon.size-18 { width: 18px; height: 18px; }
+    .wp-icon.size-20 { width: 20px; height: 20px; }
+    .wp-icon.size-22 { width: 22px; height: 22px; }
+    .wp-icon.size-24 { width: 24px; height: 24px; }
+    .wp-icon.size-28 { width: 28px; height: 28px; }
+    .wp-icon.active { color: var(--gold-text); }
+    .wp-icon.filled svg { fill: currentColor; stroke: none; }
+    .wp-icon.filled svg [data-stroke] {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+    }
+
+    /* Grid of icons */
+    .icon-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .icon-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 22px 12px 16px;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-md);
+      cursor: default;
+      transition: border-color 0.25s var(--ease), background 0.25s, transform 0.25s var(--ease);
+    }
+    .icon-cell:hover {
+      border-color: rgba(245,158,11,0.28);
+      background: var(--layer2);
+      transform: translateY(-2px);
+    }
+    .icon-cell:hover .wp-icon { color: var(--gold-text); }
+    .icon-cell .label {
+      font-size: 11px;
+      color: var(--t3);
+      font-family: var(--mono);
+      letter-spacing: 0.02em;
+    }
+    .icon-cell .zh {
+      font-size: 12px;
+      color: var(--t2);
+      margin-top: -6px;
+      font-family: var(--font);
+    }
+
+    /* Compare strip */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 720px) {
+      .compare { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; align-items: flex-start; }
+    }
+    .compare-card {
+      padding: 20px;
+      border-radius: var(--r-lg);
+      border: 1px solid var(--glass-border);
+      background: var(--layer1);
+    }
+    .compare-card.old { opacity: 0.72; }
+    .compare-card .tag {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--t4);
+      margin-bottom: 16px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .compare-card.new .tag { color: var(--gold-text); }
+    .fake-topbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 12px;
+      background: rgba(10,12,22,0.85);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-sm);
+    }
+    .fake-nav {
+      display: flex;
+      gap: 4px;
+      margin-right: auto;
+    }
+    .fake-nav .item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--t3);
+    }
+    .fake-nav .item.on {
+      background: var(--gold-soft);
+      color: var(--gold-text);
+    }
+    .fake-nav .item.on .wp-icon { color: var(--gold-text); }
+    .fake-tools {
+      display: flex;
+      gap: 2px;
+    }
+    .tool-btn {
+      width: 34px; height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      color: var(--t3);
+      transition: background 0.2s, color 0.2s;
+    }
+    .tool-btn:hover {
+      background: var(--glass-hover);
+      color: var(--t2);
+    }
+    .emoji-row {
+      display: flex;
+      gap: 8px;
+      font-size: 18px;
+      opacity: 0.85;
+    }
+    .emoji-row span {
+      width: 34px; height: 34px;
+      display: grid; place-items: center;
+    }
+
+    /* Home chips / bento preview */
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      font-size: 13px;
+      color: var(--t2);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .chip:hover {
+      border-color: rgba(245,158,11,0.25);
+      background: var(--layer2);
+    }
+    .chip .wp-icon { color: var(--gold-text); opacity: 0.85; }
+
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 800px) {
+      .bento { grid-template-columns: 1fr; }
+    }
+    .bento-card {
+      padding: 22px 20px;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-lg);
+      transition: border-color 0.25s, transform 0.25s var(--ease);
+      cursor: default;
+    }
+    .bento-card:hover {
+      border-color: rgba(245,158,11,0.28);
+      transform: translateY(-2px);
+    }
+    .icon-well {
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      display: grid; place-items: center;
+      background: var(--gold-soft);
+      border: 1px solid rgba(245,158,11,0.12);
+      margin-bottom: 16px;
+      color: var(--gold-text);
+    }
+    .bento-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      margin-bottom: 6px;
+    }
+    .bento-card p {
+      font-size: 12px;
+      color: var(--t3);
+      line-height: 1.6;
+    }
+    .bento-card .action {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--gold-text);
+      font-weight: 500;
+    }
+
+    /* Sizes demo */
+    .size-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 28px;
+      padding: 28px;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-lg);
+      flex-wrap: wrap;
+    }
+    .size-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .size-item .wp-icon { color: var(--gold-text); }
+    .size-item span {
+      font-size: 11px;
+      color: var(--t4);
+      font-family: var(--mono);
+    }
+
+    /* States */
+    .state-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 720px) {
+      .state-row { grid-template-columns: 1fr 1fr; }
+    }
+    .state-card {
+      padding: 24px;
+      text-align: center;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-md);
+    }
+    .state-card .wp-icon { margin: 0 auto 12px; }
+    .state-card .s-label {
+      font-size: 11px;
+      color: var(--t4);
+      font-family: var(--mono);
+    }
+    .state-idle .wp-icon { color: var(--t3); }
+    .state-hover .wp-icon { color: var(--t2); }
+    .state-active {
+      background: var(--gold-soft);
+      border-color: rgba(245,158,11,0.2);
+    }
+    .state-active .wp-icon { color: var(--gold-text); }
+    .state-disabled .wp-icon { color: var(--t4); opacity: 0.5; }
+
+    /* Spec */
+    .spec {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .spec { grid-template-columns: 1fr; }
+    }
+    .spec-item {
+      padding: 18px 20px;
+      border-radius: var(--r-md);
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+    }
+    .spec-item strong {
+      display: block;
+      font-size: 13px;
+      color: var(--t1);
+      margin-bottom: 6px;
+    }
+    .spec-item span {
+      font-size: 12px;
+      color: var(--t3);
+      line-height: 1.65;
+      font-family: var(--mono);
+    }
+
+    footer {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid var(--glass-border);
+      font-size: 12px;
+      color: var(--t4);
+      text-align: center;
+    }
+    footer code {
+      color: var(--t3);
+      font-family: var(--mono);
+      background: var(--layer2);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- SVG sprite — WorkPilot Icon Set v1 -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <!-- Home / diamond mark -->
+    <symbol id="i-home" viewBox="0 0 24 24">
+      <path d="M4.5 10.5 12 4l7.5 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5.5a1 1 0 0 1-1-1v-9.5Z"/>
+    </symbol>
+    <!-- Career advisor / conversation -->
+    <symbol id="i-career" viewBox="0 0 24 24">
+      <path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v6A2.5 2.5 0 0 1 16.5 16H11l-3.5 3v-3H7.5A2.5 2.5 0 0 1 5 13.5v-6Z"/>
+      <path d="M9 9.5h6M9 12.5h3.5"/>
+    </symbol>
+    <!-- Super agent / spark orb -->
+    <symbol id="i-agent" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.55 1.55M16.35 16.35l1.55 1.55M17.9 6.1l-1.55 1.55M7.65 16.35l-1.55 1.55"/>
+    </symbol>
+    <!-- Knowledge -->
+    <symbol id="i-knowledge" viewBox="0 0 24 24">
+      <path d="M4.5 6.2c2.2-1.1 4.6-1.4 7.5.2 2.9-1.6 5.3-1.3 7.5-.2V18c-2.2-1.1-4.6-1.4-7.5.2-2.9-1.6-5.3-1.3-7.5-.2V6.2Z"/>
+      <path d="M12 6.5v11.7"/>
+    </symbol>
+    <!-- Artifacts / package -->
+    <symbol id="i-artifact" viewBox="0 0 24 24">
+      <path d="M12 3.5 20 8v8l-8 4.5L4 16V8l8-4.5Z"/>
+      <path d="M12 12.2 20 8M12 12.2 4 8M12 12.2V20.5"/>
+    </symbol>
+    <!-- Favorite / star -->
+    <symbol id="i-star" viewBox="0 0 24 24">
+      <path d="m12 3.8 2.2 4.7 5.1.6-3.8 3.5 1.1 5-4.6-2.6-4.6 2.6 1.1-5-3.8-3.5 5.1-.6L12 3.8Z"/>
+    </symbol>
+    <!-- Usage / chart -->
+    <symbol id="i-usage" viewBox="0 0 24 24">
+      <path d="M4.5 19.5h15"/>
+      <path d="M7.5 16.5v-4M12 16.5V8.5M16.5 16.5v-7"/>
+    </symbol>
+    <!-- Admin / settings gear -->
+    <symbol id="i-admin" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="2.8"/>
+      <path d="M12 3.8l1.1 1.9 2.1-.3.9 1.9 1.9.9-.3 2.1 1.9 1.1-1.9 1.1.3 2.1-1.9.9-.9 1.9-2.1-.3L12 20.2l-1.1-1.9-2.1.3-.9-1.9-1.9-.9.3-2.1L3.5 12l1.9-1.1-.3-2.1 1.9-.9.9-1.9 2.1.3L12 3.8Z"/>
+    </symbol>
+    <!-- Search -->
+    <symbol id="i-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="6"/>
+      <path d="m16.2 16.2 3.3 3.3"/>
+    </symbol>
+    <!-- Lock / privacy -->
+    <symbol id="i-lock" viewBox="0 0 24 24">
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/>
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>
+    </symbol>
+    <!-- Salary / negotiation -->
+    <symbol id="i-salary" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8"/>
+      <path d="M12 7.5v9M9.5 9.8c.7-1 1.8-1.5 2.8-1.5 1.7 0 2.7.9 2.7 2.1s-1 2.1-2.7 2.1h-1.1c-1.7 0-2.7.9-2.7 2.1s1 2.1 2.7 2.1c1.1 0 2.1-.5 2.8-1.5"/>
+    </symbol>
+    <!-- Leave / path -->
+    <symbol id="i-path" viewBox="0 0 24 24">
+      <circle cx="6.5" cy="17.5" r="2"/>
+      <circle cx="17.5" cy="6.5" r="2"/>
+      <path d="M8.3 16.2c2.2-4.8 5.2-7.2 9-9"/>
+    </symbol>
+    <!-- Direction / compass -->
+    <symbol id="i-compass" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.5"/>
+      <path d="m14.8 9.2-1.3 4.3-4.3 1.3 1.3-4.3 4.3-1.3Z"/>
+    </symbol>
+    <!-- Interview / clipboard -->
+    <symbol id="i-interview" viewBox="0 0 24 24">
+      <rect x="6" y="5" width="12" height="15" rx="2"/>
+      <path d="M9 5.2V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5v.7M9 11h6M9 14.5h4"/>
+    </symbol>
+    <!-- Offer compare -->
+    <symbol id="i-compare" viewBox="0 0 24 24">
+      <rect x="3.5" y="5" width="7" height="14" rx="1.5"/>
+      <rect x="13.5" y="5" width="7" height="14" rx="1.5"/>
+      <path d="M6 9.5h2M6 12.5h2M16 9.5h2M16 12.5h2"/>
+    </symbol>
+    <!-- Resume / doc -->
+    <symbol id="i-resume" viewBox="0 0 24 24">
+      <path d="M7 4.5h7.5L18.5 9v10.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z"/>
+      <path d="M14.5 4.5V9H18.5M9 13h6M9 16.5h4"/>
+    </symbol>
+    <!-- Consult / calendar -->
+    <symbol id="i-calendar" viewBox="0 0 24 24">
+      <rect x="4" y="5.5" width="16" height="14" rx="2"/>
+      <path d="M8 3.5v4M16 3.5v4M4 10h16"/>
+    </symbol>
+    <!-- Performance / target -->
+    <symbol id="i-target" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8"/>
+      <circle cx="12" cy="12" r="4.5"/>
+      <circle cx="12" cy="12" r="1.2"/>
+    </symbol>
+    <!-- Manage up / handshake abstract -->
+    <symbol id="i-manage" viewBox="0 0 24 24">
+      <circle cx="8" cy="8" r="2.5"/>
+      <circle cx="16" cy="8" r="2.5"/>
+      <path d="M4.5 18.5c.4-2.8 2.2-4.5 4.5-4.5.9 0 1.7.3 2.4.8.7-.5 1.5-.8 2.4-.8 2.3 0 4.1 1.7 4.5 4.5"/>
+    </symbol>
+    <!-- Archive -->
+    <symbol id="i-archive" viewBox="0 0 24 24">
+      <rect x="3.5" y="4" width="17" height="4" rx="1"/>
+      <path d="M5 8v10.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V8M10 12.5h4"/>
+    </symbol>
+    <!-- User -->
+    <symbol id="i-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="9" r="3.2"/>
+      <path d="M5.5 19c1.2-3 3.3-4.5 6.5-4.5s5.3 1.5 6.5 4.5"/>
+    </symbol>
+    <!-- Arrow send -->
+    <symbol id="i-send" viewBox="0 0 24 24">
+      <path d="M5 12h12.5M13 6.5 18.5 12 13 17.5"/>
+    </symbol>
+    <!-- Wave / greeting mark -->
+    <symbol id="i-mark" viewBox="0 0 24 24">
+      <path d="M12 4.5 14.2 9.7l5.5.6-4.1 3.8 1.2 5.4L12 16.8 7.2 19.5l1.2-5.4-4.1-3.8 5.5-.6L12 4.5Z"/>
+    </symbol>
+  </svg>
+
+  <div class="ambient"><div class="a"></div><div class="b"></div></div>
+
+  <div class="wrap">
+    <header class="hero">
+      <div class="hero-left">
+        <div class="eyebrow">WorkPilot · Design Prototype</div>
+        <h1>Icon System v1</h1>
+        <p>用统一细线 SVG 替换 emoji。金色描边、圆角端点、24 栅格，和 Dark Advisor 主题对齐。</p>
+      </div>
+      <div class="legend">
+        <span><i class="swatch-idle"></i> idle · #60637a</span>
+        <span><i class="swatch-active"></i> active · #fbbf24</span>
+        <span><i class="swatch-soft"></i> well · gold-soft</span>
+      </div>
+    </header>
+
+    <!-- Before / After -->
+    <section>
+      <div class="sec-head">
+        <h2>对比 · 顶栏场景</h2>
+        <span class="note">before emoji → after stroke</span>
+      </div>
+      <div class="compare">
+        <div class="compare-card old">
+          <div class="tag">Before</div>
+          <div class="fake-topbar">
+            <div class="fake-nav">
+              <div class="item on">◈ 首页</div>
+              <div class="item">💬 职场顾问</div>
+              <div class="item">🤖 超级智能体</div>
+            </div>
+            <div class="emoji-row">
+              <span>📚</span><span>📦</span><span>⭐</span><span>📊</span><span>⚙️</span>
+            </div>
+          </div>
+        </div>
+        <div class="compare-card new">
+          <div class="tag">After · proposed</div>
+          <div class="fake-topbar">
+            <div class="fake-nav">
+              <div class="item on">
+                <span class="wp-icon size-16 active"><svg><use href="#i-home"/></svg></span>
+                首页
+              </div>
+              <div class="item">
+                <span class="wp-icon size-16"><svg><use href="#i-career"/></svg></span>
+                职场顾问
+              </div>
+              <div class="item">
+                <span class="wp-icon size-16"><svg><use href="#i-agent"/></svg></span>
+                超级智能体
+              </div>
+            </div>
+            <div class="fake-tools">
+              <div class="tool-btn" title="知识库"><span class="wp-icon size-18"><svg><use href="#i-knowledge"/></svg></span></div>
+              <div class="tool-btn" title="交付物"><span class="wp-icon size-18"><svg><use href="#i-artifact"/></svg></span></div>
+              <div class="tool-btn" title="收藏"><span class="wp-icon size-18"><svg><use href="#i-star"/></svg></span></div>
+              <div class="tool-btn" title="用量"><span class="wp-icon size-18"><svg><use href="#i-usage"/></svg></span></div>
+              <div class="tool-btn" title="管理"><span class="wp-icon size-18"><svg><use href="#i-admin"/></svg></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Full set -->
+    <section>
+      <div class="sec-head">
+        <h2>完整图标集</h2>
+        <span class="note">hover 看金色激活态</span>
+      </div>
+      <div class="icon-grid" id="full-set"></div>
+    </section>
+
+    <!-- Sizes -->
+    <section>
+      <div class="sec-head">
+        <h2>尺寸阶梯</h2>
+        <span class="note">16 / 18 / 20 / 22 / 24 / 28</span>
+      </div>
+      <div class="size-row">
+        <div class="size-item"><span class="wp-icon size-16"><svg><use href="#i-career"/></svg></span><span>16</span></div>
+        <div class="size-item"><span class="wp-icon size-18"><svg><use href="#i-career"/></svg></span><span>18</span></div>
+        <div class="size-item"><span class="wp-icon size-20"><svg><use href="#i-career"/></svg></span><span>20</span></div>
+        <div class="size-item"><span class="wp-icon size-22"><svg><use href="#i-career"/></svg></span><span>22</span></div>
+        <div class="size-item"><span class="wp-icon size-24"><svg><use href="#i-career"/></svg></span><span>24</span></div>
+        <div class="size-item"><span class="wp-icon size-28"><svg><use href="#i-career"/></svg></span><span>28</span></div>
+      </div>
+    </section>
+
+    <!-- States -->
+    <section>
+      <div class="sec-head">
+        <h2>状态</h2>
+        <span class="note">idle · hover · active · disabled</span>
+      </div>
+      <div class="state-row">
+        <div class="state-card state-idle">
+          <span class="wp-icon size-22"><svg><use href="#i-star"/></svg></span>
+          <div class="s-label">idle</div>
+        </div>
+        <div class="state-card state-hover">
+          <span class="wp-icon size-22"><svg><use href="#i-star"/></svg></span>
+          <div class="s-label">hover</div>
+        </div>
+        <div class="state-card state-active">
+          <span class="wp-icon size-22"><svg><use href="#i-star"/></svg></span>
+          <div class="s-label">active</div>
+        </div>
+        <div class="state-card state-disabled">
+          <span class="wp-icon size-22"><svg><use href="#i-star"/></svg></span>
+          <div class="s-label">disabled</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Home chips -->
+    <section>
+      <div class="sec-head">
+        <h2>首页 · Quick chips</h2>
+        <span class="note">替掉 💬 emoji</span>
+      </div>
+      <div class="chip-row">
+        <div class="chip"><span class="wp-icon size-16"><svg><use href="#i-salary"/></svg></span>我不知道该不该提涨薪</div>
+        <div class="chip"><span class="wp-icon size-16"><svg><use href="#i-path"/></svg></span>想离职但怕后悔</div>
+        <div class="chip"><span class="wp-icon size-16"><svg><use href="#i-resume"/></svg></span>总觉得简历写不好</div>
+        <div class="chip"><span class="wp-icon size-16"><svg><use href="#i-manage"/></svg></span>同事关系让我很累</div>
+        <div class="chip"><span class="wp-icon size-16"><svg><use href="#i-interview"/></svg></span>面试前的慌张怎么克服</div>
+      </div>
+    </section>
+
+    <!-- Bento -->
+    <section>
+      <div class="sec-head">
+        <h2>首页 · Bento 卡片</h2>
+        <span class="note">icon well + gold accent</span>
+      </div>
+      <div class="bento">
+        <div class="bento-card">
+          <div class="icon-well"><span class="wp-icon size-22"><svg><use href="#i-salary"/></svg></span></div>
+          <h3>不知道怎么谈涨薪？</h3>
+          <p>害怕谈崩、不知道要多少合适、老板说你表现不够好怎么回应</p>
+          <div class="action">聊聊这件事 →</div>
+        </div>
+        <div class="bento-card">
+          <div class="icon-well"><span class="wp-icon size-22"><svg><use href="#i-path"/></svg></span></div>
+          <h3>该不该离职？</h3>
+          <p>什么时候走最安全、竞业限制怎么绕、交接时怎么保护自己</p>
+          <div class="action">一起分析一下 →</div>
+        </div>
+        <div class="bento-card">
+          <div class="icon-well"><span class="wp-icon size-22"><svg><use href="#i-compass"/></svg></span></div>
+          <h3>好像迷路了</h3>
+          <p>不知道自己擅长什么、35 岁以后怎么办、换行业怎么找突破口</p>
+          <div class="action">理一理方向 →</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Spec -->
+    <section>
+      <div class="sec-head">
+        <h2>落地规范</h2>
+        <span class="note">确认后接入 Vue</span>
+      </div>
+      <div class="spec">
+        <div class="spec-item">
+          <strong>绘制</strong>
+          <span>24×24 viewBox<br>stroke 1.5 · round caps<br>光学对齐，非死板居中</span>
+        </div>
+        <div class="spec-item">
+          <strong>颜色</strong>
+          <span>currentColor 继承<br>idle t3 / active gold-text<br>禁止彩色 emoji 混用</span>
+        </div>
+        <div class="spec-item">
+          <strong>用法</strong>
+          <span>导航 16 · 工具栏 18<br>卡片井 22 · 空状态 28<br>&lt;WpIcon name="career" /&gt;</span>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      原型文件 · <code>yu-ai-agent-frontend/prototypes/icon-system.html</code>
+      · 用浏览器直接打开即可预览。满意后我再接到正式组件里。
+    </footer>
+  </div>
+
+  <script>
+    const ICONS = [
+      { id: 'home', zh: '首页' },
+      { id: 'career', zh: '职场顾问' },
+      { id: 'agent', zh: '超级智能体' },
+      { id: 'knowledge', zh: '知识库' },
+      { id: 'artifact', zh: '交付物' },
+      { id: 'star', zh: '收藏' },
+      { id: 'usage', zh: '用量' },
+      { id: 'admin', zh: '管理' },
+      { id: 'search', zh: '搜索' },
+      { id: 'lock', zh: '隐私' },
+      { id: 'salary', zh: '谈薪' },
+      { id: 'path', zh: '离职路径' },
+      { id: 'compass', zh: '方向' },
+      { id: 'interview', zh: '面试' },
+      { id: 'compare', zh: 'Offer 对比' },
+      { id: 'resume', zh: '简历' },
+      { id: 'calendar', zh: '预约' },
+      { id: 'target', zh: '绩效' },
+      { id: 'manage', zh: '向上管理' },
+      { id: 'archive', zh: '归档' },
+      { id: 'user', zh: '用户' },
+      { id: 'send', zh: '发送' },
+    ]
+
+    const grid = document.getElementById('full-set')
+    grid.innerHTML = ICONS.map(({ id, zh }) => `
+      <div class="icon-cell">
+        <span class="wp-icon size-24">
+          <svg><use href="#i-${id}"/></svg>
+        </span>
+        <div class="zh">${zh}</div>
+        <div class="label">${id}</div>
+      </div>
+    `).join('')
+  </script>
+</body>
+</html>
