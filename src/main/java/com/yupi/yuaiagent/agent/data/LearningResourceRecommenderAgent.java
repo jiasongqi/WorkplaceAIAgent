@@ -2,6 +2,7 @@ package com.yupi.yuaiagent.agent.data;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
+import com.yupi.yuaiagent.artifact.ArtifactPublisher;
 import com.yupi.yuaiagent.artifact.ArtifactShelf;
 import com.yupi.yuaiagent.artifact.model.Artifact;
 import com.yupi.yuaiagent.artifact.model.ArtifactScope;
@@ -123,7 +124,21 @@ public class LearningResourceRecommenderAgent extends DataEmployeeAgent {
         super(artifactShelf);
         this.chatMemoryManager = chatMemoryManager;
         this.userProfileService = userProfileService;
-        this.chatClient = ChatClient.builder(dashscopeChatModel)
+        this.chatClient = buildChatClient(dashscopeChatModel);
+    }
+
+    public LearningResourceRecommenderAgent(ChatModel dashscopeChatModel,
+                                            ChatMemoryManager chatMemoryManager,
+                                            UserProfileService userProfileService,
+                                            ArtifactPublisher artifactPublisher) {
+        super(artifactPublisher);
+        this.chatMemoryManager = chatMemoryManager;
+        this.userProfileService = userProfileService;
+        this.chatClient = buildChatClient(dashscopeChatModel);
+    }
+
+    private ChatClient buildChatClient(ChatModel dashscopeChatModel) {
+        return ChatClient.builder(dashscopeChatModel)
                 .defaultAdvisors(new MyLoggerAdvisor())
                 .build();
     }

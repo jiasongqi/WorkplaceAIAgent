@@ -30,6 +30,10 @@ spring:
       chat:
         options:
           model: qwen3.7-max
+      # 同步 call() 的 HTTP 超时（须小于 SSE 300s，避免 silent hang）
+      http:
+        connect-timeout: ${DASHSCOPE_CONNECT_TIMEOUT:10s}
+        read-timeout: ${DASHSCOPE_READ_TIMEOUT:90s}
     ollama:
       base-url: http://localhost:11434
       chat:
@@ -96,10 +100,13 @@ calendar:
 appointment:
   storage:
     dir: ${APPOINTMENT_STORAGE_DIR:./tmp/appointments}
-# 会话记录存储配置
+# 会话记录 + 跨 Agent 共享状态
 session:
   storage:
     dir: ${SESSION_STORAGE_DIR:./tmp/sessions}
+  shared-state:
+    storage:
+      dir: ${SESSION_SHARED_STATE_DIR:./tmp/session-shared-state}
 # 交付物货架存储配置
 artifact:
   storage:
@@ -172,21 +179,24 @@ agent:
       max-messages: 100
       max-prompt-tokens: 8000
   # ─── Guard 防护组件配置 ───
-  guard:
-    token-budget:
-      # 模型上下文窗口总 Token 预算（与 memory.max-prompt-tokens 一致）
-      max-tokens: ${GUARD_BUDGET_MAX_TOKENS:8000}
-      # Observation 正常模式保留字符数
-      observation-max-normal: 3000
-      # Observation Compact 模式截断字符数
-      observation-max-compact: 1500
-    loop-detector:
-      # 滑动窗口大小（保留最近 N 条工具调用 embedding）
-      window-size: ${GUARD_LOOP_WINDOW_SIZE:5}
-      # 余弦相似度阈值，超过此值判定为重复调用（0.88 更敏感）
-      similarity-threshold: ${GUARD_LOOP_SIMILARITY_THRESHOLD:0.88}
-      # 连续重复次数阈值，达到后注入引导消息
-      consecutive-threshold: ${GUARD_LOOP_CONSECUTIVE_THRESHOLD:2}
+    guard:
+      loop-run:
+        # Single Agent run token fuse (Manus / ToolCallAgent loop); 0 = only daily snapshot
+        max-tokens: ${GUARD_LOOP_RUN_MAX_TOKENS:25000}
+      token-budget:
+        # 模型上下文窗口总 Token 预算（与 memory.max-prompt-tokens 一致）
+        max-tokens: ${GUARD_BUDGET_MAX_TOKENS:8000}
+        # Observation 正常模式保留字符数
+        observation-max-normal: 3000
+        # Observation Compact 模式截断字符数
+        observation-max-compact: 1500
+      loop-detector:
+        # 滑动窗口大小（保留最近 N 条工具调用 embedding）
+        window-size: ${GUARD_LOOP_WINDOW_SIZE:5}
+        # 余弦相似度阈值，超过此值判定为重复调用（0.88 更敏感）
+        similarity-threshold: ${GUARD_LOOP_SIMILARITY_THRESHOLD:0.88}
+        # 连续重复次数阈值，达到后注入引导消息
+        consecutive-threshold: ${GUARD_LOOP_CONSECUTIVE_THRESHOLD:2}
 
 # ─── 应用层配置 ───
 app:
@@ -212,12 +222,26 @@ app:
         daily-chats: ${QUOTA_ADMIN_CHATS:10000}
         daily-tokens: ${QUOTA_ADMIN_TOKENS:50000000}
   cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:8123,https://www.codefather.cn}
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001,http://localhost:8123,https://www.codefather.cn}
   # 人工审批网关（HITL）— 高危副作用操作执行前需人工确认
   hitl:
     terminal-require-approval: ${HITL_TERMINAL_APPROVAL:true}
     calendar-require-approval: ${HITL_CALENDAR_APPROVAL:true}
+    file-write-require-approval: ${HITL_FILE_WRITE_APPROVAL:true}
     approval-ttl-seconds: ${HITL_APPROVAL_TTL_SECONDS:300}
+    human-handoff-ttl-seconds: ${HITL_HUMAN_HANDOFF_TTL_SECONDS:86400}
+    max-consecutive-tool-errors: ${HITL_MAX_CONSECUTIVE_TOOL_ERRORS:3}
+    storage-dir: ${HITL_STORAGE_DIR:./tmp/hitl}
+    notify-webhook: ${HITL_NOTIFY_WEBHOOK:}
+
+  # Tool Call 工程增强（mm_agent_tutorial Ch3）
+  tools:
+    idempotency-ttl-seconds: ${TOOL_IDEMPOTENCY_TTL_SECONDS:600}
+    async-task-ttl-seconds: ${TOOL_ASYNC_TASK_TTL_SECONDS:3600}
+
+  # 感知层（文档/图片预处理）
+  perception:
+    image-max-edge-px: ${PERCEPTION_IMAGE_MAX_EDGE:1280}
 
 # 修改日志级别，查看 Spring AI 更多调用细节
 logging:
@@ -276,11 +300,43 @@ reflexion:
   max-memories-per-user: ${REFLEXION_MAX_MEMORIES:50}
   expiration-days: ${REFLEXION_EXPIRATION_DAYS:7}
 
-# ─── RAG Rerank 配置 ───
+# ─── RAG 配置 ───
 rag:
+  # 查询重写：额外一次同步 LLM，会拉高 TTFT；本地排查卡顿可设 enabled=false 对比
+  query-rewrite:
+    enabled: ${RAG_QUERY_REWRITE_ENABLED:true}
+    timeout-ms: ${RAG_QUERY_REWRITE_TIMEOUT_MS:8000}
+  pipeline:
+    max-empty-retries: ${RAG_MAX_EMPTY_RETRIES:2}
   rerank:
     enabled: ${RERANK_ENABLED:true}
     top-k: ${RERANK_TOP_K:5}
+    time-decay-enabled: ${RERANK_TIME_DECAY_ENABLED:true}
+    time-decay-weight: ${RERANK_TIME_DECAY_WEIGHT:0.15}
+
+# ─── 感知 / 上传生命周期（Ch5 P2）───
+perception:
+  hybrid:
+    top-text: ${PERCEPTION_HYBRID_TOP_TEXT:3}
+    top-vision: ${PERCEPTION_HYBRID_TOP_VISION:2}
+  map-reduce:
+    char-threshold: ${PERCEPTION_MAP_REDUCE_THRESHOLD:12000}
+    chunk-size: ${PERCEPTION_MAP_REDUCE_CHUNK:4000}
+  image-caption:
+    llm-guess-enabled: ${PERCEPTION_IMAGE_CAPTION_LLM:true}
+  upload:
+    storage-dir: ${PERCEPTION_UPLOAD_DIR:./tmp/session-uploads}
+    ttl-days: ${PERCEPTION_UPLOAD_TTL_DAYS:7}
+    cleanup-cron: ${PERCEPTION_UPLOAD_CLEANUP_CRON:0 0 3 * * *}
+
+# ─── 知识库 PDF 结构化入库 ───
+knowledge:
+  pdf:
+    min-table-rows: ${KNOWLEDGE_PDF_MIN_TABLE_ROWS:2}
+    min-table-cols: ${KNOWLEDGE_PDF_MIN_TABLE_COLS:2}
+    sidecar-enabled: ${KNOWLEDGE_PDF_SIDECAR_ENABLED:true}
+    table-sidecar-dir: ${KNOWLEDGE_PDF_SIDECAR_DIR:./tmp/knowledge/tables}
+    text-chunk-size: ${KNOWLEDGE_PDF_TEXT_CHUNK_SIZE:200}
 
 # ─── Paradigm 范式选择配置 ───
 paradigm:
@@ -311,3 +367,10 @@ memory:
       token-budget-percent: 15
       top-k: ${MEMORY_EXPERIENCE_TOP_K:3}
       similarity-threshold: ${MEMORY_EXPERIENCE_THRESHOLD:0.7}
+
+# ─── DAG 工作流（固定流程：JOB_CHANGE / INTERVIEW）───
+workflow:
+  storage:
+    dir: ${WORKFLOW_STORAGE_DIR:./tmp/workflows}
+  dag:
+    enabled: ${WORKFLOW_DAG_ENABLED:false}

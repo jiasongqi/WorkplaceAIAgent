@@ -67,11 +67,14 @@ SseEmitter 设置了 onTimeout 和 onError 回调，客户端断开时自动清�
 
 **为什么重要？** 客户端断开是常态（网络波动、用户刷新页面）。如果不处理，服务端会累积大量僵尸 trace。
 
-### 8. ToolCallAgent 工具超时 30s + 重试 2 次
+### 8. ToolCallAgent：超时 + 只读重试 + 并行 Fan-out
 
-工具调用有 30 秒超时和 2 次自动重试。超时后根据 ToolResultClassifier 分级处理。
+- 每工具约 30s 超时；**仅只读工具**超时自动重试（`ToolSideEffectPolicy`），副作用靠幂等指纹防重复执行
+- 同轮多个 tool call → `ParallelToolCallingSupport` 并发
+- Observation 进 Context 前经 `ObservationSanitizer` 清洗；大文件传 `file_id` + `readFileChunk`
+- 长任务 `start*` + `checkAsyncToolTask`（Submit-Poll）
 
-**为什么重要？** MCP 外部服务不可控，可能慢、可能挂。没有超时的工具调用会阻塞整个 Agent 循环。
+**为什么重要？** 「一律超时重试」会把写文件/下载执行两遍；传全文会撑爆 Context。这是 Ch3 Tool Call 工程的核心取舍。
 
 ### 9. EmbeddingLoopDetector 循环检测
 
@@ -79,11 +82,25 @@ SseEmitter 设置了 onTimeout 和 onError 回调，客户端断开时自动清�
 
 **为什么重要？** 简单计数会误杀（有些任务确实需要多次工具调用）。语义检测更精准。而且"注入引导"比"直接终止"更温和——给 LLM 一个修正的机会。
 
+### 9b. ConsecutiveFailureGuard + Loop Wrap-up（Ch1/Ch4）
+
+- 连续非 NORMAL 工具结果达阈值 → 终止并可 HITL park（与 LoopDetector 正交）
+- `maxSteps` 触顶且仍 RUNNING → **Wrap-up**（部分结论 + 未完成清单），不 Crash
+- P&E 步骤失败 → **Replanner**（最多一次）；嵌套 Depth Limit ≤3
+
+**为什么重要？** Loop 是操作系统：调度、刹车、收尾。死循环烧 Token 是生产第一敌人。
+
 ### 10. 投票式访问控制（一票否决）
 
 三个维度独立评估：Agent 权限、MCP 信任等级、调用配额。任何一个拒绝就拒绝。
 
 **为什么重要？** RBAC 是静态的，投票式是动态的。一个 Agent 有权限但 MCP 服务不信任，最终拒绝。这是**最小权限原则**的动态实现。
+
+### 11. Perception 感知层（Ch1）
+
+简历/Offer 先 PDFBox/POI 降维 → SharedState bind → SSE 短消息；Goal Anchor 每步重插目标。
+
+**为什么重要？** 不把 PDF/像素直接塞进 VLM；符合 Budget Awareness，并规避 EventSource URL 长度限制。
 
 ---
 
@@ -91,12 +108,14 @@ SseEmitter 设置了 onTimeout 和 onError 回调，客户端断开时自动清�
 
 ### Q1: 你的 Agent 会不会"发疯"？
 
-**回答**：三层防护：
-1. ReActAgent.maxSteps=10（硬上限）
-2. EmbeddingLoopDetector 余弦相似度检测（语义重复）
-3. TokenBudgetManager 三级预算控制（Normal/Compact/Compress）
+**回答**：多层防护：
+1. `maxSteps` 硬上限；触顶走 `LoopWrapUp`（部分成功收尾），不抛异常走人
+2. `EmbeddingLoopDetector` 余弦相似度检测（语义重复 / Stall）
+3. `ConsecutiveFailureGuard` 连续失败熔断 → 可选 HITL
+4. `TokenBudgetManager` + `ObservationSanitizer` 控 Context
+5. `AgentDepthContext` 嵌套深度 ≤3；`CompletionClaimGuard` 防「我说做了」幻觉
 
-检测到循环后不是直接终止，而是注入引导性消息让 LLM 自主修正。
+检测到循环后不是直接终止，而是注入引导 / Reflect；预算耗尽则强制 Wrap-up。
 
 ### Q2: 你的系统能扛多少并发？
 
@@ -113,7 +132,8 @@ SseEmitter 设置了 onTimeout 和 onError 回调，客户端断开时自动清�
 2. MemoryCoordinator 超时回退 → last-known-good 缓存
 3. SkillExecutor 失败 → 降级到 NLU 路由
 4. NLU 路由失败 → 降级到 GENERAL Agent
-5. 工具超时 → ToolResultClassifier 分级 → 重试/跳过/换策略
+5. 工具超时 → ToolResultClassifier 分级 → **只读**可重试 / 副作用幂等去重 / 换策略 / start* 异步
+6. 步数耗尽 → LoopWrapUp 输出 PARTIAL_SUCCESS + 未完成项
 
 ### Q4: 如何保证用户数据不串？
 
@@ -204,8 +224,12 @@ DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED，每步有合法性
 
 ## 五、面试加分点
 
-1. **能说出"为什么不用 X"**：比如"为什么不用向量库做所有记忆"、"为什么不用 SpEL 做条件表达式"
-2. **能说出"迭代了 N 轮"**：NLU 从 V1 到 V4.2，每轮有具体问题和解决方案
-3. **能说出"取舍"**：路由确定性 vs 全自主、文件持久化 vs 数据库、串行 vs 并行
-4. **能说出"生产细节"**：trace 容错、SSE 断开处理、工具超时重试、循环检测
+1. **能说出"为什么不用 X"**：比如"为什么不用向量库做所有记忆"、"为什么副作用工具不能超时一律重试"
+2. **能说出"迭代了 N 轮"**：NLU V1→V4.2；多模态教程 Ch1/Ch3/Ch4 对照落地
+3. **能说出"取舍"**：路由确定性 vs 全自主；ReAct vs P&E；硬截断 vs 智能摘要
+4. **能说出"生产细节"**：trace 容错、SSE 断开、只读超时重试、幂等、Wrap-up、Depth Limit
 5. **能说出"扩展路径"**：V1→V2→V3 演进、AgentRunner 适配层、Repository 接口抽象
+6. **诚实边界**：扫描 OCR / 真 VLM / Browser Agent **未做**——比吹「全模态」更加分
+
+> 同步：2026-07-29 · Ch1 Perception/Goal · Ch3 Tool · Ch4 Loop  
+> 详设：`mm-agent-tutorial-ch1/ch3/ch4-落地.md` · `interview-perception-goal-reliability.md`

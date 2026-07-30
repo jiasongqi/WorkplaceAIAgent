@@ -4,7 +4,14 @@
     <div class="header glass">
       <div class="back-button" @click="goBack">← 返回</div>
       <h1 class="title">执行轨迹</h1>
-      <div class="header-right">
+        <div class="header-right">
+        <button
+          v-if="trace"
+          class="save-skill-btn"
+          type="button"
+          :disabled="skillBusy"
+          @click="saveAsSkill"
+        >{{ skillBusy ? '生成中…' : '保存为技能' }}</button>
         <span class="trace-status" :class="trace?.status?.toLowerCase()">
           {{ trace?.status === 'SUCCESS' ? '成功' : trace?.status === 'RUNNING' ? '运行中' : trace?.status === 'FAILED' ? '失败' : '—' }}
         </span>
@@ -107,7 +114,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getTrace } from '../api'
+import { getTrace, draftSkillFromTrace, saveDraftSkill } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -117,6 +124,7 @@ const trace = ref(null)
 const loading = ref(true)
 const error = ref('')
 const selectedSpan = ref(0)
+const skillBusy = ref(false)
 
 let pollTimer = null
 
@@ -137,6 +145,27 @@ const formatJson = (obj) => {
 }
 
 const goBack = () => router.back()
+
+const saveAsSkill = async () => {
+  if (!traceId.value || skillBusy.value) return
+  skillBusy.value = true
+  try {
+    const draftRes = await draftSkillFromTrace(traceId.value)
+    const draft = draftRes.data?.data
+    if (!draft) {
+      alert('未能从 Trace 生成技能草稿')
+      return
+    }
+    const ok = window.confirm(`保存技能「${draft.name}」？\n${draft.description || ''}`)
+    if (!ok) return
+    await saveDraftSkill(draft)
+    alert('技能已保存到注册中心')
+  } catch (e) {
+    alert(e.message || '保存技能失败')
+  } finally {
+    skillBusy.value = false
+  }
+}
 
 const loadTrace = async () => {
   try {
@@ -208,11 +237,21 @@ onBeforeUnmount(() => {
 .back-button:hover { color: var(--text); }
 .title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0; }
 .header-right { display: flex; align-items: center; gap: 8px; }
+.save-skill-btn {
+  border: 1px solid var(--gold-border);
+  background: var(--gold-soft);
+  color: var(--gold-text);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.save-skill-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .trace-status {
   font-size: 11px; padding: 2px 8px; border-radius: var(--radius-sm); font-weight: 500;
 }
 .trace-status.success { background: var(--success-light); color: var(--success); }
-.trace-status.running { background: var(--primary-light); color: var(--glass-bg); }
+.trace-status.running { background: var(--gold-soft); color: var(--gold-text); }
 .trace-status.failed { background: var(--danger-light); color: var(--danger); }
 .trace-id { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
 

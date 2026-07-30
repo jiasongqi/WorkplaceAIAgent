@@ -2,8 +2,12 @@ package com.yupi.yuaiagent.rag.rerank;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -26,6 +30,16 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class RerankService {
+
+    private final boolean timeDecayEnabled;
+    private final double timeDecayWeight;
+
+    public RerankService(
+            @Value("${rag.rerank.time-decay-enabled:true}") boolean timeDecayEnabled,
+            @Value("${rag.rerank.time-decay-weight:0.15}") double timeDecayWeight) {
+        this.timeDecayEnabled = timeDecayEnabled;
+        this.timeDecayWeight = Math.max(0, Math.min(0.5, timeDecayWeight));
+    }
 
     // Stop words to filter out
     private static final Set<String> STOP_WORDS = Set.of(
@@ -61,6 +75,10 @@ public class RerankService {
 
         // Sort by score (descending)
         scoredDocs.sort(Comparator.comparingDouble(ScoredDocument::score).reversed());
+
+        if (timeDecayEnabled) {
+            scoredDocs = applyTimeDecay(scoredDocs);
+        }
 
         // Extract reranked documents
         List<Document> reranked = scoredDocs.stream()
@@ -182,6 +200,31 @@ public class RerankService {
                 .filter(token -> token.length() > 1)
                 .filter(token -> !STOP_WORDS.contains(token))
                 .collect(Collectors.toSet());
+    }
+
+    private List<ScoredDocument> applyTimeDecay(List<ScoredDocument> scoredDocs) {
+        List<ScoredDocument> adjusted = new ArrayList<>();
+        for (ScoredDocument sd : scoredDocs) {
+            double factor = timeDecayFactor(sd.document());
+            double newScore = sd.score() * (1.0 - timeDecayWeight + timeDecayWeight * factor);
+            adjusted.add(new ScoredDocument(sd.document(), newScore, sd.originalIndex()));
+        }
+        adjusted.sort(Comparator.comparingDouble(ScoredDocument::score).reversed());
+        return adjusted;
+    }
+
+    private double timeDecayFactor(Document doc) {
+        if (doc.getMetadata() == null || doc.getMetadata().get("indexedAt") == null) {
+            return 0.5;
+        }
+        try {
+            LocalDateTime ts = LocalDateTime.parse(doc.getMetadata().get("indexedAt").toString());
+            long days = ChronoUnit.DAYS.between(ts, LocalDateTime.now());
+            double years = Math.max(0, days) / 365.0;
+            return 1.0 / (1.0 + years);
+        } catch (DateTimeParseException e) {
+            return 0.5;
+        }
     }
 
     /**

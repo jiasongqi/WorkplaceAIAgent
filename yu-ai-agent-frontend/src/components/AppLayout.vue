@@ -4,6 +4,8 @@
     <div class="ambient">
       <div class="glow-top"></div>
       <div class="glow-bot"></div>
+      <div class="leaf leaf-1"></div>
+      <div class="leaf leaf-2"></div>
     </div>
     <div class="noise"></div>
 
@@ -31,6 +33,20 @@
           </router-link>
         </nav>
         <div class="topbar-r">
+          <button
+            class="tb-btn theme-toggle"
+            :title="theme === 'sage' ? '切换到暗色主题' : '切换到青荷绿主题'"
+            aria-label="切换主题"
+            @click="toggleTheme"
+          >
+            <!-- moon when sage (switch to dark) / leaf when dark (switch to sage) -->
+            <svg v-if="theme === 'sage'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2C8 6 5 9.5 5 13a7 7 0 0 0 14 0c0-3.5-3-7-7-11z"/>
+            </svg>
+          </button>
           <button
             v-for="tool in toolItems"
             :key="tool.path"
@@ -77,6 +93,11 @@
               <WpIcon class="nav-icon" :name="tool.icon" :size="18" />
               <span>{{ tool.label }}</span>
             </router-link>
+            <div class="drawer-divider"></div>
+            <button class="drawer-link theme-drawer-btn" @click="toggleTheme">
+              <span class="nav-icon" aria-hidden="true">{{ theme === 'sage' ? '🌙' : '🌿' }}</span>
+              <span>{{ theme === 'sage' ? '切换暗色主题' : '切换青荷绿主题' }}</span>
+            </button>
           </nav>
         </div>
       </Transition>
@@ -97,8 +118,10 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import WpIcon from './WpIcon.vue'
+import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
+const { theme, toggleTheme } = useTheme()
 const mobileNavOpen = ref(false)
 const username = ref(localStorage.getItem('username') || '用户')
 const userInitial = computed(() => (username.value || 'U').charAt(0).toUpperCase())
@@ -147,10 +170,11 @@ const isActive = (path) => {
   justify-content: space-between;
   padding: 12px 24px;
   flex-shrink: 0;
-  background: rgba(10,12,22,0.7);
+  background: var(--topbar-bg);
   backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--glass-border);
   height: var(--topbar-h);
+  transition: background 0.35s var(--ease), border-color 0.35s var(--ease);
 }
 
 .logo-area {
@@ -165,7 +189,7 @@ const isActive = (path) => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, rgba(245,158,11,0.85), rgba(217,119,6,0.4));
+  background: var(--logo-orb);
   box-shadow: 0 0 14px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,0.2);
   animation: orb-pulse 5s ease-in-out infinite;
 }
@@ -242,7 +266,7 @@ const isActive = (path) => {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(245,158,11,0.6), rgba(217,119,6,0.3));
+  background: var(--user-orb);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -250,6 +274,14 @@ const isActive = (path) => {
   font-weight: 600;
   color: var(--t1);
   margin-left: 8px;
+}
+
+.theme-toggle {
+  color: var(--gold-text);
+}
+.theme-toggle:hover {
+  color: var(--gold);
+  background: var(--gold-soft);
 }
 
 /* Main */
@@ -290,7 +322,7 @@ const isActive = (path) => {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(5, 6, 13, 0.7);
+  background: var(--overlay-bg);
   backdrop-filter: blur(4px);
 }
 
@@ -349,6 +381,15 @@ const isActive = (path) => {
 .drawer-link.active {
   background: var(--gold-soft);
   color: var(--gold-text);
+}
+
+.theme-drawer-btn {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
 }
 
 .drawer-divider {

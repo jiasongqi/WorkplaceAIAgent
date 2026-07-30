@@ -52,6 +52,15 @@ public class UserQuotaService {
         dailyQuotaStore.save(record);
     }
 
+    /**
+     * Daily tokens still available for this user (snapshot; not reserved for in-flight runs).
+     */
+    public int remainingDailyTokens(String userId, UserRole role) {
+        AuthProperties.RoleQuota limits = authProperties.limitsFor(role);
+        DailyQuotaStore.DailyQuotaRecord record = dailyQuotaStore.getOrCreate(userId, LocalDate.now());
+        return Math.max(0, limits.getDailyTokens() - record.getTokenUsed());
+    }
+
     public Map<String, Object> snapshot(String userId, UserRole role) {
         AuthProperties.RoleQuota limits = authProperties.limitsFor(role);
         DailyQuotaStore.DailyQuotaRecord record = dailyQuotaStore.getOrCreate(userId, LocalDate.now());

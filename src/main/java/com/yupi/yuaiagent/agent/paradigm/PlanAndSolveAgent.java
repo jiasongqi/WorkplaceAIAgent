@@ -109,12 +109,34 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
             }
             """;
 
+    /** System prompt for replan phase (Ch4 Plan-and-Execute Replanner) */
+    private static final String REPLAN_SYSTEM_PROMPT = """
+            You are a replanner. A prior plan step failed or verification found gaps.
+            Keep completed work; only rewrite the REMAINING steps.
+            
+            Original task: %s
+            Completed steps and results:
+            %s
+            Failure / gap reason: %s
+            
+            Output strict JSON:
+            {
+              "analysis": "why replan",
+              "steps": [
+                {"id": 1, "action": "...", "expected_output": "..."}
+              ]
+            }
+            Generate 1-5 remaining steps only. Do not repeat completed work.
+            """;
+
     // Internal state
     private String planJson;
     private List<PlanStep> planSteps;
     private int currentStepIndex = 0;
     private List<String> stepResults;
     private Phase currentPhase = Phase.PLANNING;
+    private int replanCount = 0;
+    private static final int MAX_REPLANS = 1;
 
     /**
      * Constructor with ChatClient.
@@ -151,16 +173,29 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
                 return "规划阶段失败：无法生成计划";
             }
 
-            // Phase 2: Execution
+            // Phase 2: Execution (with optional Replan)
             currentPhase = Phase.EXECUTION;
             String executionResult = executePlan();
             if (executionResult == null) {
                 return "执行阶段失败：计划执行中断";
             }
 
-            // Phase 3: Verification
+            // Phase 3: Verification — may trigger one Replan + re-execute remaining
             currentPhase = Phase.VERIFICATION;
             String verificationResult = verifyResults();
+            if (needsReplanAfterVerify(verificationResult) && replanCount < MAX_REPLANS) {
+                log.info("[PlanAndSolveAgent] Verification requested replan");
+                String reason = extractGapReason(verificationResult);
+                if (replanRemaining(reason)) {
+                    currentPhase = Phase.EXECUTION;
+                    String more = executeRemainingAfterReplan();
+                    if (more != null) {
+                        executionResult = executionResult + "\n\n## Replan 后续执行\n\n" + more;
+                    }
+                    currentPhase = Phase.VERIFICATION;
+                    verificationResult = verifyResults();
+                }
+            }
 
             endParadigmTrace(paradigmSpan, true);
             return formatFinalResult(planResult, executionResult, verificationResult);
@@ -249,6 +284,19 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
 
                 // Update trace
                 addStepToTrace(step.action(), stepResult);
+
+                // Mid-execution replan on hard failure (once)
+                if (looksFailed(stepResult) && replanCount < MAX_REPLANS && i < planSteps.size() - 1) {
+                    log.warn("[PlanAndSolveAgent] Step {} looks failed — triggering Replanner", i + 1);
+                    if (replanRemaining("Step failed: " + truncate(stepResult, 200))) {
+                        results.append("(Replanned remaining steps)\n\n");
+                        String rest = executeRemainingAfterReplan();
+                        if (rest != null) {
+                            results.append(rest);
+                        }
+                        break;
+                    }
+                }
             }
 
             endPhaseTrace(executionSpan, true);
@@ -377,14 +425,11 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
     private String buildProgressSummary() {
         StringBuilder summary = new StringBuilder();
         summary.append("Completed steps:\n");
-
         for (int i = 0; i < stepResults.size(); i++) {
-            PlanStep step = planSteps.get(i);
-            summary.append(String.format("- Step %d: %s → %s\n",
-                    i + 1, step.action(),
-                    stepResults.get(i).substring(0, Math.min(100, stepResults.get(i).length()))));
+            String result = stepResults.get(i);
+            summary.append(String.format("- Step %d → %s\n",
+                    i + 1, result.substring(0, Math.min(100, result.length()))));
         }
-
         return summary.toString();
     }
 
@@ -429,6 +474,101 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
                 """, planJson, execution, verification);
     }
 
+    /**
+     * Replan remaining steps after a failure or verification gap (max once).
+     */
+    private boolean replanRemaining(String reason) {
+        TraceSpan span = startPhaseTrace("Replanning");
+        try {
+            replanCount++;
+            currentPhase = Phase.REPLANNING;
+            String userMessage = getMessageList().isEmpty() ? "" :
+                    getMessageList().get(getMessageList().size() - 1).getText();
+            String completed = buildProgressSummary();
+            String system = String.format(REPLAN_SYSTEM_PROMPT, userMessage, completed, reason);
+            Prompt prompt = new Prompt(List.of(
+                    new SystemMessage(system),
+                    new UserMessage("Output the revised remaining steps as JSON.")));
+            ChatResponse response = getChatClient().prompt(prompt).call().chatResponse();
+            String text = response.getResult().getOutput().getText();
+            List<PlanStep> next = parsePlan(text);
+            if (next == null || next.isEmpty()) {
+                endPhaseTrace(span, false);
+                return false;
+            }
+            this.planSteps = next;
+            this.planJson = (planJson == null ? "" : planJson) + "\n\n## Replan\n" + text;
+            this.currentStepIndex = 0;
+            log.info("[PlanAndSolveAgent] Replanned into {} remaining steps", next.size());
+            endPhaseTrace(span, true);
+            return true;
+        } catch (Exception e) {
+            log.warn("[PlanAndSolveAgent] Replan failed: {}", e.getMessage());
+            endPhaseTrace(span, false);
+            return false;
+        }
+    }
+
+    /** Execute the (already replaced) remaining planSteps after a replan. */
+    private String executeRemainingAfterReplan() {
+        StringBuilder results = new StringBuilder();
+        try {
+            for (int i = 0; i < planSteps.size(); i++) {
+                currentStepIndex = i;
+                PlanStep step = planSteps.get(i);
+                log.info("[PlanAndSolveAgent] Replan-exec step {}/{}: {}", i + 1, planSteps.size(), step.action());
+                String progress = buildProgressSummary();
+                String systemPrompt = String.format(EXECUTION_SYSTEM_PROMPT,
+                        progress, i + 1, planSteps.size(), step.action());
+                Prompt prompt = new Prompt(List.of(
+                        new SystemMessage(systemPrompt),
+                        new UserMessage("Execute this replanned step and provide the result.")));
+                ChatResponse response = getChatClient().prompt(prompt).call().chatResponse();
+                String stepResult = response.getResult().getOutput().getText();
+                stepResults.add(stepResult);
+                results.append("Replan Step ").append(i + 1).append(": ").append(step.action()).append("\n");
+                results.append("Result: ").append(stepResult).append("\n\n");
+                addStepToTrace(step.action(), stepResult);
+            }
+            return results.toString();
+        } catch (Exception e) {
+            log.error("[PlanAndSolveAgent] Replan execution failed: {}", e.getMessage());
+            return results + "\nReplan execution interrupted: " + e.getMessage();
+        }
+    }
+
+    private static boolean looksFailed(String stepResult) {
+        if (stepResult == null || stepResult.isBlank()) {
+            return true;
+        }
+        String s = stepResult.toLowerCase();
+        return s.contains("失败") || s.contains("无法完成") || s.contains("cannot")
+                || s.contains("failed") || s.contains("error:") || s.contains("执行错误");
+    }
+
+    private static boolean needsReplanAfterVerify(String verification) {
+        if (verification == null) {
+            return false;
+        }
+        String v = verification.toLowerCase();
+        return v.contains("\"status\": \"partial\"") || v.contains("\"status\":\"partial\"")
+                || v.contains("\"status\": \"failed\"") || v.contains("\"status\":\"failed\"")
+                || (v.contains("partial") && v.contains("issues"))
+                || v.contains("未完成") || v.contains("缺口")
+                || (v.contains("failed") && v.contains("issues"));
+    }
+
+    private static String extractGapReason(String verification) {
+        return truncate(verification == null ? "verification gap" : verification, 400);
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) {
+            return "";
+        }
+        return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
     // ─── Inner Classes ─────────────────────────────────────────────────
 
     /**
@@ -442,6 +582,7 @@ public class PlanAndSolveAgent extends BaseParadigmAgent {
     public enum Phase {
         PLANNING,
         EXECUTION,
+        REPLANNING,
         VERIFICATION
     }
 }

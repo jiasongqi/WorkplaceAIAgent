@@ -215,11 +215,11 @@ async function guestLogin() {
   flex-direction: column;
   gap: 14px;
   padding: 22px 22px 20px;
-  background: rgba(15, 17, 29, 0.72);
+  background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   backdrop-filter: blur(20px);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--card-hover-shadow);
   animation: rise 0.7s 0.12s var(--ease) both;
 }
 
@@ -349,7 +349,7 @@ async function guestLogin() {
   width: 100%;
   padding: 13px 16px;
   border-radius: var(--r-md);
-  background: linear-gradient(135deg, var(--gold), #d97706);
+  background: var(--gold-grad);
   color: #fff;
   font-size: 15px;
   font-weight: 650;

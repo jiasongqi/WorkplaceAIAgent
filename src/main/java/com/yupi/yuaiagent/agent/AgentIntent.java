@@ -13,6 +13,7 @@ public enum AgentIntent {
     ESCAPE("离职规划专家", "离职、辞职、劳动纠纷、工作交接"),
     CONSULTATION("预约咨询专家", "预约咨询、预约专家、咨询预约"),
     DATA_QUERY("数据查询顾问", "数据查询、指标查看、报表、KPI"),
+    DIGITAL_EMPLOYEE("数字员工", "创建数字员工、委托专属员工、调整员工人设"),
     GENERAL("职场通用顾问", "其他职场问题");
     
     private final String agentName;
@@ -63,6 +64,10 @@ public enum AgentIntent {
         // 预约咨询关键词 → CONSULTATION（Req 1.3）
         if (containsAny(rawIntent, "预约", "咨询")) {
             return CONSULTATION;
+        }
+
+        if (containsAny(rawIntent, "数字员工", "专属员工", "创建员工")) {
+            return DIGITAL_EMPLOYEE;
         }
         
         return GENERAL;

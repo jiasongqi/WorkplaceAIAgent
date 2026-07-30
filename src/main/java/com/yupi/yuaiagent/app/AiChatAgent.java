@@ -2,9 +2,8 @@ package com.yupi.yuaiagent.app;
 
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
-import com.yupi.yuaiagent.demo.rag.MultiQueryExpanderDemo;
-import com.yupi.yuaiagent.rag.MultiQueryRetriever;
-import com.yupi.yuaiagent.rag.QueryRewriter;
+import com.yupi.yuaiagent.rag.RetrievalOptions;
+import com.yupi.yuaiagent.rag.RetrievalPipeline;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -14,7 +13,6 @@ import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvi
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.rag.Query;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -114,37 +112,17 @@ public class AiChatAgent {
     private VectorStore pgVectorVectorStore;
 
     @Resource
-    private QueryRewriter queryRewriter;
-
-    @Resource
-    private MultiQueryExpanderDemo multiQueryExpanderDemo;
+    private RetrievalPipeline retrievalPipeline;
 
     /**
-     * 和 RAG 知识库进行对话（含 Multi-Query 多路召回）
-     * 
-     * 优化：使用 MultiQueryRetriever 封装检索逻辑
+     * 和 RAG 知识库进行对话（统一 RetrievalPipeline：改写 + Multi-Query + Rerank）
      */
     public String doChatWithRag(String message, String chatId) {
-        // 1. 创建 MultiQueryRetriever
-        MultiQueryRetriever retriever = new MultiQueryRetriever(aiChatVectorStore, queryRewriter);
-        
-        // 2. 查询重写
-        String rewrittenMessage = queryRewriter.doQueryRewrite(message);
-        log.info("查询重写：{} -> {}", message, rewrittenMessage);
-        
-        // 3. Multi-Query 扩展
-        List<Query> expandedQueries = multiQueryExpanderDemo.expand(rewrittenMessage);
-        log.info("Multi-Query 扩展结果（共 {} 个变体）", expandedQueries.size());
-        
-        // 4. 多路检索并合并结果
-        List<org.springframework.ai.document.Document> documents = retriever.retrieve(rewrittenMessage, expandedQueries);
-        log.info("Multi-Query 合并后共 {} 个唯一文档片段", documents.size());
-        
-        // 5. 构建带上下文的 prompt
-        String context = retriever.buildContext(documents);
-        String contextPrompt = context.isEmpty()
-                ? rewrittenMessage
-                : "请基于以下参考资料回答用户问题：\n\n" + context + "\n\n用户问题：" + rewrittenMessage;
+        RetrievalPipeline.RetrievalResult result =
+                retrievalPipeline.retrieve(message, RetrievalOptions.chatDefaults());
+        log.info("RAG 检索：docs={} rewritten={}", result.documents().size(), result.rewrittenQuery());
+
+        String contextPrompt = result.buildPrompt(message);
 
         ChatResponse chatResponse = chatClient
                 .prompt()

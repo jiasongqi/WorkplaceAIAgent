@@ -180,9 +180,56 @@ export const uploadDocument = (file, status = '通用') => {
   formData.append('file', file)
   formData.append('status', status)
   return request.post('/document/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
   })
 }
+
+export const listDocuments = () => request.get('/document/list')
+
+export const deleteDocument = (docId) => request.delete(`/document/${docId}`)
+
+export const addTextDocument = (content, filename, status = '通用') => {
+  const formData = new FormData()
+  formData.append('content', content)
+  formData.append('filename', filename)
+  formData.append('status', status)
+  return request.post('/document/add', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}
+
+/** 简历/Offer 感知预处理 → promptBlock（调试用，不绑会话） */
+export const preprocessPerception = (file, hint = 'resume') => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('hint', hint || 'resume')
+  return request.post('/perception/preprocess', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}
+
+/**
+ * 预处理并写入会话 Shared State（推荐联调路径）。
+ * 聊天只需发短句，避免 EventSource GET URL 过长。
+ */
+export const preprocessPerceptionAndBind = (file, chatId, hint = 'resume') => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('hint', hint || 'resume')
+  formData.append('chatId', chatId)
+  return request.post('/perception/preprocess-and-bind', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}
+
+/** 感知假设 vs 工具观测交叉验证 */
+export const perceptionCrossCheck = (hypothesis, observed) =>
+  request.post('/perception/cross-check', null, { params: { hypothesis, observed } })
+
 
 export const getMyProfile = () => request.get('/profile/me')
 export const clearMyProfile = () => request.delete('/profile/me')
@@ -196,6 +243,18 @@ export const listTrashSessions = () => request.get('/session/trash')
 export const searchSessions = (keyword) => request.get('/session/search', { params: { keyword } })
 export const listArtifacts = (params) => request.get('/artifact/list', { params })
 export const getArtifactDetail = (artifactId) => request.get(`/artifact/${artifactId}`)
+export const listMyArtifacts = (chatId) =>
+  request.get('/artifact/mine', { params: chatId ? { chatId } : {} })
+export const getMyArtifactDetail = (artifactId) => request.get(`/artifact/mine/${artifactId}`)
+export const listExpertPacks = () => request.get('/pack/list')
+export const setExpertPackEnabled = (packId, enabled) =>
+  request.post(`/pack/${packId}/enabled`, { enabled })
+export const listSkills = () => request.get('/skill/list')
+export const draftSkillFromTrace = (traceId) =>
+  request.post('/skill/draft-from-trace', { traceId })
+export const saveDraftSkill = (draft) => request.post('/skill/save', draft)
+export const listMyTasks = () => request.get('/task/mine')
+export const getSandboxPolicy = () => request.get('/task/sandbox-policy')
 export const getTrace = (traceId) => request.get(`/trace/${traceId}`)
 export const getTracesByChat = (chatId, pageNum = 1, pageSize = 20) =>
   request.get(`/trace/chat/${chatId}`, { params: { pageNum, pageSize } })
@@ -212,6 +271,24 @@ export const exportAll = () => {
 export const importData = (formData) =>
   request.post('/export/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const getUsageStats = () => request.get('/usage/stats')
+
+export const submitFeedback = (chatId, messageId, rating, { comment, agentType, intent } = {}) =>
+  request.post('/feedback', null, {
+    params: { chatId, messageId, rating, comment, agentType, intent }
+  })
+
+export const getFeedbackStats = () => request.get('/feedback/stats')
+
+export const getMyCompanion = () => request.get('/companion/me')
+export const updateMyCompanion = (payload) => request.put('/companion/me', payload)
+
+export const listDigitalEmployeeTemplates = () => request.get('/digital-employee/templates')
+export const listMyDigitalEmployees = () => request.get('/digital-employee/mine')
+export const createDigitalEmployee = (payload) => request.post('/digital-employee', payload)
+export const updateDigitalEmployee = (id, payload) => request.put(`/digital-employee/${id}`, payload)
+export const rollbackDigitalEmployee = (id, version) =>
+  request.post(`/digital-employee/${id}/rollback`, null, { params: { version } })
+export const setActiveDigitalEmployee = (id) => request.post(`/digital-employee/${id}/activate`)
 
 export const approveHitl = (approvalId) =>
   request.post('/hitl/approve', null, { params: { approvalId } })

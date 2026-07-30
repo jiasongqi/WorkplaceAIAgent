@@ -36,4 +36,22 @@ class ConsultationCatalogInquiryTest {
         assertThat(KeywordRouter.keywordRouteIntent("想咨询一下怎么涨薪"))
                 .isEqualTo(AgentIntent.NEGOTIATION);
     }
+
+    @Test
+    void keywordRouterRoutesScheduleInquiryToConsultation() {
+        assertThat(KeywordRouter.keywordRouteIntent("看下我的日程安排"))
+                .isEqualTo(AgentIntent.CONSULTATION);
+        assertThat(KeywordRouter.keywordRouteIntent("查看我的预约"))
+                .isEqualTo(AgentIntent.CONSULTATION);
+        assertThat(KeywordRouter.keywordRouteIntent("我的预约进度怎么样"))
+                .isEqualTo(AgentIntent.CONSULTATION);
+    }
+
+    @Test
+    void detectsScheduleInquiry() {
+        assertThat(ConsultationAgent.isScheduleInquiry("看下我的日程安排")).isTrue();
+        assertThat(ConsultationAgent.isScheduleInquiry("查看我的预约")).isTrue();
+        assertThat(ConsultationAgent.isScheduleInquiry("我想预约明天三点简历咨询")).isFalse();
+        assertThat(ConsultationAgent.isScheduleInquiry("有什么可以预约")).isFalse();
+    }
 }

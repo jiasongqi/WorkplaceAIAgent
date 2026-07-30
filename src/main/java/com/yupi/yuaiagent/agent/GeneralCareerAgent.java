@@ -117,7 +117,7 @@ public class GeneralCareerAgent {
      * @param profileInjection  可选的用户画像提示片段
      */
     public String chat(String message, String chatId, String userId, String profileInjection) {
-        String memoryContext = assembleMemoryContext(userId, chatId);
+        String memoryContext = assembleMemoryContext(userId, chatId, message);
 
         ChatResponse response = chatClient.prompt()
                 .system(buildSystemPrompt(memoryContext, profileInjection))
@@ -159,7 +159,7 @@ public class GeneralCareerAgent {
      * @param profileInjection  可选的用户画像提示片段
      */
     public Flux<String> chatStream(String message, String chatId, String userId, String profileInjection) {
-        String memoryContext = assembleMemoryContext(userId, chatId);
+        String memoryContext = assembleMemoryContext(userId, chatId, message);
 
         return chatClient.prompt()
                 .system(buildSystemPrompt(memoryContext, profileInjection))
@@ -204,12 +204,12 @@ public class GeneralCareerAgent {
      * @param chatId 会话 ID
      * @return 组装后的记忆上下文文本，或空字符串
      */
-    private String assembleMemoryContext(String userId, String chatId) {
+    private String assembleMemoryContext(String userId, String chatId, String currentMessage) {
         if (memoryCoordinator == null || userId == null || userId.isBlank()) {
             return "";
         }
         try {
-            SystemMessage contextMsg = memoryCoordinator.assembleContext(userId, chatId, "general");
+            SystemMessage contextMsg = memoryCoordinator.assembleContext(userId, chatId, "general", currentMessage);
             return contextMsg.getText();
         } catch (Exception e) {
             log.warn("Memory context assembly failed, proceeding without memory: {}", e.getMessage());

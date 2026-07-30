@@ -1,10 +1,15 @@
 package com.yupi.yuaiagent.agent;
 
 import cn.hutool.core.util.StrUtil;
+import com.yupi.yuaiagent.agent.loop.AgentDepthContext;
+import com.yupi.yuaiagent.agent.loop.AgentLoopResult;
+import com.yupi.yuaiagent.agent.loop.LoopRunBudget;
+import com.yupi.yuaiagent.agent.loop.LoopWrapUp;
 import com.yupi.yuaiagent.agent.model.AgentState;
+import com.yupi.yuaiagent.guard.ConsecutiveFailureGuard;
+import com.yupi.yuaiagent.hitl.HumanHandoffService;
 import com.yupi.yuaiagent.trace.TraceContext;
 import com.yupi.yuaiagent.trace.TraceRecorder;
-import com.yupi.yuaiagent.trace.model.TraceSpan;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,240 +26,152 @@ import java.util.concurrent.Executor;
 /**
  * 抽象基础代理类，用于管理代理状态和执行流程。
  * <p>
- * 提供状态转换、内存管理和基于步骤的执行循环的基础功能。
- * 子类必须实现step方法。
- * @author jsq
+ * Ch4: maxSteps 触顶走 Wrap-up；嵌套深度受 {@link AgentDepthContext} 限制。
  */
 @Data
 @Slf4j
 public abstract class BaseAgent {
 
-    // 核心属性
     private String name;
 
-    // 提示词
     private String systemPrompt;
     private String nextStepPrompt;
 
-    // 代理状态
     private AgentState state = AgentState.IDLE;
 
-    // 执行步骤控制
     private int currentStep = 0;
-    private int maxSteps = 10; // default, overridden by @Value in Spring-managed subclasses
+    private int maxSteps = 10;
 
-    // LLM 大模型
     private ChatClient chatClient;
 
-    // Memory 记忆（需要自主维护会话上下文）
     private List<Message> messageList = new ArrayList<>();
 
-    // Trace context for execution tracing (Req 8.5), nullable
     private TraceContext traceContext;
     private TraceRecorder traceRecorder;
 
-    // Custom executor for async operations (injected by subclass or setter)
+    private String turnGoal;
+
+    private ConsecutiveFailureGuard consecutiveFailureGuard;
+
+    private String chatId;
+    private String userId;
+    private HumanHandoffService humanHandoffService;
+
+    /** Structured terminal payload for the last run (Ch4). */
+    private AgentLoopResult lastLoopResult;
+
+    /** Per-run token budget fuse (Ch4 §2.3). */
+    private LoopRunBudget runBudget;
+
+    /** Called once in cleanup() to persist run token usage (e.g. daily quota). */
+    private java.util.function.IntConsumer runTokenFinalizer;
+
     private Executor executor = java.util.concurrent.ForkJoinPool.commonPool();
 
     public void setExecutor(Executor executor) {
         this.executor = executor;
     }
 
-    /**
-     * 运行代理
-     *
-     * @param userPrompt 用户提示词
-     * @return 执行结果
-     */
     public String run(String userPrompt) {
-        // 1、基础校验
+        return AgentDepthContext.runWithDepth(
+                () -> doRun(userPrompt),
+                () -> {
+                    lastLoopResult = AgentLoopResult.failed(
+                            AgentDepthContext.denyMessage(AgentDepthContext.DEFAULT_MAX_DEPTH),
+                            "", true);
+                    return lastLoopResult.summary();
+                });
+    }
+
+    private String doRun(String userPrompt) {
         if (this.state != AgentState.IDLE) {
             throw new RuntimeException("Cannot run agent from state: " + this.state);
         }
         if (StrUtil.isBlank(userPrompt)) {
             throw new RuntimeException("Cannot run agent with empty user prompt");
         }
-        // 2、执行，更改状态
         this.state = AgentState.RUNNING;
-        // 记录消息上下文
+        this.lastLoopResult = null;
         messageList.add(new UserMessage(userPrompt));
-        // 保存结果列表
         List<String> results = new ArrayList<>();
         try {
-            // 执行循环
             for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
                 if (Thread.currentThread().isInterrupted()) {
                     log.info("Agent execution interrupted for name={}", name);
                     state = AgentState.FINISHED;
                     break;
                 }
+                if (runBudget != null && runBudget.isExhausted()) {
+                    log.warn("[BaseAgent] run token budget exhausted before step {} name={}", i + 1, name);
+                    break;
+                }
                 int stepNumber = i + 1;
                 currentStep = stepNumber;
                 log.info("Executing step {}/{}", stepNumber, maxSteps);
-                // 单步执行
                 String stepResult = step();
                 String result = "Step " + stepNumber + ": " + stepResult;
                 results.add(result);
             }
-            // 检查是否超出步骤限制
-            if (currentStep >= maxSteps) {
-                state = AgentState.FINISHED;
-                results.add("Terminated: Reached max steps (" + maxSteps + ")");
+            if (shouldWrapUp()) {
+                String wrap = applyWrapUp(results);
+                results.add(wrap);
+            } else if (state == AgentState.FINISHED && lastLoopResult == null) {
+                lastLoopResult = AgentLoopResult.success(
+                        "任务在步数预算内结束",
+                        truncateJoin(results, 1500));
             }
             return String.join("\n", results);
         } catch (Exception e) {
             state = AgentState.ERROR;
+            lastLoopResult = AgentLoopResult.failed(e.getMessage(), truncateJoin(results, 800), false);
             log.error("error executing agent", e);
             return "执行错误" + e.getMessage();
         } finally {
-            // 3、清理资源
             this.cleanup();
         }
     }
 
-    /**
-     * 运行代理（流式输出），将每步结果推送到外部已有的 SseEmitter。
-     * 适用于需要把多个 Agent 的输出合并到同一个 SSE 连接的场景（如 OrchestratorAgent）。
-     *
-     * @param userPrompt      用户提示词
-     * @param externalEmitter 外部 SseEmitter，由调用方负责最终 complete/completeWithError
-     */
     public void runStream(String userPrompt, SseEmitter externalEmitter) {
-        CompletableFuture.runAsync(() -> {
-            if (this.state != AgentState.IDLE) {
-                try {
-                    externalEmitter.send(SseEmitter.event().name("error").data("错误：无法从状态运行代理：" + this.state));
-                } catch (IOException ignored) {}
-                externalEmitter.complete();
-                return;
-            }
-            if (StrUtil.isBlank(userPrompt)) {
-                try {
-                    externalEmitter.send(SseEmitter.event().name("error").data("错误：不能使用空提示词运行代理"));
-                } catch (IOException ignored) {}
-                externalEmitter.complete();
-                return;
-            }
-            this.state = AgentState.RUNNING;
-            messageList.add(new UserMessage(userPrompt));
+        CompletableFuture.runAsync(() -> AgentDepthContext.runWithDepth(() -> {
+            runStreamBody(userPrompt, externalEmitter, true);
+            return null;
+        }, () -> {
             try {
-                for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
-                    if (Thread.currentThread().isInterrupted()) {
-                        log.info("Agent stream execution interrupted for name={}", name);
-                        state = AgentState.FINISHED;
-                        break;
-                    }
-                    currentStep = i + 1;
-                    log.info("Executing step {}/{}", currentStep, maxSteps);
-                    String stepResult = step();
-                    externalEmitter.send(SseEmitter.event().name("message").data(stepResult));
-                }
-                if (currentStep >= maxSteps) {
-                    state = AgentState.FINISHED;
-                    externalEmitter.send(SseEmitter.event().name("message")
-                            .data("执行结束：达到最大步骤（" + maxSteps + "）"));
-                }
+                String deny = AgentDepthContext.denyMessage(AgentDepthContext.DEFAULT_MAX_DEPTH);
+                lastLoopResult = AgentLoopResult.failed(deny, "", true);
+                externalEmitter.send(SseEmitter.event().name("message").data(deny));
                 externalEmitter.send(SseEmitter.event().data("[DONE]"));
                 externalEmitter.complete();
-            } catch (Exception e) {
-                state = AgentState.ERROR;
-                log.error("error executing agent", e);
-                try {
-                    externalEmitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
-                    externalEmitter.send(SseEmitter.event().data("[DONE]"));
-                    externalEmitter.complete();
-                } catch (IOException ex) {
-                    externalEmitter.completeWithError(ex);
-                }
-            } finally {
-                this.cleanup();
+            } catch (IOException ignored) {
+                externalEmitter.completeWithError(new IllegalStateException(denyMsg()));
             }
-        }, executor);
+            return null;
+        }), executor);
     }
 
-    /**
-     * 运行代理（流式输出）
-     *
-     * @param userPrompt 用户提示词
-     * @return 执行结果
-     */
     public SseEmitter runStream(String userPrompt) {
-        // 创建一个超时时间较长的 SseEmitter
-        SseEmitter sseEmitter = new SseEmitter(300000L); // 5 分钟超时
-        // 使用线程异步处理，避免阻塞主线程
-        CompletableFuture.runAsync(() -> {
-            // 1、基础校验
+        SseEmitter sseEmitter = new SseEmitter(300000L);
+        CompletableFuture.runAsync(() -> AgentDepthContext.runWithDepth(() -> {
+            runStreamBody(userPrompt, sseEmitter, false);
+            return null;
+        }, () -> {
             try {
-                if (this.state != AgentState.IDLE) {
-                    sseEmitter.send("错误：无法从状态运行代理：" + this.state);
-                    sseEmitter.complete();
-                    return;
-                }
-                if (StrUtil.isBlank(userPrompt)) {
-                    sseEmitter.send("错误：不能使用空提示词运行代理");
-                    sseEmitter.complete();
-                    return;
-                }
-            } catch (Exception e) {
-                sseEmitter.completeWithError(e);
-                return;  // catch 后必须 return，否则继续执行下方 RUNNING 逻辑
-            }
-            // 2、执行，更改状态
-            this.state = AgentState.RUNNING;
-            // 记录消息上下文
-            messageList.add(new UserMessage(userPrompt));
-            // 保存结果列表
-            List<String> results = new ArrayList<>();
-            try {
-                // 执行循环
-                for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
-                    if (Thread.currentThread().isInterrupted()) {
-                        log.info("Agent stream execution interrupted for name={}", name);
-                        state = AgentState.FINISHED;
-                        break;
-                    }
-                    int stepNumber = i + 1;
-                    currentStep = stepNumber;
-                    log.info("Executing step {}/{}", stepNumber, maxSteps);
-                    // 单步执行
-                    String stepResult = step();
-                    String result = "Step " + stepNumber + ": " + stepResult;
-                    results.add(result);
-                    // 输出当前每一步的结果到 SSE
-                    sseEmitter.send(result);
-                }
-                // 检查是否超出步骤限制
-                if (currentStep >= maxSteps) {
-                    state = AgentState.FINISHED;
-                    results.add("Terminated: Reached max steps (" + maxSteps + ")");
-                    sseEmitter.send("执行结束：达到最大步骤（" + maxSteps + "）");
-                }
-                // 显式结束标记，避免前端把正常关流当成连接错误
+                String deny = AgentDepthContext.denyMessage(AgentDepthContext.DEFAULT_MAX_DEPTH);
+                lastLoopResult = AgentLoopResult.failed(deny, "", true);
+                sseEmitter.send(deny);
                 sseEmitter.send("[DONE]");
                 sseEmitter.complete();
-            } catch (Exception e) {
-                state = AgentState.ERROR;
-                log.error("error executing agent", e);
-                try {
-                    sseEmitter.send("执行错误：" + e.getMessage());
-                    sseEmitter.send("[DONE]");
-                    sseEmitter.complete();
-                } catch (IOException ex) {
-                    sseEmitter.completeWithError(ex);
-                }
-            } finally {
-                // 3、清理资源
-                this.cleanup();
+            } catch (IOException ex) {
+                sseEmitter.completeWithError(ex);
             }
-        }, executor);
+            return null;
+        }), executor);
 
-        // 设置超时回调
         sseEmitter.onTimeout(() -> {
             this.state = AgentState.ERROR;
             this.cleanup();
             log.warn("SSE connection timeout");
         });
-        // 设置完成回调
         sseEmitter.onCompletion(() -> {
             if (this.state == AgentState.RUNNING) {
                 this.state = AgentState.FINISHED;
@@ -265,17 +182,135 @@ public abstract class BaseAgent {
         return sseEmitter;
     }
 
-    /**
-     * 定义单个步骤
-     *
-     * @return
-     */
+    private void runStreamBody(String userPrompt, SseEmitter emitter, boolean namedEvents) {
+        try {
+            if (this.state != AgentState.IDLE) {
+                send(emitter, namedEvents, "error", "错误：无法从状态运行代理：" + this.state);
+                completeDone(emitter, namedEvents);
+                return;
+            }
+            if (StrUtil.isBlank(userPrompt)) {
+                send(emitter, namedEvents, "error", "错误：不能使用空提示词运行代理");
+                completeDone(emitter, namedEvents);
+                return;
+            }
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+            return;
+        }
+        this.state = AgentState.RUNNING;
+        this.lastLoopResult = null;
+        messageList.add(new UserMessage(userPrompt));
+        List<String> results = new ArrayList<>();
+        try {
+            for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
+                if (Thread.currentThread().isInterrupted()) {
+                    log.info("Agent stream execution interrupted for name={}", name);
+                    state = AgentState.FINISHED;
+                    break;
+                }
+                if (runBudget != null && runBudget.isExhausted()) {
+                    log.warn("[BaseAgent] run token budget exhausted before step {} name={}", i + 1, name);
+                    break;
+                }
+                currentStep = i + 1;
+                log.info("Executing step {}/{}", currentStep, maxSteps);
+                String stepResult = step();
+                String result = namedEvents ? stepResult : ("Step " + currentStep + ": " + stepResult);
+                results.add(namedEvents ? stepResult : result);
+                send(emitter, namedEvents, "message", namedEvents ? stepResult : result);
+            }
+            if (shouldWrapUp()) {
+                String wrap = applyWrapUp(results);
+                results.add(wrap);
+                send(emitter, namedEvents, "message", wrap);
+            } else if (state == AgentState.FINISHED && lastLoopResult == null) {
+                lastLoopResult = AgentLoopResult.success(
+                        "任务在步数预算内结束",
+                        truncateJoin(results, 1500));
+            }
+            completeDone(emitter, namedEvents);
+        } catch (Exception e) {
+            state = AgentState.ERROR;
+            lastLoopResult = AgentLoopResult.failed(e.getMessage(), truncateJoin(results, 800), false);
+            log.error("error executing agent", e);
+            try {
+                send(emitter, namedEvents, "error", "执行错误：" + e.getMessage());
+                completeDone(emitter, namedEvents);
+            } catch (Exception ex) {
+                emitter.completeWithError(ex);
+            }
+        } finally {
+            this.cleanup();
+        }
+    }
+
+    private boolean shouldWrapUp() {
+        // Budget exhausted without self-terminate (Ch4 Wrap-up); clean Terminate → SUCCESS path
+        if (state != AgentState.RUNNING) {
+            return false;
+        }
+        if (runBudget != null && runBudget.isExhausted()) {
+            return true;
+        }
+        return currentStep >= maxSteps;
+    }
+
+    private String applyWrapUp(List<String> results) {
+        state = AgentState.FINISHED;
+        String goal = StrUtil.blankToDefault(turnGoal, name);
+        String budgetReason = runBudget != null && runBudget.isExhausted()
+                ? runBudget.budgetReasonForWrapUp() : null;
+        AgentLoopResult result = LoopWrapUp.wrapUp(goal, results, maxSteps, chatClient, budgetReason);
+        this.lastLoopResult = result;
+        log.info("[BaseAgent] Wrap-up applied name={} status={} runTokens={}",
+                name, result.status(), runBudget != null ? runBudget.getTokensUsed() : 0);
+        return result.toUserFacingWrapUp();
+    }
+
+    private static void send(SseEmitter emitter, boolean named, String event, String data) throws IOException {
+        if (named) {
+            emitter.send(SseEmitter.event().name(event).data(data));
+        } else {
+            emitter.send(data);
+        }
+    }
+
+    private static void completeDone(SseEmitter emitter, boolean named) throws IOException {
+        if (named) {
+            emitter.send(SseEmitter.event().data("[DONE]"));
+        } else {
+            emitter.send("[DONE]");
+        }
+        emitter.complete();
+    }
+
+    private static String denyMsg() {
+        return AgentDepthContext.denyMessage(AgentDepthContext.DEFAULT_MAX_DEPTH);
+    }
+
+    private static String truncateJoin(List<String> steps, int max) {
+        if (steps == null || steps.isEmpty()) {
+            return "";
+        }
+        String joined = String.join("\n", steps);
+        return joined.length() <= max ? joined : joined.substring(0, max) + "...";
+    }
+
     public abstract String step();
 
     /**
-     * 清理资源：重置状态、步骤计数和消息历史，确保实例可安全复用
+     * 清理资源：重置状态、步骤计数和消息历史，确保实例可安全复用。
+     * 保留 lastLoopResult 供调用方读取。
      */
     protected void cleanup() {
+        if (runBudget != null && runTokenFinalizer != null && runBudget.getTokensUsed() > 0) {
+            try {
+                runTokenFinalizer.accept(runBudget.getTokensUsed());
+            } catch (Exception e) {
+                log.warn("[BaseAgent] run token finalizer failed: {}", e.getMessage());
+            }
+        }
         this.messageList.clear();
         this.state = AgentState.IDLE;
         this.currentStep = 0;

@@ -1,11 +1,14 @@
 package com.yupi.yuaiagent.workflow.runtime;
 
+import com.yupi.yuaiagent.context.ConversationContext;
+import com.yupi.yuaiagent.workflow.dag.DagDefinition;
+import com.yupi.yuaiagent.workflow.dag.DagExecutionResult;
+import com.yupi.yuaiagent.workflow.dag.DagProgressListener;
+import com.yupi.yuaiagent.workflow.dag.DagWorkflowExecutor;
 import com.yupi.yuaiagent.workflow.node.*;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -13,20 +16,39 @@ import java.util.*;
  * 工作流运行时引擎 — 与 AgentRuntime 并存的独立执行引擎。
  * <p>
  * Agent 负责决策，Workflow 负责执行。
- * 支持 6 种节点类型：Agent、Tool、Condition、Parallel、Loop、Approval。
+ * 支持 6 种节点类型：Agent、Tool、Condition、Parallel、Loop、Approval（legacy list 模式）。
+ * Phase-1 固定流程请走 {@link #startDag}（真实 AgentRunner + 就绪队列并行）。
  *
  * @author jsq
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WorkflowRuntime {
 
     /** Maximum steps per workflow execution to prevent infinite loops */
     private static final int MAX_STEPS = 1000;
 
-    @Resource
-    private WorkflowRepository workflowRepository;
+    private final WorkflowRepository workflowRepository;
+    private final DagWorkflowExecutor dagWorkflowExecutor;
+
+    public WorkflowRuntime(WorkflowRepository workflowRepository,
+                           DagWorkflowExecutor dagWorkflowExecutor) {
+        this.workflowRepository = workflowRepository;
+        this.dagWorkflowExecutor = dagWorkflowExecutor;
+    }
+
+    /**
+     * Execute a validated DAG synchronously (ready-queue + real AgentRunner).
+     */
+    public DagExecutionResult startDag(DagDefinition dag,
+                                       ConversationContext conversationContext,
+                                       String userMessage,
+                                       String userId,
+                                       String chatId,
+                                       DagProgressListener listener) {
+        return dagWorkflowExecutor.execute(
+                dag, conversationContext, userMessage, userId, chatId, listener);
+    }
 
     /**
      * 启动工作流实例
@@ -49,8 +71,8 @@ public class WorkflowRuntime {
         log.info("[WorkflowRuntime] 启动工作流: id={}, workflow={}, nodes={}",
                 instance.getInstanceId(), workflowId, nodes.size());
 
-        // 异步执行
-        executeFromCurrentNode(instance);
+        // 异步执行（可离开页面；PAUSE 后由 resumeWorkflow 继续）
+        java.util.concurrent.CompletableFuture.runAsync(() -> executeFromCurrentNode(instance));
         return instance;
     }
 
@@ -75,7 +97,7 @@ public class WorkflowRuntime {
         workflowRepository.save(instance);
 
         log.info("[WorkflowRuntime] 恢复工作流: id={}", instanceId);
-        executeFromCurrentNode(instance);
+        java.util.concurrent.CompletableFuture.runAsync(() -> executeFromCurrentNode(instance));
         return instance;
     }
 

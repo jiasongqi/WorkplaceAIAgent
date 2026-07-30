@@ -12,6 +12,12 @@
     <meta property="og:description" content="不管你在烦恼什么，都可以先放一放。这里只有选择，没有对错。" />
     <meta property="og:type" content="website" />
     <title>WorkPilot</title>
+    <script>
+      (function () {
+        var t = localStorage.getItem('wp-theme') || 'sage';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

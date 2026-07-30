@@ -25,7 +25,7 @@ public final class KeywordRouter {
         if (lower.matches(".*(?:简历|优化|修改|投递).*")) domainCount++;
         if (lower.matches(".*(?:涨薪|加薪|谈薪|薪资|工资|谈判).*")) domainCount++;
         if (lower.matches(".*(?:离职|辞职|裁员|竞业).*")) domainCount++;
-        if (lower.matches(".*(?:预约|约时间|可约).*")) domainCount++;
+        if (lower.matches(".*(?:预约|约时间|可约|日程|我的预约).*")) domainCount++;
         return domainCount >= 2;
     }
 
@@ -59,7 +59,7 @@ public final class KeywordRouter {
             return true;
         }
         String[] complexKeywords = {
-            "预约", "咨询", "顾问",
+            "预约", "咨询", "顾问", "日程",
         };
         String lower = message == null ? "" : message.toLowerCase();
         for (String kw : complexKeywords) {
@@ -92,11 +92,18 @@ public final class KeywordRouter {
         if (lower.matches(".*(?:离职|辞职|裁员|竞业|交接|走人|不想干|被辞|辞退|解雇|开除).*")) {
             return AgentIntent.ESCAPE;
         }
-        // CONSULTATION：明确预约 / 问可约服务或课程（目录由 ConsultationAgent 返回）
+        // CONSULTATION：明确预约 / 问可约服务 / 查改已有日程
         if (lower.matches(".*(?:预约|约时间|约个顾问|预约咨询|预约专家|可预约|预约的课程).*")
                 || lower.matches(".*(?:有什么|有哪些).*(?:预约|可约|课程).*")
-                || lower.matches(".*咨询预约.*")) {
+                || lower.matches(".*咨询预约.*")
+                || lower.matches(".*(?:日程|行程|日历).*(?:安排|查看|看看|如何|怎样)?.*")
+                || lower.matches(".*(?:看|查|查看|看看).*(?:日程|行程|日历|预约).*")
+                || lower.matches(".*(?:我的预约|预约进度|预约编号|修改预约|取消预约).*")) {
             return AgentIntent.CONSULTATION;
+        }
+        // Digital employee create / manage
+        if (lower.matches(".*(?:数字员工|专属员工|创建员工|我的数字员工).*")) {
+            return AgentIntent.DIGITAL_EMPLOYEE;
         }
         // Interview → GENERAL
         if (lower.matches(".*(?:面试|准备面试|模拟面试|面经|笔试).*")) {

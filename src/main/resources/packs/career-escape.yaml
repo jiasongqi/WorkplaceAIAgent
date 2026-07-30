@@ -1,0 +1,10 @@
+packId: career-escape
+displayName: 离职规划专家包
+description: 离职决策与离职信相关技能
+agentCodes:
+  - escape-agent
+skillNames:
+  - resignation-letter
+permissionProfiles:
+  - escape-agent
+enabledByDefault: true

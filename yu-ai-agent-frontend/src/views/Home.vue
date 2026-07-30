@@ -2,9 +2,10 @@
   <div class="home">
     <!-- Greeting -->
     <div class="greet-block">
-      <span class="greet-wave">👋</span>
+      <span class="greet-wave">{{ theme === 'sage' ? '🌿' : '👋' }}</span>
       <h1 class="greet-title">{{ greeting }}</h1>
-      <p class="greet-sub">不管你在烦恼什么，都可以先放一放。<br>这里只有选择，没有对错。</p>
+      <p class="greet-sub greet-sub--sage" v-if="theme === 'sage'">心里有光<br><span class="greet-tagline">不管你在烦恼什么，都可以先放一放。这里只有倾听，没有对错。</span></p>
+      <p class="greet-sub" v-else>不管你在烦恼什么，都可以先放一放。<br>这里只有选择，没有对错。</p>
     </div>
 
     <!-- Hero Input -->
@@ -84,8 +85,10 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { listSessions } from '../api'
 import WpIcon from '../components/WpIcon.vue'
+import { useTheme } from '../composables/useTheme'
 
 const router = useRouter()
+const { theme } = useTheme()
 const taskInput = ref('')
 const inputFocused = ref(false)
 const heroTextarea = ref(null)
@@ -179,7 +182,9 @@ const goToSession = (chatId) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* 内容过高时不可用 center，否则顶部会被裁切且无法上滚 */
+  justify-content: flex-start;
+  justify-content: safe center;
   padding: 48px 28px;
   gap: 36px;
   height: 100%;
@@ -205,7 +210,7 @@ const goToSession = (chatId) => {
   font-weight: 650;
   letter-spacing: -0.8px;
   line-height: 1.2;
-  background: linear-gradient(180deg, var(--t1) 25%, rgba(242,242,248,0.55));
+  background: var(--greet-grad);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-top: 8px;
@@ -221,6 +226,20 @@ const goToSession = (chatId) => {
   animation: rise 0.8s 0.2s var(--ease) both;
 }
 
+.greet-sub--sage {
+  color: var(--gold-text);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.greet-tagline {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--t3);
+  font-weight: 400;
+}
+
 /* Hero Input */
 .hero-input {
   width: 100%;
@@ -234,11 +253,12 @@ const goToSession = (chatId) => {
   border-radius: var(--r-lg);
   padding: 6px;
   transition: all 0.4s var(--ease);
+  box-shadow: var(--shadow-card);
 }
 
 .hero-input-wrap.focused {
-  border-color: rgba(245,158,11,0.28);
-  box-shadow: 0 0 0 4px var(--gold-dim), 0 0 36px rgba(245,158,11,0.03);
+  border-color: var(--gold-border);
+  box-shadow: 0 0 0 4px var(--gold-dim), 0 0 36px var(--gold-dim);
 }
 
 .hero-input-wrap textarea {
@@ -277,7 +297,7 @@ const goToSession = (chatId) => {
   height: 42px;
   border-radius: var(--r-md);
   border: none;
-  background: linear-gradient(135deg, var(--gold), #d97706);
+  background: var(--gold-grad);
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -291,7 +311,7 @@ const goToSession = (chatId) => {
 
 .hero-submit:hover {
   transform: scale(1.06);
-  box-shadow: 0 8px 28px rgba(245,158,11,0.35);
+  box-shadow: 0 8px 28px var(--gold-glow-strong);
 }
 
 .hero-submit:active {
@@ -336,7 +356,7 @@ const goToSession = (chatId) => {
 
 .chip:hover {
   background: var(--glass-hover);
-  border-color: rgba(255,255,255,0.1);
+  border-color: var(--chip-hover-border);
   color: var(--t1);
   transform: translateY(-1px);
 }
@@ -365,6 +385,7 @@ const goToSession = (chatId) => {
   padding: 22px;
   cursor: pointer;
   transition: all 0.4s var(--ease);
+  box-shadow: var(--shadow-card);
 }
 
 .bento-card::after {
@@ -372,16 +393,16 @@ const goToSession = (chatId) => {
   position: absolute;
   inset: 0;
   opacity: 0;
-  background: radial-gradient(ellipse at top left, rgba(245,158,11,0.04), transparent 70%);
+  background: radial-gradient(ellipse at top left, var(--gold-soft), transparent 70%);
   transition: opacity 0.4s var(--ease);
 }
 
 .bento-card:hover::after { opacity: 1; }
 
 .bento-card:hover {
-  border-color: rgba(255,255,255,0.08);
+  border-color: var(--card-hover-border);
   transform: translateY(-3px);
-  box-shadow: 0 12px 36px rgba(0,0,0,0.3);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .icon-well {
@@ -391,7 +412,7 @@ const goToSession = (chatId) => {
   display: grid;
   place-items: center;
   background: var(--gold-soft);
-  border: 1px solid rgba(245,158,11,0.12);
+  border: 1px solid var(--gold-border-soft);
   margin-bottom: 14px;
   color: var(--gold-text);
 }

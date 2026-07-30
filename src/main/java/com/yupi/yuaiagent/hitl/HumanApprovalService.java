@@ -1,11 +1,19 @@
 package com.yupi.yuaiagent.hitl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.annotation.PostConstruct;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,8 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Human-in-the-loop approval gate for dangerous tool / side-effect operations.
- * <p>
- * Flow: requestApproval → (user approves via API) → consumeApproval → execute.
+ * Persists to local JSON so restarts do not lose PENDING approvals.
  */
 @Slf4j
 @Service
@@ -45,10 +52,42 @@ public class HumanApprovalService {
     }
 
     private final HitlProperties properties;
+    private final HitlNotifyService notifyService;
     private final Map<String, ApprovalRequest> store = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    public HumanApprovalService(HitlProperties properties) {
+    @Value("${app.hitl.storage-dir:./tmp/hitl}")
+    private String storageDir;
+
+    private File storageFile;
+
+    public HumanApprovalService(HitlProperties properties, HitlNotifyService notifyService) {
         this.properties = properties;
+        this.notifyService = notifyService;
+    }
+
+    @PostConstruct
+    public void init() {
+        try {
+            File dir = new File(storageDir);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            storageFile = new File(dir, "approvals.json");
+            if (storageFile.exists()) {
+                List<ApprovalRequest> loaded = objectMapper.readValue(storageFile, new TypeReference<>() {});
+                if (loaded != null) {
+                    for (ApprovalRequest req : loaded) {
+                        if (req.getApprovalId() != null) {
+                            store.put(req.getApprovalId(), refreshExpiry(req));
+                        }
+                    }
+                }
+            }
+            log.info("[HITL] loaded {} approvals from {}", store.size(), storageFile.getAbsolutePath());
+        } catch (Exception e) {
+            log.warn("[HITL] failed to load persisted approvals: {}", e.getMessage());
+        }
     }
 
     public ApprovalRequest requestApproval(String userId, String chatId,
@@ -66,7 +105,13 @@ public class HumanApprovalService {
                 .expiresAt(now.plusSeconds(Math.max(30, properties.getApprovalTtlSeconds())))
                 .build();
         store.put(req.getApprovalId(), req);
+        persist();
         log.info("[HITL] approval requested id={} type={} user={}", req.getApprovalId(), actionType, userId);
+        try {
+            notifyService.notifyPending(req);
+        } catch (Exception e) {
+            log.debug("[HITL] remote notify skipped: {}", e.getMessage());
+        }
         return req;
     }
 
@@ -76,23 +121,21 @@ public class HumanApprovalService {
 
     public ApprovalRequest approve(String approvalId, String userId) {
         ApprovalRequest req = requireOwned(approvalId, userId);
-        if (req.getStatus() != Status.PENDING) {
+        if (req.getStatus() != Status.PENDING && req.getStatus() != Status.APPROVED) {
             throw new IllegalStateException("approval not pending: " + req.getStatus());
         }
         req.setStatus(Status.APPROVED);
+        persist();
         return req;
     }
 
     public ApprovalRequest reject(String approvalId, String userId) {
         ApprovalRequest req = requireOwned(approvalId, userId);
         req.setStatus(Status.REJECTED);
+        persist();
         return req;
     }
 
-    /**
-     * Returns true and marks CONSUMED if this approval is valid for the action.
-     * When HITL is disabled for the action type, always returns true (no token needed).
-     */
     public boolean consumeIfApproved(String approvalId, ActionType actionType, String payloadHint) {
         if (!requiresApproval(actionType)) {
             return true;
@@ -110,13 +153,13 @@ public class HumanApprovalService {
         if (req.getActionType() != actionType) {
             return false;
         }
-        // Optional payload binding: command must match what was approved
         if (payloadHint != null && req.getPayload() != null
                 && !req.getPayload().equals(payloadHint)) {
             log.warn("[HITL] payload mismatch for approval {}", approvalId);
             return false;
         }
         req.setStatus(Status.CONSUMED);
+        persist();
         return true;
     }
 
@@ -124,7 +167,7 @@ public class HumanApprovalService {
         return switch (actionType) {
             case TERMINAL_COMMAND -> properties.isTerminalRequireApproval();
             case CALENDAR_CREATE -> properties.isCalendarRequireApproval();
-            case FILE_WRITE -> false;
+            case FILE_WRITE -> properties.isFileWriteRequireApproval();
         };
     }
 
@@ -148,7 +191,6 @@ public class HumanApprovalService {
                 """.formatted(actionLabel, req.getSummary(), req.getApprovalId());
     }
 
-    /** 按会话查找仍有效的待审批单（聊天二次确认用） */
     public Optional<ApprovalRequest> findPendingByChatId(String chatId) {
         if (chatId == null || chatId.isBlank()) {
             return Optional.empty();
@@ -159,6 +201,22 @@ public class HumanApprovalService {
                         && r.getStatus() == Status.PENDING
                         && chatId.equals(r.getChatId()))
                 .findFirst();
+    }
+
+    public List<ApprovalRequest> listPendingByUser(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return List.of();
+        }
+        List<ApprovalRequest> list = new ArrayList<>();
+        for (ApprovalRequest req : store.values()) {
+            ApprovalRequest refreshed = refreshExpiry(req);
+            if (refreshed != null
+                    && refreshed.getStatus() == Status.PENDING
+                    && userId.equals(refreshed.getUserId())) {
+                list.add(refreshed);
+            }
+        }
+        return list;
     }
 
     private ApprovalRequest requireOwned(String approvalId, String userId) {
@@ -178,7 +236,20 @@ public class HumanApprovalService {
         if (req == null) return null;
         if (req.getStatus() == Status.PENDING && Instant.now().isAfter(req.getExpiresAt())) {
             req.setStatus(Status.EXPIRED);
+            persist();
         }
         return req;
+    }
+
+    private synchronized void persist() {
+        if (storageFile == null) {
+            return;
+        }
+        try {
+            objectMapper.writerWithDefaultPrettyPrinter()
+                    .writeValue(storageFile, new ArrayList<>(store.values()));
+        } catch (Exception e) {
+            log.warn("[HITL] persist failed: {}", e.getMessage());
+        }
     }
 }

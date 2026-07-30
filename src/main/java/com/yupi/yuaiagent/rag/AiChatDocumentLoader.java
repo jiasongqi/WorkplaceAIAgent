@@ -9,6 +9,7 @@ import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,6 +46,7 @@ public class AiChatDocumentLoader {
                         // 添加元信息
                         .withAdditionalMetadata("filename", filename)
                         .withAdditionalMetadata("status", status)
+                        .withAdditionalMetadata("indexedAt", LocalDateTime.now().toString())
                         .build();
                 MarkdownDocumentReader markdownDocumentReader = new MarkdownDocumentReader(resource, config);
                 allDocuments.addAll(markdownDocumentReader.get());

@@ -3,6 +3,7 @@ package com.yupi.yuaiagent.service;
 import com.yupi.yuaiagent.document.DocumentMeta;
 import com.yupi.yuaiagent.document.DocumentMetadataManager;
 import com.yupi.yuaiagent.document.DocumentStatus;
+import com.yupi.yuaiagent.document.pdf.PdfKnowledgeIngestionService;
 import com.yupi.yuaiagent.usage.UsageEventType;
 import com.yupi.yuaiagent.usage.UsageTracker;
 import com.yupi.yuaiagent.dto.DocumentResponse;
@@ -19,12 +20,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Document application service — upload, list, delete documents.
- *
- * @author jsq
+ * Supports Markdown and PDF (structured table ingestion).
  */
 @Slf4j
 @Service
@@ -35,41 +37,31 @@ public class DocumentAppService {
     private final VectorStore aiChatVectorStore;
     private final DocumentMetadataManager documentMetadataManager;
     private final UsageTracker usageTracker;
+    private final PdfKnowledgeIngestionService pdfKnowledgeIngestionService;
 
     public DocumentResponse upload(MultipartFile file, String status) throws IOException {
         if (file.isEmpty()) {
             throw new BusinessException(400, "文件不能为空");
         }
         String filename = file.getOriginalFilename();
-        if (filename == null || !filename.endsWith(".md")) {
-            throw new BusinessException(400, "仅支持 Markdown (.md) 文件");
+        if (filename == null || !isSupportedUpload(filename)) {
+            throw new BusinessException(400, "仅支持 Markdown (.md) 或 PDF (.pdf) 文件");
         }
 
         byte[] bytes = file.getBytes();
-
-        // Record upload + dedup check
         DocumentMeta meta = documentMetadataManager.recordUpload(filename, bytes.length, bytes);
         if (meta.getStatus() == DocumentStatus.INDEXED) {
             return toResponse(meta);
         }
 
-        // Parse and index
         documentMetadataManager.updateStatus(meta.getDocId(), DocumentStatus.EMBEDDING);
 
-        org.springframework.core.io.Resource resource = new ByteArrayResource(bytes) {
-            @Override
-            public String getFilename() { return filename; }
-        };
-        MarkdownDocumentReaderConfig config = MarkdownDocumentReaderConfig.builder()
-                .withHorizontalRuleCreateDocument(true)
-                .withIncludeCodeBlock(false)
-                .withIncludeBlockquote(false)
-                .withAdditionalMetadata("filename", filename)
-                .withAdditionalMetadata("status", status)
-                .withAdditionalMetadata("docId", meta.getDocId())
-                .build();
-        MarkdownDocumentReader reader = new MarkdownDocumentReader(resource, config);
-        List<Document> documents = reader.get();
+        List<Document> documents;
+        if (filename.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            documents = pdfKnowledgeIngestionService.ingest(bytes, filename, status, meta.getDocId());
+        } else {
+            documents = parseMarkdown(bytes, filename, status, meta.getDocId());
+        }
 
         documentMetadataManager.updateStatus(meta.getDocId(), DocumentStatus.INDEXING);
         aiChatVectorStore.add(documents);
@@ -90,18 +82,8 @@ public class DocumentAppService {
 
         documentMetadataManager.updateStatus(meta.getDocId(), DocumentStatus.EMBEDDING);
 
-        org.springframework.core.io.Resource resource = new ByteArrayResource(bytes) {
-            @Override
-            public String getFilename() { return filename.endsWith(".md") ? filename : filename + ".md"; }
-        };
-        MarkdownDocumentReaderConfig config = MarkdownDocumentReaderConfig.builder()
-                .withHorizontalRuleCreateDocument(true)
-                .withAdditionalMetadata("filename", filename)
-                .withAdditionalMetadata("status", status)
-                .withAdditionalMetadata("docId", meta.getDocId())
-                .build();
-        MarkdownDocumentReader reader = new MarkdownDocumentReader(resource, config);
-        List<Document> documents = reader.get();
+        List<Document> documents = parseMarkdown(bytes,
+                filename.endsWith(".md") ? filename : filename + ".md", status, meta.getDocId());
 
         documentMetadataManager.updateStatus(meta.getDocId(), DocumentStatus.INDEXING);
         aiChatVectorStore.add(documents);
@@ -117,10 +99,38 @@ public class DocumentAppService {
     }
 
     public void delete(String docId) {
-        DocumentMeta meta = documentMetadataManager.findByDocId(docId)
+        documentMetadataManager.findByDocId(docId)
                 .orElseThrow(() -> BusinessException.notFound("文档"));
         documentMetadataManager.updateStatus(docId, DocumentStatus.DELETED);
         log.info("Document soft-deleted: docId={}", docId);
+    }
+
+    private List<Document> parseMarkdown(byte[] bytes, String filename, String status, String docId)
+            throws IOException {
+        org.springframework.core.io.Resource resource = new ByteArrayResource(bytes) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+        MarkdownDocumentReaderConfig config = MarkdownDocumentReaderConfig.builder()
+                .withHorizontalRuleCreateDocument(true)
+                .withIncludeCodeBlock(false)
+                .withIncludeBlockquote(false)
+                .withAdditionalMetadata("filename", filename)
+                .withAdditionalMetadata("status", status)
+                .withAdditionalMetadata("docId", docId)
+                .withAdditionalMetadata("sourceType", "markdown")
+                .withAdditionalMetadata("chunkType", "text")
+                .withAdditionalMetadata("indexedAt", LocalDateTime.now().toString())
+                .build();
+        MarkdownDocumentReader reader = new MarkdownDocumentReader(resource, config);
+        return reader.get();
+    }
+
+    private static boolean isSupportedUpload(String filename) {
+        String lower = filename.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".md") || lower.endsWith(".pdf");
     }
 
     private DocumentResponse toResponse(DocumentMeta meta) {

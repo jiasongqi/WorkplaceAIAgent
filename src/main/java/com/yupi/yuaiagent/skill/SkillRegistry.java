@@ -87,19 +87,25 @@ public class SkillRegistry {
      * 简单实现：关键词匹配，后续可升级为向量相似度
      */
     public List<SkillDefinition> findByIntent(String userMessage) {
+        return findByIntent(userMessage, null);
+    }
+
+    /**
+     * 智能匹配技能；若 allowedNames 非空则仅在该集合内匹配（专家包作用域）。
+     */
+    public List<SkillDefinition> findByIntent(String userMessage, java.util.Collection<String> allowedNames) {
         String lowerMsg = userMessage.toLowerCase();
-        
+
         return skills.values().stream()
+                .filter(skill -> allowedNames == null || allowedNames.isEmpty() || allowedNames.contains(skill.getName()))
                 .filter(skill -> {
-                    // 匹配描述和标签
-                    String keywords = (skill.getDescription() + " " + 
+                    String keywords = (skill.getDescription() + " " +
                             String.join(" ", skill.getTags() != null ? skill.getTags() : List.of()))
                             .toLowerCase();
                     return Arrays.stream(keywords.split("[\\s，、]+"))
                             .anyMatch(keyword -> keyword.length() > 1 && lowerMsg.contains(keyword));
                 })
                 .sorted((a, b) -> {
-                    // 按匹配度排序（简单实现）
                     long aCount = countMatches(lowerMsg, a);
                     long bCount = countMatches(lowerMsg, b);
                     return Long.compare(bCount, aCount);

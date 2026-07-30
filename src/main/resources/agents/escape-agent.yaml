@@ -1,0 +1,21 @@
+agentCode: escape-agent
+agentVersion: "1.0.0"
+displayName: "离职规划专员"
+description: "离职时机、交接清单、竞业与离职信等专精数字员工模板"
+promptVersion: "escape-v1"
+agentType: "ESCAPE"
+permissionProfile: "escape-agent"
+capabilities:
+  - "escape"
+  - "resignation"
+skillBindings:
+  - "resignation-letter"
+intentKeywords:
+  - "离职"
+  - "辞职"
+  - "交接"
+metadata:
+  icon: "door"
+  category: "career"
+  author: "WorkPilot"
+enabled: true

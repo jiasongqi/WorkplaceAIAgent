@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="capsule">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WorkPilot · 主题预览（暗色 / 胶囊 / 青荷）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ===== Dark Advisor (current) ===== */
+    [data-theme="dark"] {
+      --abyss: #05060d;
+      --deep: #0a0c16;
+      --layer1: #0f111d;
+      --layer2: #161824;
+      --layer3: #1c1f2e;
+      --t1: #f2f2f8;
+      --t2: #a0a3b8;
+      --t3: #60637a;
+      --t4: #383b50;
+      --accent: #f59e0b;
+      --accent-hover: #d97706;
+      --accent-text: #fbbf24;
+      --accent-glow: rgba(245,158,11,0.25);
+      --accent-soft: rgba(245,158,11,0.08);
+      --accent-dim: rgba(245,158,11,0.03);
+      --accent-grad: linear-gradient(135deg, #f59e0b, #d97706);
+      --glass: rgba(255,255,255,0.025);
+      --glass-border: rgba(255,255,255,0.06);
+      --glass-hover: rgba(255,255,255,0.05);
+      --sidebar-bg: #0a0c16;
+      --input-bg: #0f111d;
+      --card-bg: #0f111d;
+      --chip-bg: rgba(255,255,255,0.025);
+      --topbar-bg: rgba(5,6,13,0.72);
+      --shadow-card: none;
+      --shadow-input: 0 0 0 4px var(--accent-dim), 0 0 36px rgba(245,158,11,0.03);
+      --page-bg: var(--abyss);
+      --ambient-a: rgba(245,158,11,0.04);
+      --ambient-b: rgba(96,165,250,0.025);
+      --scroll-thumb: rgba(255,255,255,0.06);
+      --logo-orb: linear-gradient(135deg, #f59e0b, #d97706);
+      --badge-bg: rgba(245,158,11,0.1);
+      --badge-text: #fbbf24;
+      --privacy-bg: rgba(255,255,255,0.02);
+      --greet-grad: linear-gradient(180deg, #f2f2f8 25%, rgba(242,242,248,0.55));
+      --noise-opacity: 0.015;
+    }
+
+    /* ===== Capsule / 暗色顾问 + 轻量胶囊 ===== */
+    [data-theme="capsule"] {
+      --abyss: #05060d;
+      --deep: #0a0c16;
+      --layer1: #0f111d;
+      --layer2: #161824;
+      --layer3: #1c1f2e;
+      --t1: #f2f2f8;
+      --t2: #a0a3b8;
+      --t3: #60637a;
+      --t4: #383b50;
+      --accent: #f59e0b;
+      --accent-hover: #d97706;
+      --accent-text: #fbbf24;
+      --accent-glow: rgba(245,158,11,0.25);
+      --accent-soft: rgba(245,158,11,0.08);
+      --accent-dim: rgba(245,158,11,0.03);
+      --accent-grad: linear-gradient(135deg, #f59e0b, #d97706);
+      --glass: rgba(255,255,255,0.025);
+      --glass-border: rgba(255,255,255,0.07);
+      --glass-hover: rgba(255,255,255,0.05);
+      --sidebar-bg: #0a0c16;
+      --input-bg: #0f111d;
+      --card-bg: #0f111d;
+      --chip-bg: rgba(255,255,255,0.025);
+      --topbar-bg: rgba(5,6,13,0.72);
+      --shadow-card: none;
+      --shadow-input: 0 0 0 4px var(--accent-dim), 0 0 48px rgba(245,158,11,0.06);
+      --page-bg: var(--abyss);
+      --ambient-a: rgba(245,158,11,0.055);
+      --ambient-b: rgba(96,165,250,0.035);
+      --scroll-thumb: rgba(255,255,255,0.06);
+      --logo-orb: linear-gradient(135deg, #f59e0b, #d97706);
+      --badge-bg: rgba(245,158,11,0.1);
+      --badge-text: #fbbf24;
+      --privacy-bg: rgba(255,255,255,0.02);
+      --greet-grad: linear-gradient(105deg, #f7f7fc 0%, #f2f2f8 38%, #fcd34d 92%);
+      --noise-opacity: 0.018;
+    }
+
+    /* ===== Sage / 青荷 (healing green) ===== */
+    [data-theme="sage"] {
+      --abyss: #f7fbf7;
+      --deep: #eef6ef;
+      --layer1: #ffffff;
+      --layer2: #f2f8f3;
+      --layer3: #e5f0e7;
+      --t1: #1e2b22;
+      --t2: #4a5d50;
+      --t3: #7a8f82;
+      --t4: #a8bdb0;
+      --accent: #5aad6a;
+      --accent-hover: #4a9a59;
+      --accent-text: #3d8f4e;
+      --accent-glow: rgba(90,173,106,0.28);
+      --accent-soft: rgba(90,173,106,0.12);
+      --accent-dim: rgba(90,173,106,0.06);
+      --accent-grad: linear-gradient(135deg, #6bbf7a, #4a9a59);
+      --glass: rgba(255,255,255,0.55);
+      --glass-border: rgba(90,173,106,0.14);
+      --glass-hover: rgba(90,173,106,0.08);
+      --sidebar-bg: rgba(255,255,255,0.75);
+      --input-bg: #ffffff;
+      --card-bg: rgba(255,255,255,0.78);
+      --chip-bg: rgba(255,255,255,0.7);
+      --topbar-bg: rgba(247,251,247,0.78);
+      --shadow-card: 0 8px 28px rgba(62,110,72,0.06), 0 2px 8px rgba(62,110,72,0.04);
+      --shadow-input: 0 0 0 4px var(--accent-dim), 0 12px 40px rgba(90,173,106,0.1);
+      --page-bg: linear-gradient(180deg, #ffffff 0%, #eef7ef 45%, #e4f2e6 100%);
+      --ambient-a: rgba(122,200,138,0.18);
+      --ambient-b: rgba(168,220,180,0.22);
+      --scroll-thumb: rgba(90,173,106,0.2);
+      --logo-orb: linear-gradient(135deg, #6bbf7a, #4a9a59);
+      --badge-bg: rgba(90,173,106,0.12);
+      --badge-text: #3d8f4e;
+      --privacy-bg: rgba(90,173,106,0.06);
+      --greet-grad: linear-gradient(180deg, #1e2b22 20%, #3d5a45 100%);
+      --noise-opacity: 0.025;
+    }
+
+    :root {
+      --r-sm: 10px;
+      --r-md: 16px;
+      --r-lg: 24px;
+      --r-xl: 32px;
+      --r-full: 9999px;
+      --ease: cubic-bezier(0.4, 0, 0.2, 1);
+      --spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      --font: 'DM Sans', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --topbar-h: 56px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--t1);
+      background: var(--abyss);
+      min-height: 100%;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+    }
+
+    body {
+      background: var(--page-bg);
+      background-attachment: fixed;
+      transition: background 0.45s var(--ease), color 0.35s var(--ease);
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
+
+    /* Ambient */
+    .ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .ambient .glow-top {
+      position: absolute; top: -35%; left: 5%; width: 65%; height: 85%;
+      background: radial-gradient(ellipse at center, var(--ambient-a) 0%, transparent 70%);
+      animation: breathe-a 14s ease-in-out infinite;
+      transition: background 0.5s;
+    }
+    .ambient .glow-bot {
+      position: absolute; bottom: -30%; right: -5%; width: 55%; height: 75%;
+      background: radial-gradient(ellipse at center, var(--ambient-b) 0%, transparent 70%);
+      animation: breathe-b 18s ease-in-out infinite reverse;
+      transition: background 0.5s;
+    }
+    /* Sage-only soft leaf shapes */
+    .ambient .leaf {
+      display: none;
+      position: absolute;
+      border-radius: 60% 40% 55% 45%;
+      background: rgba(122,200,138,0.08);
+      filter: blur(2px);
+    }
+    [data-theme="sage"] .ambient .leaf { display: block; }
+    .ambient .leaf-1 {
+      width: 180px; height: 220px; top: 12%; right: 8%;
+      transform: rotate(28deg);
+      animation: float-l 22s ease-in-out infinite;
+    }
+    .ambient .leaf-2 {
+      width: 120px; height: 150px; bottom: 18%; left: 6%;
+      transform: rotate(-18deg);
+      background: rgba(90,173,106,0.06);
+      animation: float-l 26s ease-in-out infinite reverse;
+    }
+    .ambient .sparkle {
+      display: none;
+      position: absolute;
+      width: 8px; height: 8px;
+      background: var(--accent);
+      opacity: 0.25;
+      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    }
+    [data-theme="sage"] .ambient .sparkle { display: block; }
+    .ambient .s1 { top: 18%; left: 18%; animation: twinkle 4s ease-in-out infinite; }
+    .ambient .s2 { top: 28%; right: 22%; width: 6px; height: 6px; animation: twinkle 5.5s 1s ease-in-out infinite; }
+    .ambient .s3 { bottom: 32%; left: 28%; width: 5px; height: 5px; animation: twinkle 6s 0.5s ease-in-out infinite; }
+
+    /* Capsule-only soft light rods */
+    .ambient .capsule {
+      display: none;
+      position: absolute;
+      border-radius: 9999px;
+      filter: blur(48px);
+      will-change: transform, opacity;
+    }
+    [data-theme="capsule"] .ambient .capsule { display: block; }
+    .ambient .capsule-a {
+      width: 420px; height: 140px; top: 28%; right: -4%;
+      background: linear-gradient(90deg, rgba(245,158,11,0) 0%, rgba(245,158,11,0.14) 45%, rgba(251,191,36,0.08) 100%);
+      transform: rotate(-28deg);
+      animation: drift-a 22s ease-in-out infinite;
+    }
+    .ambient .capsule-b {
+      width: 280px; height: 96px; bottom: 18%; left: -6%;
+      background: linear-gradient(90deg, rgba(96,165,250,0) 0%, rgba(96,165,250,0.1) 50%, rgba(129,140,248,0.05) 100%);
+      transform: rotate(18deg);
+      filter: blur(40px);
+      animation: drift-b 26s ease-in-out infinite;
+    }
+    .ambient .capsule-c {
+      width: 220px; height: 72px; top: 12%; left: 8%;
+      background: linear-gradient(90deg, rgba(148,163,184,0) 0%, rgba(148,163,184,0.06) 55%, rgba(255,255,255,0.02) 100%);
+      transform: rotate(-12deg);
+      filter: blur(36px);
+      animation: drift-c 30s ease-in-out infinite;
+    }
+    .ambient .capsule-d {
+      width: 160px; height: 52px; bottom: 12%; right: 14%;
+      background: linear-gradient(90deg, rgba(217,119,6,0) 0%, rgba(217,119,6,0.07) 60%, rgba(245,158,11,0.03) 100%);
+      transform: rotate(32deg);
+      filter: blur(32px);
+      animation: drift-d 24s ease-in-out infinite reverse;
+    }
+
+    .noise {
+      position: fixed; inset: 0; pointer-events: none; z-index: 1;
+      opacity: var(--noise-opacity);
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    @keyframes breathe-a {
+      0%,100% { opacity: 0.35; transform: translateY(0) scale(1); }
+      50% { opacity: 0.9; transform: translateY(-3%) scale(1.04); }
+    }
+    @keyframes breathe-b {
+      0%,100% { opacity: 0.25; transform: translateY(0) scale(1); }
+      50% { opacity: 0.8; transform: translateY(2%) scale(1.03); }
+    }
+    @keyframes float-l {
+      0%,100% { transform: rotate(28deg) translateY(0); }
+      50% { transform: rotate(32deg) translateY(-12px); }
+    }
+    @keyframes drift-a {
+      0%,100% { transform: rotate(-28deg) translateY(0); }
+      50% { transform: rotate(-24deg) translateY(-14px); }
+    }
+    @keyframes drift-b {
+      0%,100% { transform: rotate(18deg) translateY(0); }
+      50% { transform: rotate(22deg) translateY(10px); }
+    }
+    @keyframes drift-c {
+      0%,100% { transform: rotate(-12deg) translateX(0); }
+      50% { transform: rotate(-8deg) translateX(12px); }
+    }
+    @keyframes drift-d {
+      0%,100% { transform: rotate(32deg) translateY(0); }
+      50% { transform: rotate(36deg) translateY(-8px); }
+    }
+    @keyframes twinkle {
+      0%,100% { opacity: 0.15; transform: scale(0.8); }
+      50% { opacity: 0.45; transform: scale(1.15); }
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes wiggle {
+      0%,100% { transform: rotate(0deg); }
+      15% { transform: rotate(12deg); }
+      35% { transform: rotate(-5deg); }
+      55% { transform: rotate(8deg); }
+      75% { transform: rotate(-2deg); }
+    }
+
+    /* Shell */
+    .app-shell { position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Topbar */
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      height: var(--topbar-h);
+      display: flex; align-items: center; gap: 20px;
+      padding: 0 24px;
+      background: var(--topbar-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--glass-border);
+      transition: background 0.4s, border-color 0.4s;
+    }
+    .logo-area {
+      display: flex; align-items: center; gap: 10px;
+      cursor: default; flex-shrink: 0;
+    }
+    .logo-orb {
+      width: 22px; height: 22px; border-radius: 8px;
+      background: var(--logo-orb);
+      box-shadow: 0 2px 10px var(--accent-glow);
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .logo-text {
+      font-size: 15px; font-weight: 650; letter-spacing: -0.3px;
+      color: var(--t1);
+    }
+    .topbar-nav {
+      display: flex; align-items: center; gap: 4px;
+      margin-left: 12px;
+    }
+    .nav-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px;
+      border-radius: var(--r-full);
+      font-size: 13px; font-weight: 500;
+      color: var(--t3);
+      text-decoration: none;
+      transition: all 0.25s var(--ease);
+    }
+    .nav-link:hover { color: var(--t1); background: var(--glass-hover); }
+    .nav-link.active {
+      color: var(--accent-text);
+      background: var(--accent-soft);
+    }
+    .topbar-r {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .tb-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: grid; place-items: center;
+      color: var(--t3);
+      border: none; background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tb-btn:hover { background: var(--glass-hover); color: var(--t1); }
+    .user-orb {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      display: grid; place-items: center;
+      font-size: 12px; font-weight: 650;
+      border: 1px solid var(--glass-border);
+    }
+
+    /* Theme switcher (prototype chrome) */
+    .theme-switcher {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-full);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.18), var(--shadow-card);
+      backdrop-filter: blur(16px);
+    }
+    .theme-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px;
+      border-radius: var(--r-full);
+      border: none;
+      background: transparent;
+      color: var(--t3);
+      font-family: var(--font);
+      font-size: 13px; font-weight: 550;
+      cursor: pointer;
+      transition: all 0.25s var(--ease);
+      white-space: nowrap;
+    }
+    .theme-btn:hover { color: var(--t1); }
+    .theme-btn.active {
+      background: var(--accent-grad);
+      color: #fff;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .theme-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .theme-dot.dark { background: #383b50; box-shadow: inset 0 0 0 2px #05060d, 0 0 0 1px #60637a; }
+    .theme-dot.capsule { background: #f59e0b; box-shadow: inset 0 0 0 2px #05060d, 0 0 0 1px #f59e0b; }
+    .theme-dot.sage { background: #5aad6a; box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px #5aad6a; }
+    .theme-btn.active .theme-dot { box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px rgba(255,255,255,0.4); }
+    @media (max-width: 640px) {
+      .theme-btn { padding: 9px 12px; font-size: 12px; }
+    }
+
+    /* Home content */
+    .main {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: 40px 28px 120px;
+      gap: 32px;
+    }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 6px 14px;
+      border-radius: var(--r-full);
+      background: var(--badge-bg);
+      color: var(--badge-text);
+      font-size: 12px; font-weight: 550;
+      animation: rise 0.7s var(--ease) both;
+    }
+    .badge svg { width: 14px; height: 14px; }
+
+    .greet-block {
+      text-align: center;
+      max-width: 480px;
+      animation: rise 0.8s 0.08s var(--ease) both;
+    }
+    .greet-wave {
+      display: inline-block;
+      font-size: 28px;
+      animation: wiggle 2.8s ease-in-out infinite;
+      transform-origin: 70% 70%;
+    }
+    .greet-title {
+      font-size: 40px;
+      font-weight: 650;
+      letter-spacing: -0.8px;
+      line-height: 1.2;
+      background: var(--greet-grad);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-top: 8px;
+    }
+    .greet-sub {
+      margin-top: 14px;
+      font-size: 15px;
+      color: var(--t3);
+      line-height: 1.7;
+    }
+    [data-theme="sage"] .greet-sub {
+      color: var(--accent-text);
+      font-weight: 500;
+      font-size: 16px;
+    }
+    .greet-tagline {
+      display: none;
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--t3);
+    }
+    [data-theme="sage"] .greet-tagline { display: block; }
+
+    /* Hero input */
+    .hero-input {
+      width: 100%; max-width: 620px;
+      animation: rise 0.8s 0.25s var(--ease) both;
+    }
+    .hero-input-wrap {
+      background: var(--input-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-lg);
+      padding: 6px;
+      box-shadow: var(--shadow-card);
+      transition: all 0.4s var(--ease);
+    }
+    .hero-input-wrap:focus-within {
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+      box-shadow: var(--shadow-input);
+    }
+    .hero-input-wrap textarea {
+      width: 100%; border: none; background: transparent;
+      color: var(--t1);
+      font-family: var(--font);
+      font-size: 16px; line-height: 1.7;
+      padding: 20px 24px 12px;
+      resize: none; outline: none;
+      min-height: 72px;
+    }
+    .hero-input-wrap textarea::placeholder { color: var(--t4); }
+    .hero-input-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 14px 12px;
+    }
+    .hero-hint { font-size: 11px; color: var(--t4); }
+    .hero-submit {
+      width: 42px; height: 42px;
+      border-radius: var(--r-md);
+      border: none;
+      background: var(--accent-grad);
+      color: #fff;
+      cursor: pointer;
+      display: grid; place-items: center;
+      font-size: 17px; font-weight: 700;
+      transition: all 0.25s var(--spring);
+      box-shadow: 0 4px 18px var(--accent-glow);
+    }
+    .hero-submit:hover { transform: scale(1.06); }
+
+    /* Chips */
+    .quick-chips {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: center; max-width: 620px;
+      animation: rise 0.8s 0.35s var(--ease) both;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px;
+      border-radius: var(--r-full);
+      background: var(--chip-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--t2);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.25s var(--ease);
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-card);
+    }
+    .chip:hover {
+      background: var(--glass-hover);
+      border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      color: var(--t1);
+      transform: translateY(-1px);
+    }
+    .chip-icon { color: var(--accent-text); opacity: 0.9; display: flex; }
+
+    /* Bento */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      max-width: 720px; width: 100%;
+      animation: rise 0.8s 0.45s var(--ease) both;
+    }
+    .bento-card {
+      position: relative; overflow: hidden;
+      background: var(--card-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-lg);
+      padding: 22px;
+      cursor: pointer;
+      transition: all 0.35s var(--ease);
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(12px);
+    }
+    .bento-card:hover {
+      transform: translateY(-3px);
+      border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.08), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    [data-theme="sage"] .bento-card:hover {
+      box-shadow: 0 14px 36px rgba(62,110,72,0.1);
+    }
+    .icon-well {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      display: grid; place-items: center;
+      margin-bottom: 14px;
+      transition: background 0.3s;
+    }
+    .bento-card h3 {
+      font-size: 15px; font-weight: 650;
+      color: var(--t1); margin-bottom: 8px;
+      letter-spacing: -0.2px;
+    }
+    .bento-card p {
+      font-size: 12.5px; color: var(--t3);
+      line-height: 1.55; margin-bottom: 14px;
+    }
+    .card-action {
+      font-size: 12px; font-weight: 600;
+      color: var(--accent-text);
+    }
+
+    /* Feature strip (sage-flavored, shown in both) */
+    .feature-strip {
+      display: none;
+      max-width: 720px; width: 100%;
+      gap: 12px;
+      animation: rise 0.8s 0.5s var(--ease) both;
+    }
+    [data-theme="sage"] .feature-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+    .feature-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: var(--shadow-card);
+    }
+    .feature-icon {
+      width: 40px; height: 40px; flex-shrink: 0;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      display: grid; place-items: center;
+    }
+    .feature-item strong {
+      display: block; font-size: 13px; font-weight: 650; color: var(--t1);
+    }
+    .feature-item span {
+      font-size: 11.5px; color: var(--t3);
+    }
+
+    /* CTA row (sage) */
+    .cta-row {
+      display: none;
+      gap: 12px;
+      animation: rise 0.8s 0.55s var(--ease) both;
+    }
+    [data-theme="sage"] .cta-row { display: flex; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px;
+      border-radius: var(--r-full);
+      border: none;
+      background: var(--accent-grad);
+      color: #fff;
+      font-family: var(--font);
+      font-size: 14px; font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 22px var(--accent-glow);
+      transition: transform 0.25s var(--spring);
+    }
+    .btn-primary:hover { transform: translateY(-2px); }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 24px;
+      border-radius: var(--r-full);
+      border: 1.5px solid var(--accent);
+      background: transparent;
+      color: var(--accent-text);
+      font-family: var(--font);
+      font-size: 14px; font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .btn-ghost:hover { background: var(--accent-soft); }
+
+    /* Privacy */
+    .privacy-strip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px;
+      border-radius: var(--r-full);
+      background: var(--privacy-bg);
+      color: var(--t3);
+      font-size: 12px;
+      max-width: 520px;
+      animation: rise 0.8s 0.6s var(--ease) both;
+    }
+
+    /* Palette panel */
+    .palette-panel {
+      position: fixed; top: 72px; right: 20px; z-index: 40;
+      width: 220px;
+      padding: 16px;
+      background: var(--layer1);
+      border: 1px solid var(--glass-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow-card), 0 16px 48px rgba(0,0,0,0.12);
+      backdrop-filter: blur(16px);
+      animation: rise 0.6s 0.7s var(--ease) both;
+    }
+    .palette-panel h4 {
+      font-size: 11px; font-weight: 650;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--t3); margin-bottom: 12px;
+    }
+    .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .swatch {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      position: relative;
+    }
+    .swatch span {
+      position: absolute; bottom: -18px; left: 0; right: 0;
+      font-size: 9px; color: var(--t4); text-align: center;
+      white-space: nowrap; overflow: hidden;
+    }
+    .swatch-row { margin-bottom: 22px; }
+    .token-list { display: flex; flex-direction: column; gap: 6px; }
+    .token {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--t2);
+    }
+    .token i {
+      width: 14px; height: 14px; border-radius: 4px;
+      border: 1px solid var(--glass-border);
+      flex-shrink: 0;
+    }
+    .theme-name {
+      margin-top: 14px; padding-top: 12px;
+      border-top: 1px solid var(--glass-border);
+      font-size: 13px; font-weight: 650; color: var(--t1);
+    }
+    .theme-desc {
+      margin-top: 4px; font-size: 11px; color: var(--t3); line-height: 1.5;
+    }
+
+    @media (max-width: 900px) {
+      .palette-panel { display: none; }
+      .bento-grid, .feature-strip { grid-template-columns: 1fr; max-width: 400px; }
+      .greet-title { font-size: 32px; }
+      .topbar-nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient">
+    <div class="glow-top"></div>
+    <div class="glow-bot"></div>
+    <div class="leaf leaf-1"></div>
+    <div class="leaf leaf-2"></div>
+    <div class="sparkle s1"></div>
+    <div class="sparkle s2"></div>
+    <div class="sparkle s3"></div>
+    <div class="capsule capsule-a"></div>
+    <div class="capsule capsule-b"></div>
+    <div class="capsule capsule-c"></div>
+    <div class="capsule capsule-d"></div>
+  </div>
+  <div class="noise"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="logo-area">
+        <div class="logo-orb"></div>
+        <span class="logo-text">WorkPilot</span>
+      </div>
+      <nav class="topbar-nav">
+        <a class="nav-link active" href="#">首页</a>
+        <a class="nav-link" href="#">对话</a>
+        <a class="nav-link" href="#">知识库</a>
+        <a class="nav-link" href="#">收藏</a>
+      </nav>
+      <div class="topbar-r">
+        <button class="tb-btn" title="设置" aria-label="设置">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+        <div class="user-orb">W</div>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="badge" id="themeBadge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 6 5 9.5 5 13a7 7 0 0014 0c0-3.5-3-7-7-11z"/></svg>
+        <span>青荷 · 疗愈绿</span>
+      </div>
+
+      <div class="greet-block">
+        <span class="greet-wave">🌿</span>
+        <h1 class="greet-title" id="greetTitle">晚上好</h1>
+        <p class="greet-sub" id="greetSub">心里有光</p>
+        <p class="greet-tagline">不管你在烦恼什么，都可以先放一放。<br>这里只有倾听，没有对错。</p>
+      </div>
+
+      <div class="hero-input">
+        <div class="hero-input-wrap">
+          <textarea rows="2" placeholder="说说你在烦恼什么，比如「最近老觉得不安，但又说不上来为什么」…"></textarea>
+          <div class="hero-input-foot">
+            <span class="hero-hint">说你想说的，你说的话只有你和我知道</span>
+            <button class="hero-submit" aria-label="发送">→</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-chips">
+        <span class="chip"><span class="chip-icon">💬</span>我不知道该不该提涨薪</span>
+        <span class="chip"><span class="chip-icon">🚪</span>想离职但怕后悔</span>
+        <span class="chip"><span class="chip-icon">📄</span>总觉得简历写不好</span>
+        <span class="chip"><span class="chip-icon">🤝</span>同事关系让我很累</span>
+      </div>
+
+      <!-- Sage-only soft feature strip inspired by 房·树·人 cards -->
+      <div class="feature-strip">
+        <div class="feature-item">
+          <div class="feature-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z"/></svg>
+          </div>
+          <div>
+            <strong>温柔倾听</strong>
+            <span>不评判，只陪伴</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4-4 8-7.5 8-12a8 8 0 10-16 0c0 4.5 4 8 8 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          </div>
+          <div>
+            <strong>慢慢生长</strong>
+            <span>理清内心的方向</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>
+          </div>
+          <div>
+            <strong>安心空间</strong>
+            <span>对话只属于你</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bento-grid">
+        <div class="bento-card">
+          <div class="icon-well">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          </div>
+          <h3>不知道怎么谈涨薪？</h3>
+          <p>害怕谈崩、不知道要多少合适、老板说你表现不够好怎么回应</p>
+          <span class="card-action">聊聊这件事 →</span>
+        </div>
+        <div class="bento-card">
+          <div class="icon-well">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </div>
+          <h3>该不该离职？</h3>
+          <p>什么时候走最安全、竞业限制怎么绕、交接时怎么保护自己</p>
+          <span class="card-action">一起分析一下 →</span>
+        </div>
+        <div class="bento-card">
+          <div class="icon-well">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.3 2 2-6.3 6.3-2z"/></svg>
+          </div>
+          <h3>好像迷路了</h3>
+          <p>不知道自己擅长什么、35岁以后怎么办、换行业怎么找突破口</p>
+          <span class="card-action">理一理方向 →</span>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <button class="btn-primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          开始聊聊
+        </button>
+        <button class="btn-ghost">了解一下 WorkPilot</button>
+      </div>
+
+      <div class="privacy-strip">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        <span>对话仅存储在本地，不会分享给任何第三方。你可以随时导出或删除。</span>
+      </div>
+    </main>
+  </div>
+
+  <!-- Token palette -->
+  <aside class="palette-panel" id="palettePanel">
+    <h4>色板 · Palette</h4>
+    <div class="swatch-row">
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <h4>核心 Token</h4>
+    <div class="token-list" id="tokenList"></div>
+    <div class="theme-name" id="panelName">青荷 Sage</div>
+    <p class="theme-desc" id="panelDesc">白到薄荷的呼吸感渐变，叶绿色强调，圆角软卡片——看久了不累眼。</p>
+  </aside>
+
+  <!-- Theme switcher -->
+  <div class="theme-switcher">
+    <button class="theme-btn" data-theme="dark" type="button">
+      <i class="theme-dot dark"></i> 原版暗色
+    </button>
+    <button class="theme-btn" data-theme="capsule" type="button">
+      <i class="theme-dot capsule"></i> 胶囊增强
+    </button>
+    <button class="theme-btn active" data-theme="sage" type="button">
+      <i class="theme-dot sage"></i> 青荷绿
+    </button>
+  </div>
+
+  <script>
+    const themes = {
+      dark: {
+        badge: '暗色 · Dark Advisor',
+        badgeIcon: 'moon',
+        wave: '👋',
+        title: '晚上好',
+        sub: '不管你在烦恼什么，都可以先放一放。<br>这里只有选择，没有对错。',
+        name: '原版暗色 Dark',
+        desc: '深渊底色 + 琥珀金强调。专业、聚焦、适合夜间深度对话。',
+        swatches: [
+          { c: '#05060d', l: 'abyss' },
+          { c: '#0f111d', l: 'layer' },
+          { c: '#f59e0b', l: 'gold' },
+          { c: '#f2f2f8', l: 'text' },
+        ],
+        tokens: [
+          { c: '#05060d', l: '--abyss' },
+          { c: '#f59e0b', l: '--accent' },
+          { c: '#a0a3b8', l: '--t2' },
+          { c: '#60637a', l: '--t3' },
+        ],
+      },
+      capsule: {
+        badge: '暗色顾问 · 胶囊氛围',
+        badgeIcon: 'moon',
+        wave: '👋',
+        title: '晚上好',
+        sub: '不管你在烦恼什么，都可以先放一放。<br>这里只有选择，没有对错。',
+        name: '胶囊增强 Capsule',
+        desc: '暗色顾问色板 + 4 枚低饱和胶囊光斑 + 问候微渐变。借景深，不借紫粉。',
+        swatches: [
+          { c: '#05060d', l: 'abyss' },
+          { c: '#0f111d', l: 'layer' },
+          { c: '#f59e0b', l: 'gold' },
+          { c: '#fcd34d', l: 'glow' },
+        ],
+        tokens: [
+          { c: '#05060d', l: '--abyss' },
+          { c: '#f59e0b', l: '--accent' },
+          { c: '#fcd34d', l: 'greet tip' },
+          { c: '#60a5fa', l: 'capsule-b' },
+        ],
+      },
+      sage: {
+        badge: '青荷 · 疗愈绿',
+        badgeIcon: 'leaf',
+        wave: '🌿',
+        title: '晚上好',
+        sub: '心里有光',
+        name: '青荷 Sage',
+        desc: '白到薄荷的呼吸感渐变，叶绿色强调，圆角软卡片——看久了不累眼。',
+        swatches: [
+          { c: '#f7fbf7', l: 'page' },
+          { c: '#e4f2e6', l: 'mint' },
+          { c: '#5aad6a', l: 'leaf' },
+          { c: '#1e2b22', l: 'ink' },
+        ],
+        tokens: [
+          { c: '#ffffff', l: '--layer1' },
+          { c: '#5aad6a', l: '--accent' },
+          { c: '#3d8f4e', l: '--accent-text' },
+          { c: '#7a8f82', l: '--t3' },
+        ],
+      },
+    };
+
+    const html = document.documentElement;
+    const badge = document.getElementById('themeBadge');
+    const greetTitle = document.getElementById('greetTitle');
+    const greetSub = document.getElementById('greetSub');
+    const wave = document.querySelector('.greet-wave');
+    const panelName = document.getElementById('panelName');
+    const panelDesc = document.getElementById('panelDesc');
+    const swatchesEl = document.getElementById('swatches');
+    const tokenList = document.getElementById('tokenList');
+
+    function badgeHtml(key, label) {
+      if (key === 'sage') {
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 6 5 9.5 5 13a7 7 0 0014 0c0-3.5-3-7-7-11z"/></svg><span>${label}</span>`;
+      }
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg><span>${label}</span>`;
+    }
+
+    function renderPalette(key) {
+      const t = themes[key];
+      swatchesEl.innerHTML = t.swatches.map(s =>
+        `<div class="swatch" style="background:${s.c}"><span>${s.l}</span></div>`
+      ).join('');
+      tokenList.innerHTML = t.tokens.map(s =>
+        `<div class="token"><i style="background:${s.c}"></i>${s.l}</div>`
+      ).join('');
+      panelName.textContent = t.name;
+      panelDesc.textContent = t.desc;
+      badge.innerHTML = badgeHtml(key, t.badge);
+      wave.textContent = t.wave;
+      greetTitle.textContent = t.title;
+      greetSub.innerHTML = t.sub;
+    }
+
+    function setTheme(key) {
+      if (!themes[key]) key = 'capsule';
+      html.setAttribute('data-theme', key);
+      document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === key);
+      });
+      renderPalette(key);
+      localStorage.setItem('wp-theme-preview', key);
+    }
+
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => setTheme(btn.dataset.theme));
+    });
+
+    // Time-aware greeting
+    const h = new Date().getHours();
+    const g = h < 6 ? '夜深了' : h < 12 ? '早上好' : h < 18 ? '下午好' : '晚上好';
+    themes.dark.title = g;
+    themes.capsule.title = g;
+    themes.sage.title = g;
+
+    const saved = localStorage.getItem('wp-theme-preview') || 'capsule';
+    setTheme(saved);
+  </script>
+</body>
+</html>

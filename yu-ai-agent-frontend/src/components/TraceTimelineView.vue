@@ -143,10 +143,11 @@ const toggleMeta = (seq) => {
 
 <style scoped>
 .trace-timeline {
-  background: #1a1f2e;
+  background: var(--layer1);
+  border: 1px solid var(--glass-border);
   border-radius: 12px;
   padding: 16px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--t1);
 }
 
 .trace-header {
@@ -155,7 +156,7 @@ const toggleMeta = (seq) => {
   justify-content: space-between;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .trace-status {
@@ -167,15 +168,15 @@ const toggleMeta = (seq) => {
   padding: 4px 12px;
   border-radius: 12px;
 }
-.trace-status.running { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
-.trace-status.success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-.trace-status.failed { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-.trace-status.cancelled { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+.trace-status.running { background: var(--gold-soft); color: var(--gold-text); }
+.trace-status.success { background: var(--ok-bg); color: var(--ok); }
+.trace-status.failed { background: var(--danger-bg); color: var(--danger); }
+.trace-status.cancelled { background: var(--layer2); color: var(--t3); }
 
 .trace-duration {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
-  font-family: monospace;
+  color: var(--t3);
+  font-family: var(--mono, monospace);
 }
 
 .steps-container {
@@ -207,18 +208,18 @@ const toggleMeta = (seq) => {
   font-size: 12px;
   font-weight: bold;
   flex-shrink: 0;
-  background: rgba(99, 102, 241, 0.2);
-  color: #a5b4fc;
+  background: var(--gold-soft);
+  color: var(--gold-text);
 }
-.step.success .step-dot { background: rgba(16, 185, 129, 0.3); color: #34d399; }
-.step.running .step-dot { background: rgba(99, 102, 241, 0.3); color: #818cf8; }
-.step.failed .step-dot { background: rgba(239, 68, 68, 0.3); color: #f87171; }
-.step.skipped .step-dot { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+.step.success .step-dot { background: var(--ok-bg); color: var(--ok); }
+.step.running .step-dot { background: var(--gold-soft); color: var(--gold-text); }
+.step.failed .step-dot { background: var(--danger-bg); color: var(--danger); }
+.step.skipped .step-dot { background: var(--layer2); color: var(--t3); }
 
 .step-line {
   width: 2px;
   flex: 1;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--glass-border);
   margin: 4px 0;
 }
 
@@ -236,8 +237,8 @@ const toggleMeta = (seq) => {
 
 .step-type {
   font-size: 12px;
-  background: rgba(96, 165, 250, 0.15);
-  color: #60a5fa;
+  background: var(--gold-soft);
+  color: var(--gold-text);
   padding: 2px 8px;
   border-radius: 6px;
   font-weight: 500;
@@ -245,19 +246,19 @@ const toggleMeta = (seq) => {
 
 .step-label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--t2);
 }
 
 .step-time {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.3);
-  font-family: monospace;
+  color: var(--t4);
+  font-family: var(--mono, monospace);
   margin-left: auto;
 }
 
 .step-running {
   font-size: 12px;
-  color: #818cf8;
+  color: var(--gold-text);
   margin-top: 4px;
   display: flex;
   align-items: center;
@@ -268,7 +269,7 @@ const toggleMeta = (seq) => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #818cf8;
+  background: var(--gold);
   animation: pulse 1.2s infinite;
 }
 
@@ -279,12 +280,12 @@ const toggleMeta = (seq) => {
 
 .step-error {
   font-size: 12px;
-  color: #f87171;
+  color: var(--danger);
   margin-top: 4px;
   padding: 6px 10px;
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-bg);
   border-radius: 6px;
-  border-left: 3px solid rgba(239, 68, 68, 0.4);
+  border-left: 3px solid var(--danger);
 }
 
 .step-metadata {
@@ -293,20 +294,20 @@ const toggleMeta = (seq) => {
 
 .meta-toggle {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--t3);
   background: none;
   border: none;
   cursor: pointer;
   padding: 2px 0;
 }
-.meta-toggle:hover { color: rgba(255, 255, 255, 0.7); }
+.meta-toggle:hover { color: var(--t1); }
 
 .meta-content {
   margin-top: 4px;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--layer2);
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
 }
 
 .meta-row {
@@ -315,12 +316,12 @@ const toggleMeta = (seq) => {
   font-size: 11px;
   padding: 2px 0;
 }
-.meta-key { color: rgba(255, 255, 255, 0.4); min-width: 80px; }
-.meta-val { color: rgba(255, 255, 255, 0.6); font-family: monospace; word-break: break-all; }
+.meta-key { color: var(--t3); min-width: 80px; }
+.meta-val { color: var(--t2); font-family: monospace; word-break: break-all; }
 
 .empty-spans {
   text-align: center;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--t4);
   font-size: 13px;
   padding: 24px 0;
 }

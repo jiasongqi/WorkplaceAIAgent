@@ -19,6 +19,14 @@ search-api:
 jwt:
   secret: local-dev-secret-key-please-use-a-long-random-string
 
+# 查询重写会多一次同步 LLM（易拖慢首 token）。本地排查卡顿建议先关：
+# rag.query-rewrite.enabled: false
+# 对比打开后看右侧「执行进度」是否出现「查询重写」及 latencyMs
+rag:
+  query-rewrite:
+    enabled: false
+    timeout-ms: 5000
+
 # 日历服务（如需联调飞书/钉钉再填写）
 calendar:
   provider: FEISHU

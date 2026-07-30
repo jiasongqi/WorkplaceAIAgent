@@ -46,6 +46,9 @@ public abstract class ReActAgent extends BaseAgent {
     @Override
     public String step() {
         try {
+            if (getRunBudget() != null && getRunBudget().isExhausted()) {
+                return "Token 预算已用尽，停止本步执行";
+            }
             // --- Guard: TokenBudgetManager — check budget BEFORE think() (Req 4.3) ---
             if (tokenBudgetManager != null) {
                 try {
@@ -59,10 +62,17 @@ public abstract class ReActAgent extends BaseAgent {
             boolean shouldAct = think();
             if (!shouldAct) {
                 // LLM 判断无需调用工具 → 任务完成，终止循环
-                // 修复：不设置 FINISHED 会导致 BaseAgent 循环继续浪费 LLM 调用
                 setState(com.yupi.yuaiagent.agent.model.AgentState.FINISHED);
-                // 把模型已生成的文本回传给前端，避免只显示「思考完成」导致聊天区空白
                 String reply = lastAssistantText();
+                // Ch4 Gotcha 5.2: block "I have done it" without Tool Output
+                String claimWarn = com.yupi.yuaiagent.agent.loop.CompletionClaimGuard
+                        .checkUnsupportedClaim(getMessageList(), reply);
+                if (claimWarn != null) {
+                    getMessageList().add(new org.springframework.ai.chat.messages.UserMessage(claimWarn));
+                    log.warn("[ReActAgent] completion claim without tool success");
+                    return (StrUtil.isNotBlank(reply) ? reply + "\n\n" : "")
+                            + "> 注意：系统未检测到成功的工具回执，请勿将计划视为已完成。";
+                }
                 return StrUtil.isNotBlank(reply) ? reply : "思考完成 - 无需行动";
             }
             // 再行动

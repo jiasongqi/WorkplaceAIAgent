@@ -1,18 +1,20 @@
 package com.yupi.yuaiagent.permission;
 
 import com.yupi.yuaiagent.permission.model.PermissionProfile;
+import com.yupi.yuaiagent.sessionstate.HandoffScopeContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
-import java.time.LocalDateTime;
-import java.util.regex.Pattern;
+import java.util.Set;
 
 /**
  * Agent 权限校验服务 — 基于配置驱动的 PermissionProfile 进行 Tool 调用权限校验。
  * <p>
  * 支持通配符匹配（{@code resume.*} 匹配 {@code resume.optimize}）和精确匹配。
  * Admin 画像跳过所有检查。
+ * <p>
+ * 当 {@link HandoffScopeContext} 激活时，额外与移交 Packet.scope 求交，防止幽灵权限。
  *
  * @author jsq
  */
@@ -39,17 +41,37 @@ public class AgentPermissionService {
             return true;
         }
 
-        // 遍历允许的 Tool 模式，支持通配符
+        boolean profileAllows = false;
         for (String pattern : profile.getAllowedToolPatterns()) {
             if (matchToolPattern(pattern, toolName)) {
-                log.debug("[Permission] agent={} tool={} matched pattern={} -> ALLOWED",
-                        agentCode, toolName, pattern);
-                return true;
+                profileAllows = true;
+                break;
+            }
+        }
+        if (!profileAllows) {
+            log.warn("[Permission] agent={} tool={} -> DENIED (no matching pattern)", agentCode, toolName);
+            return false;
+        }
+
+        // Handoff scope downgrade: must also match Packet.scope when installed
+        if (HandoffScopeContext.isActive()) {
+            Set<String> scope = HandoffScopeContext.current();
+            boolean inScope = false;
+            for (String pattern : scope) {
+                if (matchToolPattern(pattern, toolName)) {
+                    inScope = true;
+                    break;
+                }
+            }
+            if (!inScope) {
+                log.warn("[Permission] agent={} tool={} -> DENIED (outside handoff scope {})",
+                        agentCode, toolName, scope);
+                return false;
             }
         }
 
-        log.warn("[Permission] agent={} tool={} -> DENIED (no matching pattern)", agentCode, toolName);
-        return false;
+        log.debug("[Permission] agent={} tool={} -> ALLOWED", agentCode, toolName);
+        return true;
     }
 
     /**

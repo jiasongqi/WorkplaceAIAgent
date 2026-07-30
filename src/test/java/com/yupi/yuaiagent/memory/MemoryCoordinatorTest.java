@@ -58,6 +58,9 @@ class MemoryCoordinatorTest {
     @Mock
     private ExtractionPipeline extractionPipeline;
 
+    @Mock
+    private ExperienceQueryBuilder experienceQueryBuilder;
+
     private TokenBudgetAllocator budgetAllocator;
     private MemoryCoordinator coordinator;
 
@@ -79,10 +82,12 @@ class MemoryCoordinatorTest {
                 experienceStore,
                 budgetAllocator,
                 extractionPipeline,
+                experienceQueryBuilder,
                 directExecutor,
                 TIMEOUT_MS,
                 TOTAL_BUDGET
         );
+        when(experienceQueryBuilder.build(anyString(), any())).thenReturn("职场咨询 面试");
     }
 
     @Nested
@@ -99,7 +104,7 @@ class MemoryCoordinatorTest {
                     .thenReturn("【用户事实】\n- 身份: 姓名=张三; 行业=互联网");
             when(summaryLayer.getRecentSummaries(eq(USER_ID), anyInt()))
                     .thenReturn("【近期对话摘要】\n  话题: 职业规划\n  待办: 更新简历");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(List.of(new ExperienceDocument(
                             "exp-1", USER_ID, AGENT_TYPE,
                             "成功通过面试获得 offer",
@@ -135,7 +140,7 @@ class MemoryCoordinatorTest {
                     .thenReturn("【用户事实】\n- 身份: 行业=金融");
             when(summaryLayer.getRecentSummaries(eq(USER_ID), anyInt()))
                     .thenReturn("【近期对话摘要】\n  话题: 跳槽准备");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(List.of(new ExperienceDocument(
                             "exp-2", USER_ID, AGENT_TYPE,
                             "跳槽后薪资涨幅30%",
@@ -189,7 +194,7 @@ class MemoryCoordinatorTest {
                     .thenReturn("user: 我需要帮助");
             when(summaryLayer.getRecentSummaries(eq(USER_ID), anyInt()))
                     .thenReturn("【近期对话摘要】\n  话题: 求助");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // Act
@@ -214,7 +219,7 @@ class MemoryCoordinatorTest {
             when(factStore.formatForContext(eq(USER_ID), anyInt()))
                     .thenReturn("【用户事实】\n- 身份: 有效数据");
             when(summaryLayer.getRecentSummaries(eq(USER_ID), anyInt())).thenReturn("");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // Act
@@ -245,7 +250,7 @@ class MemoryCoordinatorTest {
                     .thenReturn("user: 今天天气好");
             when(factStore.formatForContext(eq(USER_ID), anyInt()))
                     .thenReturn("【用户事实】\n- 偏好: 简洁风格");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(List.of(new ExperienceDocument(
                             "exp-3", USER_ID, AGENT_TYPE,
                             "面试经验丰富",
@@ -268,7 +273,7 @@ class MemoryCoordinatorTest {
             // Arrange: both fact store and experience store fail
             when(factStore.formatForContext(eq(USER_ID), anyInt()))
                     .thenThrow(new RuntimeException("Disk full"));
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenThrow(new RuntimeException("Vector store unavailable"));
 
             when(slidingWindow.formatForContext(eq(CONVERSATION_ID), eq(AGENT_TYPE), anyInt()))
@@ -422,7 +427,7 @@ class MemoryCoordinatorTest {
                     .thenReturn("【用户事实】\n- 身份: 姓名=李四");
             when(summaryLayer.getRecentSummaries(eq(USER_ID), anyInt()))
                     .thenReturn("【近期对话摘要】\n  话题: 初次咨询");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // First call to populate cache
@@ -451,7 +456,7 @@ class MemoryCoordinatorTest {
             when(factStore.formatForContext(eq(USER_ID), anyInt()))
                     .thenReturn("");
             when(summaryLayer.getRecentSummaries(eq(USER_ID), anyInt())).thenReturn("");
-            when(experienceStore.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStore.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // First call

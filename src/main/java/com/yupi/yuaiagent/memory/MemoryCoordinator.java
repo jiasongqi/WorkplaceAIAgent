@@ -54,6 +54,7 @@ public class MemoryCoordinator {
     private final ExperienceStoreLayer experienceStore;
     private final TokenBudgetAllocator budgetAllocator;
     private final ExtractionPipeline extractionPipeline;
+    private final ExperienceQueryBuilder experienceQueryBuilder;
     private final Executor memoryQueryExecutor;
 
     private final int timeoutMs;
@@ -81,6 +82,7 @@ public class MemoryCoordinator {
             ExperienceStoreLayer experienceStore,
             TokenBudgetAllocator budgetAllocator,
             ExtractionPipeline extractionPipeline,
+            ExperienceQueryBuilder experienceQueryBuilder,
             @Qualifier("memoryQueryExecutor") Executor memoryQueryExecutor,
             @Value("${memory.coordinator.timeout-ms:2000}") int timeoutMs,
             @Value("${memory.coordinator.total-token-budget:6000}") int totalTokenBudget) {
@@ -90,6 +92,7 @@ public class MemoryCoordinator {
         this.experienceStore = experienceStore;
         this.budgetAllocator = budgetAllocator;
         this.extractionPipeline = extractionPipeline;
+        this.experienceQueryBuilder = experienceQueryBuilder;
         this.memoryQueryExecutor = memoryQueryExecutor;
         this.timeoutMs = timeoutMs;
         this.totalTokenBudget = totalTokenBudget;
@@ -107,6 +110,14 @@ public class MemoryCoordinator {
      * @return 包含各层记忆的 SystemMessage
      */
     public SystemMessage assembleContext(String userId, String conversationId, String agentType) {
+        return assembleContext(userId, conversationId, agentType, null);
+    }
+
+    /**
+     * 组装上下文 — 可选传入当前用户消息，用于 L4 经验层语义检索（Ch5 L2→L3 query）。
+     */
+    public SystemMessage assembleContext(String userId, String conversationId, String agentType,
+                                         String currentUserMessage) {
         // Evict expired cache entries when size exceeds threshold
         if (layerCache.size() > MAX_CACHE_SIZE / 2) {
             evictExpiredCacheEntries();
@@ -134,8 +145,9 @@ public class MemoryCoordinator {
                 memoryQueryExecutor
         ).exceptionally(ex -> handleLayerFailure(userId, MemoryLayer.SUMMARY, ex));
 
+        final String experienceQuery = experienceQueryBuilder.build(userId, currentUserMessage);
         CompletableFuture<String> experienceFuture = CompletableFuture.supplyAsync(
-                () -> queryExperienceStore(userId, conversationId, budgets.get(MemoryLayer.EXPERIENCE)),
+                () -> queryExperienceStore(userId, experienceQuery, budgets.get(MemoryLayer.EXPERIENCE)),
                 memoryQueryExecutor
         ).exceptionally(ex -> handleLayerFailure(userId, MemoryLayer.EXPERIENCE, ex));
 
@@ -356,15 +368,11 @@ public class MemoryCoordinator {
     }
 
     /**
-     * 查询 L4 经验存储层。
-     *
-     * <p>使用会话 ID 作为查询文本的简化实现。
-     * Task 8.3 中将改进为从最近消息中提取查询关键词。
+     * 查询 L4 经验存储层 — query 由 {@link ExperienceQueryBuilder} 从当前消息 + L3 摘要构造。
      */
-    private String queryExperienceStore(String userId, String conversationId, int tokenBudget) {
+    private String queryExperienceStore(String userId, String experienceQuery, int tokenBudget) {
         try {
-            // 使用 conversationId 作为简化查询（后续 Task 中优化为从消息提取关键词）
-            List<ExperienceDocument> experiences = experienceStore.searchSimilar(userId, conversationId);
+            List<ExperienceDocument> experiences = experienceStore.searchSimilar(userId, experienceQuery);
             if (experiences == null || experiences.isEmpty()) {
                 return "";
             }

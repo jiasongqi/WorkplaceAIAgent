@@ -84,17 +84,17 @@ public abstract class BaseParadigmAgent {
      * @return execution result
      */
     public String run(String userPrompt) {
-        log.info("[{}] Starting execution with prompt: {}", getParadigmName(),
-                userPrompt.substring(0, Math.min(100, userPrompt.length())));
-
-        // Add user message to history
-        addMessage(new org.springframework.ai.chat.messages.UserMessage(userPrompt));
-
-        // Execute paradigm-specific logic
-        String result = execute();
-
-        log.info("[{}] Execution completed, result length: {}", getParadigmName(), result.length());
-        return result;
+        return com.yupi.yuaiagent.agent.loop.AgentDepthContext.runWithDepth(
+                () -> {
+                    log.info("[{}] Starting execution with prompt: {}", getParadigmName(),
+                            userPrompt.substring(0, Math.min(100, userPrompt.length())));
+                    addMessage(new org.springframework.ai.chat.messages.UserMessage(userPrompt));
+                    String result = execute();
+                    log.info("[{}] Execution completed, result length: {}", getParadigmName(), result.length());
+                    return result;
+                },
+                () -> com.yupi.yuaiagent.agent.loop.AgentDepthContext.denyMessage(
+                        com.yupi.yuaiagent.agent.loop.AgentDepthContext.DEFAULT_MAX_DEPTH));
     }
 
     // ─── Trace Helpers ─────────────────────────────────────────────────

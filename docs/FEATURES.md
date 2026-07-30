@@ -3,9 +3,9 @@
 > 本文档按"能力由浅入深"的顺序梳理项目功能，每一层都建立在前一层之上。
 > 适用于：个人学习复盘、作品集讲解、面试技术亮点串讲。
 >
-> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0（Alibaba DashScope）+ Ollama + PostgreSQL/PgVector（`STORAGE_TYPE=jdbc` 可选）。
+> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0（Alibaba DashScope）+ Vue 3 + PDFBox / POI（感知层）。
 > 品牌名：WorkPilot
-> 文档同步：2026-07-20 · java-v3-db（双存储 · Auth refresh/quota · HITL · Manus SSE）
+> 文档同步：2026-07-29 · Ch1 Perception/Goal/熔断 · Ch3 Tool Schema/并行/幂等/Submit-Poll · Ch4 Loop Wrap-up/Replanner/Depth
 
 ---
 
@@ -13,16 +13,16 @@
 
 > **状态图例**：`[闭环]` 端到端可用（真实调用/真实数据，无占位逻辑）· `[部分]` 核心路径闭环，部分分支/子能力为简化实现或需额外开关 · `[脚手架]` 数据结构与接口已就位，尚未接入真实执行/调用链。
 >
-> 关键层级：L5/L17 多 Agent `[闭环]`（**单意图真 SSE**；多意图并行辩论+综合后推送 + failover + agent-progress）· L8 黑板 `[部分]` · L18 工作流 `[脚手架]`（未接主聊天）· L21 注册中心 `[脚手架]` · L22 评测 `[部分]`（routing 门禁闭环；live 需 ADMIN）· L23 Prompt A/B `[脚手架]`。
+> 关键层级：L5/L17 多 Agent `[闭环]`（**单意图真 SSE**；多意图并行辩论+综合后推送 + failover + agent-progress）· L8 黑板 `[部分]` · L18 工作流 `[部分]`（`workflow.dag.enabled` 时 JOB_CHANGE/INTERVIEW 接主聊天；其余节点仍为脚手架）· L21 注册中心 `[脚手架]` · L22 评测 `[部分]`（routing 门禁闭环；live 需 ADMIN）· L23 Prompt A/B `[脚手架]`。
 >
 > 面试话术速查：`docs/INTERVIEW-DEFENSE.md`
 
 ```
 L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
-   └─ L1 RAG 知识库   八篇职场文档检索 + Multi-Query 多路召回 + 查询改写
-       └─ L2 工具调用   联网搜索 / 文件 / 网页抓取 / 资源下载 / 终端 / PDF
+   └─ L1 RAG 知识库   RetrievalPipeline + RagTool + PDF 表格 + /knowledge 管理页
+       └─ L2 工具调用   联网搜索 / 文件(file_id) / 抓取 / 下载 / 终端 / PDF / 异步轮询
            └─ L3 MCP    图片搜索等外部 MCP 服务
-               └─ L4 Manus 超级智能体   ReAct 自主规划 + 工具循环
+               └─ L4 Manus 超级智能体   ReAct + Wrap-up + 完成态防幻觉 + Depth Limit
                    └─ L5 Multi-Agent 智能路由 [闭环]   意图识别 → 5 个专业 Agent + 并行辩论/failover + SSE 进度事件
                        └─ L6 预约咨询   状态机追问 + 飞书/钉钉日历 + HITL 人工审批
                        └─ L7 记忆压缩   Token/轮数策略 + LLM 摘要
@@ -36,7 +36,7 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L15 持久化消息  Source of Truth + 双索引
                        └─ L16 NLU 意图理解层  1次LLM + 别名解析 + 槽位提取 + 意图分类 + 澄清
                        └─ L17 多 Agent 运行时 [闭环]   群聊模式 + Task Orchestrator + 工作流引擎
-                       └─ L18 工作流引擎 [脚手架]   6种节点 + 实例状态 + 持久化
+                       └─ L18 工作流引擎 [部分]   DAG 就绪队列（JOB_CHANGE/INTERVIEW）+ 开关；legacy 6 节点脚手架
                        └─ L19 沙箱执行  Docker/本地进程隔离 + 5层防护
                        └─ L20 访问控制与治理  投票式决策 + Agent权限 + MCP信任 + Quota配额
                        └─ L21 Agent 注册中心 [脚手架]   YAML声明式 + Marketplace就绪
@@ -44,15 +44,16 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L23 Prompt 版本管理 [脚手架]   多版本 + 灰度发布 + A/B测试
                        └─ L24 交付物生命周期  DRAFT→REVIEWING→APPROVED→PUBLISHED
                        └─ L25 事件总线  异步治理事件 + 审计日志
-                       └─ L26 安全防护  循环检测 + 工具结果分级 + Token预算
+                       └─ L26 安全防护  循环检测 + 工具结果分级 + Token预算 + Observation清洗 + 连续失败熔断 + Goal Anchor + 感知预处理 + 工具幂等
                        └─ L27 分层记忆系统  四层记忆 + 异步提取 + Token预算分配
                        └─ L28 性能监控与诊断  Actuator + Micrometer + 断路器 + 诊断端点
-                       └─ L29 经典范式支持  ReAct / Plan-and-Solve / Reflection
+                       └─ L29 经典范式支持  ReAct / Plan-and-Solve(+Replanner) / Reflection / Loop Wrap-up
                        └─ L30 上下文工程优化  相关性评分 + 动态预算分配 + 关键信息提取
                        └─ L31 工具注册机制  动态注册表 + 能力发现 + 健康监控
                        └─ L32 Reflexion 失败记忆  失败轨迹记录 + 自动注入提示词
                        └─ L33 RAG Rerank  关键词重叠 + 文档质量评分 + 位置偏差
-横切关注点：JWT 鉴权（access/refresh）· 日配额 · HITL · 会话三态 · 双存储（file/jdbc）· AppService 编排 · 全局异常处理
+                       └─ L34 感知层 Perception [闭环]  文档降维 + SharedState 绑定 + 感知路由 + 视觉注入防护
+横切关注点：JWT 鉴权（access/refresh）· 日配额 · HITL · 会话三态 · 双存储（file/jdbc）· AppService 编排 · 全局异常处理 · Goal Anchor
 ```
 
 ---
@@ -74,35 +75,49 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
 
 ## L1 · RAG 知识库
 
-在基础对话之上叠加检索增强，内置职场生存文档（求职篇、在职篇、晋升篇等）。
+在基础对话之上叠加检索增强：内置职场 Markdown 文档 + 用户动态上传（`.md` / `.pdf`）。
 
 | 组件 | 职责 |
 |------|------|
-| `AiChatDocumentLoader` | 加载 Markdown 文档 |
-| `MyTokenTextSplitter` | 分词切片 |
-| `MyKeywordEnricher` | 关键词元数据增强 |
-| `QueryRewriter` | 查询改写，提升召回 |
-| `MultiQueryRetriever` | Multi-Query 多路召回（一个问题扩展为多个查询并行检索后合并） |
-| `AiChatVectorStoreConfig` / `PgVectorVectorStoreConfig` | 向量库装配（内存 / PgVector 可切换） |
-| `AiChatRagCloudAdvisorConfig` | 云端 RAG Advisor |
+| `AiChatDocumentLoader` | 启动加载 classpath Markdown |
+| `RetrievalPipeline` | **统一管线**：Query Rewrite → Multi-Query/HyDE → Rerank（含时间衰减） |
+| `RagTool` | Agent 可调用的 `searchKnowledgeBase`（已注册 ToolRegistration） |
+| `RagRetrievalAttemptTracker` | 同 chat 空检索上限，防检索循环 |
+| `QueryRewriter` / `MultiQueryRetriever` | 查询改写与多路召回 |
+| `RerankService` | 关键词 + 质量 + 位置 + **`indexedAt` 时间衰减** |
+| `PipelineRagAdvisorFactory` | ResumeAgent 等 Spring AI RAG Advisor |
+| `DocumentAppService` | 上传/文本入库/列表/软删；PDF 表格结构化 |
+| `PdfKnowledgeIngestionService` | PDF → 正文 chunk + 表格 Markdown chunk（`chunkType=table`） |
+| `DocumentMetadataManager` | 生命周期 + SHA-256 去重 |
+| `AiChatVectorStoreConfig` / `PgVectorVectorStoreConfig` | 向量库（内存 / PgVector） |
 
-**入口**：`GET /api/ai/ai_chat/rag/sync` · 文档动态入库 `POST /api/document/upload`、`POST /api/document/add`（上传后实时嵌入向量库）。
+**入口**：
+- 检索同步：`GET /api/ai/ai_chat/rag/sync`
+- 文档 API：`POST /api/document/upload` · `POST /api/document/add` · `GET /api/document/list` · `DELETE /api/document/{docId}`
+- 前端：`/knowledge`（`KnowledgeBase.vue`，双主题 · 分类 · 筛选 · 文本粘贴）
+
+**教程对照**： [mm-agent-tutorial-ch5-落地.md](./mm-agent-tutorial-ch5-落地.md) · [场景对照总结](./mm-agent-tutorial-场景对照总结.md)
 
 ---
 
 ## L2 · 工具调用（Tool Calling）
 
-让模型具备"动手"能力，工具统一在 `ToolRegistration` 注册为 `ToolCallback[]`。
+让模型具备"动手"能力，工具统一在 `ToolRegistration` 注册为 `ToolCallback[]`。  
+Schema 描述含 **WHEN / DO NOT / RETURNS**（防 Tool Confusion）；同轮多 tool 由 `ParallelToolCallingSupport` 并行扇出。
 
 | 工具 | 类 | 用途 |
 |------|----|------|
-| 联网搜索 | `WebSearchTool` | 实时职场案例 / 法律条款（SearchAPI） |
-| 网页抓取 | `WebScrapingTool` | Jsoup 解析网页正文（`UrlSafetyGuard` SSRF 防护） |
-| 文件操作 | `FileOperationTool` | 读写本地文件 |
-| 资源下载 | `ResourceDownloadTool` | 下载网络资源（`UrlSafetyGuard` SSRF 防护 + 路径穿越校验） |
-| 终端操作 | `TerminalOperationTool` | 执行命令行（沙箱执行 + HITL 人工审批网关） |
-| PDF 生成 | `PDFGenerationTool` | 生成定制化职场生存手册（iText + 亚洲字体） |
+| 联网搜索 | `WebSearchTool` | 实时外网事实（SearchAPI）；与 RAG/抓取边界写在 description |
+| 网页抓取 | `WebScrapingTool` | `scrapeWebPage` 同步；慢页用 `startScrapeWebPage`（Submit-Poll） |
+| 文件操作 | `FileOperationTool` | 读写；大文件返回 `file_id`，细节用 `readFileChunk`；写入可 HITL + 幂等 |
+| 资源下载 | `ResourceDownloadTool` | `downloadResource` / `startDownloadResource`（SSRF + 幂等） |
+| 终端操作 | `TerminalOperationTool` | 沙箱执行 + HITL + 幂等（超时不自动重试） |
+| PDF 生成 | `PDFGenerationTool` | `generatePDF` / `startGeneratePDF` |
+| 异步任务查询 | `AsyncToolStatusTool` | `checkAsyncToolTask(taskId)` |
 | 终止 | `TerminateTool` | 供 Agent 主动结束任务 |
+
+**工程增强（Ch3）**：`ObservationSanitizer` · `ToolIdempotencyStore` · `ToolSideEffectPolicy` · `AsyncToolTaskService` · `FileHandleStore`。  
+配置：`app.tools.idempotency-ttl-seconds` · `app.tools.async-task-ttl-seconds`。
 
 **入口**：`GET /api/ai/ai_chat/tools/sync`。
 
@@ -128,6 +143,11 @@ BaseAgent  →  ReActAgent（思考-行动循环）  →  ToolCallAgent（工具
 - `YuManus`：组合全部工具 + DashScope 模型，支持 `runStream` 流式输出执行过程
 - **SSE 协议**：每步推送 `Step N: ...`；无工具调用时回传模型正文（不再只返回「思考完成」）；结束发送 `[DONE]`，前端避免把正常关流误报为连接错误
 - DashScope 额度不足时返回可读中文错误（`AllocationQuota.FreeTierOnly`）
+- **Ch4 Loop 增强**：
+  - 步数耗尽且未自终止 → `LoopWrapUp` 强制收尾（`AgentLoopResult.PARTIAL_SUCCESS`）
+  - System Prompt 禁止「无 Tool Output 却声称已完成」；`CompletionClaimGuard` 校验
+  - 嵌套深度 `AgentDepthContext`（默认 ≤3）
+  - 非 NORMAL 工具结果注入 `StepReflector`
 
 **入口**：`GET /api/ai/manus/chat`。
 
@@ -207,18 +227,28 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 
 最高阶的多 Agent 协作能力，采用**黑板模式（Blackboard Pattern）**。上游 Agent 产出交付物放上货架，下游按需取用。
 
-### 共享交付物货架（Artifact Shelf）
+### 共享交付物货架（Artifact Shelf 与 ArtifactPublisher）
 
 ```
-生产者 Agent ──put(READY)──► ArtifactShelf ──query/get──► 消费者 Agent
-                                  │                            │
-                            ArtifactRepository           markConsumed
+生产者 Agent ──put(READY)──► ArtifactShelf ──ArtifactPublisher.publish()──► PUBLISHED
+                                  │                                          │
+                            ArtifactRepository                        前端展示推荐/采纳计数
                             (Jackson+JSON+RWLock)
 ```
 
 - `ArtifactShelf`：放货 `put` / 读取 `get` / 查询 `query` / 消费标记 `markConsumed`
-- **作用域隔离**：`USER_PROFILE`（按 userId 跨会话累积）/ `TASK`（按 chatId 会话级）
-- **状态机**：`DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED`
+- **ArtifactPublisher**：结构化可复用交付物发布至 `PUBLISHED` 状态（跳过 REVIEWING/APPROVED 中间态）
+- **智能回忆**：
+  - `TASK` 作用域：当前会话专项任务交付物，对话上下文注入
+  - `USER_PROFILE` 作用域：用户跨会话累积的结构化资产，用户侧智能推荐
+- **状态机**：`DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED`（或 ArtifactPublisher 直接 DRAFT → PUBLISHED）
+- **OFFERED/ADOPTED 分类账**：不改变交付物生命周期，记录推荐次数与采纳次数（前端展示）
+- **五数据员工显式闭环**：DataAnalystAgent、CareerCoachAgent、ProfileCuratorAgent、PromotionPlannerAgent、LearningResourceRecommenderAgent 按结构化交付物请求触发
+- **用户侧闭环** `[闭环]`：`GET /api/artifact/mine?chatId=` · `GET /api/artifact/mine/{id}`（JWT 归属校验）；SSE `artifact-ready` 推送推荐计数与采纳计数
+- **专家包** `[闭环]`：`classpath:packs/*.yaml` + `/api/pack/list` · `/api/pack/{id}/enabled`；启用包收窄技能匹配与数字员工模板
+- **会话共享状态** `[闭环]`：`sessionstate/*` — 同对话框跨 Agent 可读的结构化 scratchpad（预约事实、handoff、activeGoal）；预约创建写入，ContextInjection 全专家注入；详见 `docs/interview-multi-agent-session-state.md`
+- **技能沉淀** `[闭环]`：`GET /api/skill/list` · `POST /api/skill/draft-from-trace` · `POST /api/skill/save`
+- **任务中心 / 沙箱可见** `[闭环]`：`GET /api/task/mine` · `GET /api/task/sandbox-policy`；HITL 持久化 + webhook 通知；FILE_WRITE 需确认
 
 ### 数据员工 Agent（`agent/data/`）
 
@@ -443,38 +473,31 @@ DataEmployeeAgent（抽象模板：加工 → 封装 Artifact → 放货）
 
 ---
 
-## L18 · 工作流引擎（Workflow Runtime）
+## L18 · 工作流引擎（Workflow Runtime）`[部分]`
 
-独立于 Agent 的工作流执行引擎，支持 6 种节点类型，用于复杂任务编排。
+### DAG 路径（已接主聊天，需开关）
+
+配置：`workflow.dag.enabled`（默认 `false`；`application-local.yml` 为 `true`）。
+
+| 模板 | 图结构 | 说明 |
+|------|--------|------|
+| JOB_CHANGE | RESUME ∥ NEGOTIATION → SYNTHESIZE | 跳槽：并行专家后综合 |
+| INTERVIEW | RESUME → GENERAL → SYNTHESIZE | 面试：串行后综合 |
+
+**执行**：`DagCompiler` → `DagWorkflowExecutor`（就绪队列 + `CompletableFuture` 并行）→ 真实 `AgentRunner` → `ResultAggregator.synthesizeDebate`。
+
+**接入点**：`OrchestratorAgent.tryDagWorkflow`；Matcher 命中且 confidence ≥ 0.6；SSE `collaboration.mode=DAG_WORKFLOW` + `agent-progress`；Trace：`WORKFLOW_MATCH` / `TASK_EXECUTION` / `RESULT_AGGREGATION`。
+
+**关键类**：`DagDefinition` / `DagNodeSpec` / `DagCompiler` / `DagWorkflowExecutor`；`WorkflowRuntime.startDag` 委托执行。
+
+### Legacy list 节点（脚手架，未接主聊天）
 
 | 节点类型 | 类 | 说明 |
 |----------|-----|------|
-| AgentNode | `AgentNode` | 委托给 Agent 执行 |
-| ToolNode | `ToolNode` | 直接调用 Tool |
-| ConditionNode | `ConditionNode` | 条件分支（SpEL 表达式） |
-| ParallelNode | `ParallelNode` | 并行执行多个子节点 |
-| LoopNode | `LoopNode` | 循环执行（最大迭代次数限制） |
-| ApprovalNode | `ApprovalNode` | 人工审批（暂停工作流） |
+| AgentNode | `AgentNode` | list 模式下仍为占位调度 |
+| ToolNode / Condition / Parallel / Loop / Approval | 对应 node 类 | 顺序 idx 推进，未接 Orchestrator |
 
 **工作流状态**：PENDING → RUNNING → PAUSED（等待审批）/ COMPLETED / FAILED / CANCELLED
-
-**执行流程**：
-```
-WorkflowRuntime.startWorkflow(workflowId, nodes, initialContext, userId, chatId)
-  → 创建 WorkflowInstance (status=RUNNING)
-  → 遍历 nodes，按顺序执行
-    ├─ AgentNode → 委托给指定 Agent
-    ├─ ToolNode → 直接调用 Tool
-    ├─ ConditionNode → 评估条件，选择分支
-    ├─ ParallelNode → 并行执行子节点
-    ├─ LoopNode → 循环执行（最大迭代次数限制）
-    └─ ApprovalNode → 暂停，等待人工审批
-  → 记录 StepRecord（节点ID、状态、结果、耗时）
-  → 更新 WorkflowInstance 状态
-  → 持久化到 WorkflowRepository
-```
-
-**关键类**：`WorkflowRuntime`（运行时引擎）、`WorkflowInstance`（实例状态）、`WorkflowRepository`（持久化）、`WorkflowNode`（节点基类，Jackson 多态序列化）
 
 ---
 
@@ -617,10 +640,16 @@ APPROVED → PUBLISHED（发布）
 
 | 等级 | 说明 | 策略 |
 |------|------|------|
-| TIMEOUT | 超时 | 建议直接重试（方向对，网络问题） |
+| TIMEOUT | 超时 | 只读工具可自动重试；副作用工具不重试（防重复执行） |
 | EMPTY | 空结果 | 建议换策略（不是重试能解决的） |
 | GARBAGE | 垃圾内容 | 过滤后建议换关键词（登录墙/付费墙/堆栈跟踪） |
 | NORMAL | 正常 | 不干预 |
+
+### ObservationSanitizer（工具 Observation 清洗）
+
+- 去 HTML / 省略长 Base64 / 压缩空白；超长截断并标注 `[System Note]`
+- 在 `ToolCallAgent.act()` 写入历史前执行，防止 Context 污染（教程 Ch3 Sanitizer Layer）
+- 与 `TokenBudgetManager` 互补：Sanitizer 管「脏数据」，Budget 管「档位压缩」
 
 ### TokenBudgetManager（Token 预算分级）
 
@@ -631,6 +660,78 @@ APPROVED → PUBLISHED（发布）
 | Compress | > 85% | 用 LLM 压缩历史 Observation，摘要化 |
 
 **关键取舍**：Think（AssistantMessage）绝对不动，只压缩 Observation（ToolResponseMessage）。因为"思考轨迹"比"原始搜索结果"对推理更有价值。
+
+### ConsecutiveFailureGuard（连续失败熔断）
+
+- Manus / `ToolCallAgent` 内：非 NORMAL 工具结果或 think 异常累计
+- 达阈值（默认 `app.hitl.max-consecutive-tool-errors=3`）→ 终止循环，可选 `HumanHandoffService.park`
+- 成功一次清零；与 LoopDetector 互补（Loop 管「重复调用」，本守卫管「连续失败」）
+- 专业术语：**Fail-fast**、**Circuit-like fuse**、**Human-in-the-loop (HITL) escalation**
+
+### Goal Anchor（本轮目标重插）
+
+- `GoalAnchor` + `ContextInjectionService`：专家路由每轮注入 `【本轮任务目标】`（注入链最前）
+- `OrchestratorAgent`：会话无 `activeGoal` 时用本轮用户话种入 SharedState
+- `ToolCallAgent.think()`：ReAct 每步把目标挂回 **system prompt**，防止长循环遗忘
+- 专业术语：**Goal grounding**、**Context forgetting mitigation**、**System-prompt re-anchoring**
+
+### Perception 感知预处理（L26 交叉 / 详见 L34）
+
+- 入口：`POST /api/perception/preprocess`（调试）与 **`POST /api/perception/preprocess-and-bind`**（联调推荐）
+- 绑定路径：材料写入 `SessionSharedState.lastPerceptionBlock`，SSE 只发短句（规避 EventSource GET URL 长度限制）
+- 感知路由：`suggestIntentFromPerception` → 有绑定材料时跳过模糊 NLU 澄清，直达 RESUME/NEGOTIATION
+- 详见下方 **L34** 与 [mm-agent-tutorial-ch1-落地.md](./mm-agent-tutorial-ch1-落地.md)
+
+---
+
+## L34 · 感知层 Perception（文档降维 → Agent）
+
+> 状态：`[闭环]`（职场顾问上传 → bind → 路由专家 → 注入分析）。混合检索 / OCR / VLM 精读为扩展桩。
+
+源自多模态 Agent 教程「Perception 不是把像素扔给 VLM，而是降维成语义流」与 **Budget Awareness（预算感知）**：先用便宜解析（PDFBox / POI / 启发式结构化），再进专家 Agent。
+
+### 端到端链路
+
+```
+前端 📎 上传 (resume.txt / PDF / docx)
+    → POST /api/perception/preprocess-and-bind
+         DocumentPerceptionService（抽文本 + ResumeOfferStructurer）
+         VisualPromptSanitizer（图片重采样 / 注入 scrub）
+         SessionSharedState.setPerceptionBlock + setActiveGoal
+    → SSE 短消息（含「简历/Offer」关键词或靠感知路由）
+         Orchestrator：perceptionIntent 优先于模糊 NLU
+         ContextInjection：Goal Anchor + SharedState（感知块置顶，上限 5000 字）
+    → ResumeAgent / NegotiationAgent 流式回答
+```
+
+### 组件与技术
+
+| 组件 | 路径 | 技术 / 术语 |
+|------|------|-------------|
+| `DocumentPerceptionService` | `perception/` | PDFBox 文字层；Apache POI `.docx`；启发式 **Information Extraction** |
+| `ResumeOfferStructurer` | 同上 | 零 LLM 抽 email/phone/薪资/学历（**cheap first pass**） |
+| `VisualPromptSanitizer` | 同上 | JPEG 重压缩抗对抗样本；文本 **Prompt Injection scrub** |
+| `PerceptionCrossValidator` | 同上 | 感知假设 vs 工具观测交叉验证（防 **Perceptual Hallucination**） |
+| `TextFirstHybridRetrieval` | `rag/hybrid/` | Text-first Hybrid Retrieval 桩（Caption Top-1，不全量塞图） |
+| `PerceptionAppService` | `service/` | Controller → AppService → Domain 分层 |
+| 前端 | `CareerAdvisor.vue` | `preprocessPerceptionAndBind`；类型 hint=resume/offer |
+
+### 格式支持
+
+| 格式 | 状态 |
+|------|------|
+| `.txt` / `.md` / `.csv` | ✅ |
+| `.pdf`（可选中文字） | ✅ PDFBox |
+| `.pdf` 扫描件 | ❌ 无 OCR |
+| `.docx` | ✅ POI |
+| `.doc` | ❌ 请另存 docx |
+| 图片 | ⚠️ 仅净化，无 OCR |
+
+### 联调踩坑（已修，面试可讲）
+
+1. **默认话术过泛** → NLU Ambiguity →「多个领域能否具体描述」→ 改为带「简历/Offer」默认句 + `suggestIntentFromPerception` 快路径  
+2. **SSE EventSource 只能 GET** → 长 `promptBlock` 撑爆 URL → **preprocess-and-bind** 写 SharedState  
+3. **SharedState 1800 字截断**把感知块砍掉 → 感知块置顶 + 有感知时上限 5000  
 
 ---
 
@@ -753,6 +854,10 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 | `user-profile.storage.dir` | `./tmp/user-profiles` | 画像目录 |
 | `profile.injection.max-chars` | `1000` | 画像注入字符上限 |
 | `sandbox.require-docker` | `false` | 生产环境是否强制要求 Docker |
+| `app.hitl.max-consecutive-tool-errors` | `3` | 工具连续失败熔断阈值，触发后可 HITL park |
+| `app.tools.idempotency-ttl-seconds` | `600` | 副作用工具幂等缓存 TTL |
+| `app.tools.async-task-ttl-seconds` | `3600` | Submit-Poll 异步任务保留时长 |
+| `app.hitl.*` | — | 终端/日历/写文件审批开关与 TTL |
 
 ---
 
@@ -771,8 +876,12 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 | MCP | GET | `/api/ai/ai_chat/mcp/sync` |
 | 结构化报告 | GET | `/api/ai/ai_chat/report/sync` |
 | 文档入库 | POST | `/api/document/upload` · `/api/document/add` |
+| 感知预处理 | POST | `/api/perception/preprocess` · `/api/perception/preprocess-and-bind` · `/api/perception/cross-check` |
 | 用户画像 | GET/DELETE | `/api/profile/me`（JWT） |
-| 交付物 | GET | `/api/artifact/list` · `/api/artifact/{id}`（管理员） |
+| 交付物 | GET | `/api/artifact/mine` · `/api/artifact/mine/{id}`（JWT）· `/api/artifact/list` · `/api/artifact/{id}`（管理员） |
+| 专家包 | GET/POST | `/api/pack/list` · `/api/pack/{packId}/enabled`（JWT） |
+| 技能 | GET/POST | `/api/skill/list` · `/api/skill/draft-from-trace` · `/api/skill/save`（JWT） |
+| 任务中心 | GET | `/api/task/mine` · `/api/task/sandbox-policy`（JWT） |
 | 会话 | - | `SessionController`（增删查/归档/搜索/消息历史） |
 | 收藏 | POST/DELETE/GET | `/api/favorite` · `/api/favorite/{id}` · `/api/favorite/list`（JWT） |
 | 用量 | GET | `/api/usage/stats`（JWT） |

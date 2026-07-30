@@ -69,6 +69,9 @@ class MemoryIntegrationTest {
     private ExtractionPipeline extractionPipeline;
 
     @Mock
+    private ExperienceQueryBuilder experienceQueryBuilder;
+
+    @Mock
     private UserProfileService userProfileService;
 
     @Mock
@@ -125,10 +128,12 @@ class MemoryIntegrationTest {
                 experienceStoreLayer,
                 budgetAllocator,
                 extractionPipeline,
+                experienceQueryBuilder,
                 directExecutor,
                 TIMEOUT_MS,
                 TOTAL_BUDGET
         );
+        lenient().when(experienceQueryBuilder.build(anyString(), any())).thenReturn("职场咨询历史");
     }
 
     /**
@@ -201,7 +206,7 @@ class MemoryIntegrationTest {
                     .thenReturn("user: 我最近在准备晋升\nassistant: 了解，我来帮你规划晋升路径");
 
             // --- Mock ExperienceStoreLayer (L4) — returns empty (realistic for new-ish user) ---
-            when(experienceStoreLayer.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStoreLayer.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // === Call assembleContext() ===
@@ -304,7 +309,7 @@ class MemoryIntegrationTest {
                     .thenReturn("");
 
             // ExperienceStoreLayer returns empty (no vector data)
-            when(experienceStoreLayer.searchSimilar(eq(newUserId), eq(CONVERSATION_ID)))
+            when(experienceStoreLayer.searchSimilar(eq(newUserId), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // === Call assembleContext() ===
@@ -439,7 +444,7 @@ class MemoryIntegrationTest {
             // Step 3: Mock external layers
             when(slidingWindowLayer.formatForContext(eq(CONVERSATION_ID), eq(AGENT_TYPE), anyInt()))
                     .thenReturn("user: 全栈学习进展如何\nassistant: 建议先从React基础开始");
-            when(experienceStoreLayer.searchSimilar(eq(USER_ID), eq(CONVERSATION_ID)))
+            when(experienceStoreLayer.searchSimilar(eq(USER_ID), anyString()))
                     .thenReturn(Collections.emptyList());
 
             // Step 4: Assemble context

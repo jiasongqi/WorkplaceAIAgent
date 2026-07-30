@@ -98,7 +98,7 @@ onMounted(loadFavorites)
   border: 0.5px solid var(--border); transition: all 0.2s;
 }
 .fav-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
-.fav-item.orphaned { opacity: 0.7; border-left: 3px solid #f59e0b; }
+.fav-item.orphaned { opacity: 0.7; border-left: 3px solid var(--warn); }
 
 .fav-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .fav-source { font-size: 12px; color: var(--text-muted); }

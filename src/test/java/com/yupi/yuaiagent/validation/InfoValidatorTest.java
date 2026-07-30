@@ -185,6 +185,31 @@ class InfoValidatorTest {
             Assertions.assertEquals(0, time.getMinute());
         }
 
+        @ParameterizedTest(name = "带空格相对时间: {0}")
+        @ValueSource(strings = {
+                "明天下午 3 点",
+                "明天下午3 点",
+                "预约职业方向梳理，明天下午 3 点"
+        })
+        @DisplayName("「明天下午 3 点」等带空格表达也能解析为次日 15:00")
+        void parseRelativeTomorrowAfternoonWithSpaces(String input) {
+            LocalDateTime time = validator.extractDateTime(input);
+            Assertions.assertNotNull(time, "应能解析: " + input);
+            Assertions.assertEquals(LocalDate.now().plusDays(1), time.toLocalDate());
+            Assertions.assertEquals(15, time.getHour());
+            Assertions.assertEquals(0, time.getMinute());
+        }
+
+        @Test
+        @DisplayName("「明天下午 3 点 30 分」带空格含分钟 -> 次日 15:30")
+        void parseRelativeTomorrowAfternoonWithSpacesAndMinutes() {
+            LocalDateTime time = validator.extractDateTime("明天下午 3 点 30 分");
+            Assertions.assertNotNull(time);
+            Assertions.assertEquals(LocalDate.now().plusDays(1), time.toLocalDate());
+            Assertions.assertEquals(15, time.getHour());
+            Assertions.assertEquals(30, time.getMinute());
+        }
+
         @Test
         @DisplayName("解析「后天 10:00」相对表达 -> 第三日 10:00")
         void parseRelativeDayAfterTomorrow() {

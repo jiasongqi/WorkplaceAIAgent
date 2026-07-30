@@ -1,7 +1,8 @@
 # WorkPilot Architecture / 架构设计
 
-> Last updated: 2026-06-26 (v1.5)
-> Capability layers: L0-L33
+> Last updated: 2026-07-29 (v1.7)  
+> Capability layers: L0–L34（含 Perception / Tool 工程 / Agent Loop）  
+> 功能详表：`docs/FEATURES.md` · 落地笔记：`mm-agent-tutorial-ch1/ch3/ch4-落地.md`
 
 ---
 
@@ -118,13 +119,11 @@
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │                    Tool System / 工具系统                              │  │
-│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐       │  │
-│  │  │   Tool     │ │   Tool     │ │   Tool     │ │   Rerank   │       │  │
-│  │  │  Registry  │ │  Discovery │ │  Callbacks │ │  Service   │       │  │
-│  │  │  工具注册表  │ │  自动发现   │ │  工具回调   │ │  重排序     │       │  │
-│  │  └────────────┘ └────────────┘ └────────────┘ └────────────┘       │  │
+│  │  Registry · Discovery · Callbacks · Idempotency · Async Submit-Poll  │  │
+│  │  Parallel Fan-out · ObservationSanitizer · FileHandle (file_id)     │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
+│  │  Perception / 感知 · Goal Anchor · Agent Loop (Wrap-up / Depth)       │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │                    Security & Workflow / 安全与工作流                   │  │
 │  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐       │  │

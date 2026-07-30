@@ -4,11 +4,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * @author jsq
  */
 @EnableAsync
+@EnableScheduling
 @SpringBootApplication(exclude = {
         // DashScope only — exclude Ollama to avoid ChatModel bean conflict
         OllamaChatAutoConfiguration.class

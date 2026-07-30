@@ -1,12 +1,17 @@
 package com.yupi.yuaiagent.agent;
 
+import com.yupi.yuaiagent.agent.goal.GoalAnchor;
 import com.yupi.yuaiagent.artifact.ArtifactShelf;
-import com.yupi.yuaiagent.artifact.model.Artifact;
-import com.yupi.yuaiagent.artifact.model.ArtifactQuery;
-import com.yupi.yuaiagent.artifact.model.ArtifactStatus;
+import com.yupi.yuaiagent.artifact.ArtifactTypeCatalog;
+import com.yupi.yuaiagent.artifact.recall.ArtifactRecallService;
+import com.yupi.yuaiagent.artifact.recall.RecallResult;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
+import com.yupi.yuaiagent.companion.UserCompanionService;
 import com.yupi.yuaiagent.message.PersistentMessageRepository;
+import com.yupi.yuaiagent.perception.PerceptionHybridContextService;
 import com.yupi.yuaiagent.profile.UserProfileService;
+import com.yupi.yuaiagent.service.DigitalEmployeeAppService;
+import com.yupi.yuaiagent.sessionstate.SessionSharedStateService;
 import com.yupi.yuaiagent.trace.TraceContext;
 import com.yupi.yuaiagent.trace.TraceRecorder;
 import com.yupi.yuaiagent.trace.model.TraceSpan;
@@ -20,7 +25,7 @@ import java.util.List;
 
 /**
  * Handles context injection into agent prompts:
- * user profile, ready artifacts, cross-agent conversation history.
+ * user profile, companion persona, digital employee, ready artifacts, cross-agent conversation history.
  *
  * <p>Extracted from OrchestratorAgent to reduce god-class complexity.
  *
@@ -30,18 +35,23 @@ import java.util.List;
 public class ContextInjectionService {
 
     private final UserProfileService userProfileService;
-    private final ArtifactShelf artifactShelf;
     private final PersistentMessageRepository messageRepository;
     private final ChatMemoryManager chatMemoryManager;
     private final TraceRecorder traceRecorder;
     private final com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService;
+    private final UserCompanionService userCompanionService;
+    private final DigitalEmployeeAppService digitalEmployeeAppService;
+    private final SessionSharedStateService sessionSharedStateService;
+    private final ArtifactRecallService artifactRecallService;
+    private final PerceptionHybridContextService perceptionHybridContextService;
 
     public ContextInjectionService(UserProfileService userProfileService,
                                    ArtifactShelf artifactShelf,
                                    PersistentMessageRepository messageRepository,
                                    ChatMemoryManager chatMemoryManager,
                                    TraceRecorder traceRecorder) {
-        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder, null);
+        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder,
+                null, null, null, null, null);
     }
 
     public ContextInjectionService(UserProfileService userProfileService,
@@ -50,12 +60,74 @@ public class ContextInjectionService {
                                    ChatMemoryManager chatMemoryManager,
                                    TraceRecorder traceRecorder,
                                    com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService) {
+        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder,
+                reflexionService, null, null, null, null);
+    }
+
+    public ContextInjectionService(UserProfileService userProfileService,
+                                   ArtifactShelf artifactShelf,
+                                   PersistentMessageRepository messageRepository,
+                                   ChatMemoryManager chatMemoryManager,
+                                   TraceRecorder traceRecorder,
+                                   com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
+                                   UserCompanionService userCompanionService,
+                                   DigitalEmployeeAppService digitalEmployeeAppService) {
+        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder,
+                reflexionService, userCompanionService, digitalEmployeeAppService, null, null);
+    }
+
+    public ContextInjectionService(UserProfileService userProfileService,
+                                   ArtifactShelf artifactShelf,
+                                   PersistentMessageRepository messageRepository,
+                                   ChatMemoryManager chatMemoryManager,
+                                   TraceRecorder traceRecorder,
+                                   com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
+                                   UserCompanionService userCompanionService,
+                                   DigitalEmployeeAppService digitalEmployeeAppService,
+                                   SessionSharedStateService sessionSharedStateService) {
+        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder,
+                reflexionService, userCompanionService, digitalEmployeeAppService,
+                sessionSharedStateService, null, null);
+    }
+
+    public ContextInjectionService(UserProfileService userProfileService,
+                                   ArtifactShelf artifactShelf,
+                                   PersistentMessageRepository messageRepository,
+                                   ChatMemoryManager chatMemoryManager,
+                                   TraceRecorder traceRecorder,
+                                   com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
+                                   UserCompanionService userCompanionService,
+                                   DigitalEmployeeAppService digitalEmployeeAppService,
+                                   SessionSharedStateService sessionSharedStateService,
+                                   ArtifactRecallService artifactRecallService) {
+        this(userProfileService, artifactShelf, messageRepository, chatMemoryManager, traceRecorder,
+                reflexionService, userCompanionService, digitalEmployeeAppService,
+                sessionSharedStateService, artifactRecallService, null);
+    }
+
+    public ContextInjectionService(UserProfileService userProfileService,
+                                   ArtifactShelf artifactShelf,
+                                   PersistentMessageRepository messageRepository,
+                                   ChatMemoryManager chatMemoryManager,
+                                   TraceRecorder traceRecorder,
+                                   com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
+                                   UserCompanionService userCompanionService,
+                                   DigitalEmployeeAppService digitalEmployeeAppService,
+                                   SessionSharedStateService sessionSharedStateService,
+                                   ArtifactRecallService artifactRecallService,
+                                   PerceptionHybridContextService perceptionHybridContextService) {
         this.userProfileService = userProfileService;
-        this.artifactShelf = artifactShelf;
         this.messageRepository = messageRepository;
         this.chatMemoryManager = chatMemoryManager;
         this.traceRecorder = traceRecorder;
         this.reflexionService = reflexionService;
+        this.userCompanionService = userCompanionService;
+        this.digitalEmployeeAppService = digitalEmployeeAppService;
+        this.sessionSharedStateService = sessionSharedStateService;
+        this.perceptionHybridContextService = perceptionHybridContextService;
+        this.artifactRecallService = artifactRecallService != null
+                ? artifactRecallService
+                : new ArtifactRecallService(artifactShelf, ArtifactTypeCatalog.defaults(), 3, 1200);
     }
 
     /**
@@ -70,8 +142,8 @@ public class ContextInjectionService {
     }
 
     /**
-     * Builds the combined injection context (profile + artifacts + cross-agent history +
-     * per-intent reflexion failure memory).
+     * Builds the combined injection context (profile + companion + digital employee + artifacts +
+     * cross-agent history + per-intent reflexion failure memory).
      *
      * @param taskType the resolved routing intent name (e.g. "RESUME", "NEGOTIATION"), used to
      *                 scope {@link com.yupi.yuaiagent.agent.reflexion.ReflexionService} lookups
@@ -79,22 +151,91 @@ public class ContextInjectionService {
      * @return combined context string, or empty if nothing to inject
      */
     public String buildCombinedInjection(String userId, String chatId, TraceContext traceCtx, String taskType) {
+        return buildCombinedInjectionResult(userId, chatId, traceCtx, taskType, "").text();
+    }
+
+    /**
+     * Builds context and returns the artifact ids offered to the target Agent.
+     */
+    public InjectionResult buildCombinedInjectionResult(String userId, String chatId,
+                                                        TraceContext traceCtx, String taskType,
+                                                        String queryText) {
+        // Goal anchor FIRST — re-injected every turn to prevent long-context forgetting
+        String activeGoal = "";
+        if (sessionSharedStateService != null && StringUtils.hasText(chatId)) {
+            try {
+                activeGoal = sessionSharedStateService.getOrCreate(chatId, userId).getActiveGoal();
+            } catch (Exception e) {
+                log.debug("Active goal lookup skipped: {}", e.getMessage());
+            }
+        }
+        String goalBlock = GoalAnchor.buildBlock(activeGoal, queryText, taskType);
+
         // Profile injection
         TraceSpan profileSpan = traceRecorder.startSpan(traceCtx, TraceStepType.PROFILE_INJECTION, "画像注入");
         String profileInjection = StringUtils.hasText(userId)
                 ? userProfileService.buildPromptInjection(userId) : "";
         traceRecorder.putMetadata(profileSpan, "hasProfile", String.valueOf(StringUtils.hasText(profileInjection)));
+        traceRecorder.putMetadata(profileSpan, "hasGoalAnchor", String.valueOf(StringUtils.hasText(goalBlock)));
         traceRecorder.endSpan(traceCtx, profileSpan);
+
+        String companionInjection = "";
+        if (userCompanionService != null && StringUtils.hasText(userId)) {
+            try {
+                companionInjection = userCompanionService.buildPromptInjection(userId);
+            } catch (Exception e) {
+                log.debug("Companion injection skipped: {}", e.getMessage());
+            }
+        }
+
+        String digitalEmployeeInjection = "";
+        if (digitalEmployeeAppService != null && StringUtils.hasText(userId)) {
+            try {
+                digitalEmployeeInjection = digitalEmployeeAppService.buildActiveInjection(userId);
+            } catch (Exception e) {
+                log.debug("Digital employee injection skipped: {}", e.getMessage());
+            }
+        }
+
+        String sharedStateInjection = "";
+        if (sessionSharedStateService != null && StringUtils.hasText(chatId)) {
+            try {
+                sharedStateInjection = sessionSharedStateService.buildPromptInjection(chatId, userId);
+            } catch (Exception e) {
+                log.debug("Shared session state injection skipped: {}", e.getMessage());
+            }
+        }
 
         // Artifact query
         TraceSpan artifactQuerySpan = traceRecorder.startSpan(traceCtx, TraceStepType.ARTIFACT_QUERY, "交付物查询");
-        List<Artifact> readyArtifacts = queryReadyArtifacts(userId, chatId);
-        String artifactContext = buildArtifactContext(readyArtifacts);
-        traceRecorder.putMetadata(artifactQuerySpan, "foundCount", String.valueOf(readyArtifacts.size()));
+        RecallResult recallResult;
+        try {
+            recallResult = artifactRecallService.recall(userId, chatId, taskType, queryText);
+        } catch (Exception e) {
+            log.warn("交付物召回失败，降级为空上下文，userId={}, chatId={}", userId, chatId, e);
+            recallResult = RecallResult.empty();
+        }
+        String artifactContext = recallResult.injectionText();
+        traceRecorder.putMetadata(artifactQuerySpan, "foundCount",
+                String.valueOf(recallResult.offeredArtifactIds().size()));
         traceRecorder.endSpan(traceCtx, artifactQuerySpan);
 
-        // Merge
-        String combined = mergeInjection(profileInjection, artifactContext);
+        // Merge: Goal → persona → shared structured state → artifacts → cross-agent transcript
+        String combined = mergeInjection(goalBlock, profileInjection);
+        combined = mergeInjection(combined, companionInjection);
+        combined = mergeInjection(combined, digitalEmployeeInjection);
+        combined = mergeInjection(combined, sharedStateInjection);
+        combined = mergeInjection(combined, artifactContext);
+
+        if (perceptionHybridContextService != null && StringUtils.hasText(queryText) && StringUtils.hasText(chatId)) {
+            try {
+                String hybrid = perceptionHybridContextService.buildHybridContext(chatId, userId, queryText);
+                combined = mergeInjection(combined, hybrid);
+            } catch (Exception e) {
+                log.debug("Perception hybrid injection skipped: {}", e.getMessage());
+            }
+        }
+
         String crossAgentContext = buildCrossAgentContext(chatId);
         if (StringUtils.hasText(crossAgentContext)) {
             combined = mergeInjection(combined, crossAgentContext);
@@ -112,13 +253,7 @@ public class ContextInjectionService {
             }
         }
 
-        // Mark consumed
-        TraceSpan consumeSpan = traceRecorder.startSpan(traceCtx, TraceStepType.ARTIFACT_CONSUME, "交付物消费");
-        markArtifactsConsumed(readyArtifacts);
-        traceRecorder.putMetadata(consumeSpan, "consumedCount", String.valueOf(readyArtifacts.size()));
-        traceRecorder.endSpan(traceCtx, consumeSpan);
-
-        return combined;
+        return new InjectionResult(combined, recallResult.offeredArtifactIds());
     }
 
     /**
@@ -197,36 +332,6 @@ public class ContextInjectionService {
 
     // ── Private helpers ──
 
-    private List<Artifact> queryReadyArtifacts(String userId, String chatId) {
-        if (!StringUtils.hasText(userId) && !StringUtils.hasText(chatId)) {
-            return List.of();
-        }
-        try {
-            return artifactShelf.query(ArtifactQuery.builder()
-                    .userId(StringUtils.hasText(userId) ? userId : null)
-                    .chatId(StringUtils.hasText(chatId) ? chatId : null)
-                    .status(ArtifactStatus.READY)
-                    .build());
-        } catch (Exception e) {
-            log.error("查询 READY 交付物失败，降级为不注入交付物，userId={}, chatId={}", userId, chatId, e);
-            return List.of();
-        }
-    }
-
-    private String buildArtifactContext(List<Artifact> readyArtifacts) {
-        if (readyArtifacts == null || readyArtifacts.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder("【参考交付物】以下是与本次对话相关的已就绪交付物，请在回答时参考：\n");
-        for (Artifact artifact : readyArtifacts) {
-            String title = StringUtils.hasText(artifact.getTitle()) ? artifact.getTitle() : "（无标题）";
-            String content = artifact.getContent() != null ? artifact.getContent() : "";
-            sb.append("- ").append(title).append("：").append(content).append("\n");
-        }
-        log.info("注入 {} 个 READY 交付物到子 Agent 上下文", readyArtifacts.size());
-        return sb.toString();
-    }
-
     private String buildCrossAgentContext(String chatId) {
         try {
             var messages = messageRepository.findByChatId(chatId);
@@ -235,7 +340,8 @@ public class ContextInjectionService {
             int from = Math.max(0, messages.size() - 10);
             var recent = messages.subList(from, messages.size());
 
-            StringBuilder sb = new StringBuilder("【近期对话记录】以下是本会话中与其他顾问的对话摘要，请参考上下文回答：\n");
+            StringBuilder sb = new StringBuilder(
+                    "【近期对话记录】以下是本会话摘要（优先级低于 Shared Session State 中的结构化事实；冲突时以事实/预约编号为准）：\n");
             for (var msg : recent) {
                 String role = "user".equals(msg.getRole()) ? "用户" : "AI";
                 String content = msg.getContent();
@@ -248,28 +354,6 @@ public class ContextInjectionService {
         } catch (Exception e) {
             log.warn("构建跨 Agent 上下文失败", e);
             return "";
-        }
-    }
-
-    private void markArtifactsConsumed(List<Artifact> consumedArtifacts) {
-        if (consumedArtifacts == null || consumedArtifacts.isEmpty()) {
-            return;
-        }
-        for (Artifact artifact : consumedArtifacts) {
-            String artifactId = artifact.getArtifactId();
-            if (!StringUtils.hasText(artifactId)) {
-                continue;
-            }
-            try {
-                boolean marked = artifactShelf.markConsumed(artifactId);
-                if (marked) {
-                    log.info("交付物已标记为 CONSUMED，artifactId={}", artifactId);
-                } else {
-                    log.warn("标记交付物消费失败（可能已不存在），artifactId={}", artifactId);
-                }
-            } catch (Exception e) {
-                log.error("标记交付物消费异常，artifactId={}", artifactId, e);
-            }
         }
     }
 
@@ -286,5 +370,12 @@ public class ContextInjectionService {
             return artifactContext;
         }
         return "";
+    }
+
+    public record InjectionResult(String text, List<String> offeredArtifactIds) {
+        public InjectionResult {
+            text = text == null ? "" : text;
+            offeredArtifactIds = offeredArtifactIds == null ? List.of() : List.copyOf(offeredArtifactIds);
+        }
     }
 }

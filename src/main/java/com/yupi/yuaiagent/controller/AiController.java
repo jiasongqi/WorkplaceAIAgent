@@ -1,9 +1,16 @@
 package com.yupi.yuaiagent.controller;
 
 import com.yupi.yuaiagent.agent.YuManus;
+import com.yupi.yuaiagent.agent.goal.GoalAnchor;
+import com.yupi.yuaiagent.agent.loop.LoopRunBudget;
 import com.yupi.yuaiagent.app.AiChatAgent;
 import com.yupi.yuaiagent.auth.AuthService;
+import com.yupi.yuaiagent.auth.UserQuotaService;
+import com.yupi.yuaiagent.auth.UserRole;
+import com.yupi.yuaiagent.budget.TokenBudgetManager;
 import com.yupi.yuaiagent.common.Response;
+import com.yupi.yuaiagent.guard.ConsecutiveFailureGuard;
+import com.yupi.yuaiagent.hitl.HumanHandoffService;
 import com.yupi.yuaiagent.service.OrchestratorAppService;
 import com.yupi.yuaiagent.trace.TraceContext;
 import com.yupi.yuaiagent.trace.TraceRecorder;
@@ -14,6 +21,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.validation.annotation.Validated;
@@ -47,6 +55,23 @@ public class AiController {
 
     @Resource
     private TraceRecorder traceRecorder;
+
+    @Resource
+    private HumanHandoffService humanHandoffService;
+
+    @Resource
+    private UserQuotaService userQuotaService;
+
+    @Resource
+    private TokenBudgetManager tokenBudgetManager;
+
+    @Value("${app.hitl.max-consecutive-tool-errors:3}")
+    private int maxConsecutiveToolErrors;
+
+    @Value("${agent.guard.loop-run.max-tokens:25000}")
+    private int loopRunMaxTokens;
+
+    private static final String MANUS_ANONYMOUS_USER = "manus";
 
     // ==================== 职场顾问（基础对话）====================
 
@@ -155,6 +180,17 @@ public class AiController {
         TraceContext traceCtx = traceRecorder.startTrace(null, null, requestId);
         yuManus.setTraceContext(traceCtx);
         yuManus.setTraceRecorder(traceRecorder);
+        // Goal Anchor + consecutive-failure fuse (mm_agent_tutorial Ch1)
+        yuManus.setTurnGoal(GoalAnchor.resolveGoal(null, message));
+        yuManus.setConsecutiveFailureGuard(new ConsecutiveFailureGuard(maxConsecutiveToolErrors));
+        yuManus.setChatId("manus-" + requestId);
+        yuManus.setUserId(MANUS_ANONYMOUS_USER);
+        yuManus.setHumanHandoffService(humanHandoffService);
+        yuManus.setTokenBudgetManager(tokenBudgetManager);
+        LoopRunBudget runBudget = LoopRunBudget.create(
+                userQuotaService, MANUS_ANONYMOUS_USER, UserRole.GUEST, loopRunMaxTokens);
+        yuManus.setRunBudget(runBudget);
+        yuManus.setRunTokenFinalizer(tokens -> userQuotaService.addTokenUsage(MANUS_ANONYMOUS_USER, tokens));
         return yuManus.runStream(message);
     }
 

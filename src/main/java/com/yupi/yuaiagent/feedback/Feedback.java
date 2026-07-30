@@ -5,6 +5,9 @@ import java.time.LocalDateTime;
 /**
  * User Feedback — captures thumbs up/down ratings on agent responses.
  *
+ * <p>TODO(five-star): extend with optional 1-5 star score (schema + API + UI),
+ * map score &lt;= 2 to the same Reflexion writeback path as DOWN. Not in current release.
+ *
  * @param id         feedback ID
  * @param userId     user who gave feedback
  * @param chatId     chat session ID

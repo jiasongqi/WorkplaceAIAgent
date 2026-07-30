@@ -229,7 +229,11 @@ public class AgentCollaborationCoordinator {
     }
 
     /**
-     * Failover after quality review rejects the answer (called by Orchestrator).
+     * Quality review rejected the answer — Request-Reply-Repair then failover:
+     * <ol>
+     *   <li>Same expert once with structured NACK (issues + suggestion)</li>
+     *   <li>If repair still weak / throws → GENERAL failover</li>
+     * </ol>
      */
     public CollaborationResult failoverAfterQuality(
             AgentIntent failedIntent,
@@ -239,8 +243,95 @@ public class AgentCollaborationCoordinator {
             String userId,
             ExpertInvoker invoker,
             List<ExpertOpinion> priorOpinions) {
-        return failover(failedIntent, "质量审查未通过: " + qualityReason,
+        return failoverAfterQuality(failedIntent, qualityReason, null, null,
                 userMessage, chatId, userId, invoker, priorOpinions);
+    }
+
+    /**
+     * Same as {@link #failoverAfterQuality(AgentIntent, String, String, String, String, ExpertInvoker, List)}
+     * with optional quality issues / suggestions for richer NACK.
+     */
+    public CollaborationResult failoverAfterQuality(
+            AgentIntent failedIntent,
+            String qualityReason,
+            List<String> issues,
+            List<String> suggestions,
+            String userMessage,
+            String chatId,
+            String userId,
+            ExpertInvoker invoker,
+            List<ExpertOpinion> priorOpinions) {
+
+        String reason = "质量审查未通过: " + (qualityReason != null ? qualityReason : "low_score");
+
+        // Already GENERAL — skip self-repair thrash; surface or honest message via failover()
+        if (failedIntent == AgentIntent.GENERAL) {
+            return failover(failedIntent, reason, userMessage, chatId, userId, invoker, priorOpinions);
+        }
+
+        // ── Attempt 1: same-expert SELF_REPAIR ──
+        String repairInjection = buildQualityNackInjection(failedIntent, reason, issues, suggestions);
+        long start = System.currentTimeMillis();
+        executionMetrics.recordExecutionStart(failedIntent.name());
+        try {
+            String repaired = invoker.invoke(failedIntent, repairInjection);
+            long duration = System.currentTimeMillis() - start;
+            boolean ok = isAcceptableRepair(repaired);
+            executionMetrics.recordExecutionEnd(failedIntent.name(), duration, 0, 0, 1, ok);
+
+            if (ok) {
+                log.info("[Collaboration] SELF_REPAIR {} succeeded after quality NACK", failedIntent.name());
+                recordReflexion(userId, failedIntent, reason, "self_repair");
+                String handoffId = writeHandoffArtifact(chatId, userId, failedIntent, failedIntent,
+                        "self_repair: " + reason);
+                List<ExpertOpinion> all = new ArrayList<>(priorOpinions != null ? priorOpinions : List.of());
+                all.add(ExpertOpinion.ok(failedIntent, repaired, duration));
+                return new CollaborationResult(
+                        CollaborationResult.Mode.SELF_REPAIR,
+                        repaired,
+                        all,
+                        failedIntent,
+                        null,
+                        reason,
+                        handoffId);
+            }
+            log.info("[Collaboration] SELF_REPAIR {} too weak, escalating to GENERAL", failedIntent.name());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - start;
+            executionMetrics.recordExecutionEnd(failedIntent.name(), duration, 0, 0, 1, false);
+            log.warn("[Collaboration] SELF_REPAIR {} failed: {}", failedIntent.name(), e.getMessage());
+            reason = reason + " / self_repair_error: " + e.getMessage();
+        }
+
+        // ── Attempt 2: failover GENERAL ──
+        return failover(failedIntent, reason, userMessage, chatId, userId, invoker, priorOpinions);
+    }
+
+    private static String buildQualityNackInjection(AgentIntent intent, String reason,
+                                                    List<String> issues, List<String> suggestions) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("【Handoff NACK — 质量审查未通过，请自我修复后重答】\n");
+        sb.append("- 你仍是「").append(intent.getAgentName()).append("」，不要换角色。\n");
+        sb.append("- 失败原因：").append(reason).append('\n');
+        if (issues != null && !issues.isEmpty()) {
+            sb.append("- 问题点：").append(String.join("；", issues)).append('\n');
+        }
+        if (suggestions != null && !suggestions.isEmpty()) {
+            sb.append("- 修复建议：").append(String.join("；", suggestions)).append('\n');
+        } else {
+            sb.append("- 修复建议：补全缺失信息、去掉幻觉引用、给出可执行步骤，勿重复上一版空话。\n");
+        }
+        sb.append("- 要求：直接输出改进后的完整回答，不要解释审查流程。\n");
+        return sb.toString();
+    }
+
+    private static boolean isAcceptableRepair(String answer) {
+        if (!StringUtils.hasText(answer)) {
+            return false;
+        }
+        String t = answer.trim();
+        // CJK answers are dense; 30 chars is enough to reject empty / one-liner repairs
+        return t.length() >= 30;
     }
 
     private CollaborationResult failover(
@@ -318,6 +409,9 @@ public class AgentCollaborationCoordinator {
 
     private String writeDebateArtifact(String chatId, String userId, String question,
                                        List<ExpertOpinion> successes, String synthesized) {
+        if (!StringUtils.hasText(userId)) {
+            return null;
+        }
         try {
             StringBuilder content = new StringBuilder();
             content.append("question: ").append(question).append("\n\n");
@@ -334,7 +428,8 @@ public class AgentCollaborationCoordinator {
                     .producer("AgentCollaborationCoordinator")
                     .title("多专家并行辩论记录")
                     .content(content.toString())
-                    .status(ArtifactStatus.READY)
+                    .status(ArtifactStatus.PUBLISHED)
+                    .reusable(false)
                     .scope(ArtifactScope.TASK)
                     .build();
             ArtifactShelf.PutResult put = artifactShelf.put(artifact);
@@ -348,23 +443,47 @@ public class AgentCollaborationCoordinator {
 
     private String writeHandoffArtifact(String chatId, String userId,
                                         AgentIntent from, AgentIntent to, String reason) {
+        if (!StringUtils.hasText(userId)) {
+            return null;
+        }
         try {
-            String content = """
-                    {"from":"%s","to":"%s","reason":"%s","targetAgent":"%s"}
+            boolean selfRepair = from != null && to != null && from == to;
+            String objective = selfRepair ? "self_repair" : "failover_repair";
+            String dod = selfRepair
+                    ? "原专家按 NACK 修复后给出可执行回答"
+                    : "备用顾问给出可执行回答";
+            // Build raw then clean through middleware (Schema Promise Break guard)
+            String raw = """
+                    {
+                      "meta": {"from":"%s","to":"%s","producer":"AgentCollaborationCoordinator"},
+                      "mission": {"objective":"%s","definitionOfDone":"%s"},
+                      "context": {"reason":"%s","userOriginalIntent":"quality_or_execution_failure"},
+                      "artifacts": {},
+                      "scope": ["general.*","rag.query"],
+                      "targetAgent":"%s"
+                    }
                     """.formatted(
                     from.name(),
                     to != null ? to.name() : "NONE",
-                    reason == null ? "" : reason.replace("\"", "'"),
+                    objective,
+                    dod,
+                    reason == null ? "" : reason.replace("\"", "'").replace("\n", " "),
                     to != null ? to.name() : "NONE");
+
+            String content = com.yupi.yuaiagent.sessionstate.HandoffPacketParser
+                    .extractJsonObject(raw)
+                    .orElseThrow(() -> new IllegalStateException("handoff JSON clean failed"));
 
             Artifact artifact = Artifact.builder()
                     .userId(userId)
                     .chatId(chatId)
                     .type(ARTIFACT_TYPE_HANDOFF)
                     .producer("AgentCollaborationCoordinator")
-                    .title("Agent 换人交接: " + from.name() + " → " + (to != null ? to.name() : "NONE"))
+                    .title((selfRepair ? "质量自修复: " : "Agent 换人交接: ")
+                            + from.name() + " → " + (to != null ? to.name() : "NONE"))
                     .content(content)
-                    .status(ArtifactStatus.READY)
+                    .status(ArtifactStatus.PUBLISHED)
+                    .reusable(false)
                     .scope(ArtifactScope.TASK)
                     .build();
             ArtifactShelf.PutResult put = artifactShelf.put(artifact);

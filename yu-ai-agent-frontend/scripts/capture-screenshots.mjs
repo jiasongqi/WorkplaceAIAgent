@@ -1,6 +1,7 @@
 /**
  * Headless Edge screenshots via CDP (no extra deps).
  * Usage: node scripts/capture-screenshots.mjs
+ * Optional: BASE=http://[::1]:3000  EDGE_PATH=...
  */
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -15,7 +16,7 @@ const EDGE = process.env.EDGE_PATH ||
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const PORT = 9466
 const userData = path.join(ROOT, 'tmp-edge-cdp-2')
-const BASE = 'http://localhost:3000'
+const BASE = process.env.BASE || 'http://[::1]:3000'
 
 const PAGES = [
   { name: 'screenshot-login.png', url: `${BASE}/login`, waitMs: 2800 },
@@ -23,6 +24,24 @@ const PAGES = [
   { name: 'screenshot-career.png', url: `${BASE}/chat/career`, waitMs: 4000, guest: true },
   { name: 'screenshot-super.png', url: `${BASE}/chat/super`, waitMs: 3500, guest: true },
   { name: 'screenshot-knowledge.png', url: `${BASE}/knowledge`, waitMs: 3500, guest: true },
+  {
+    name: 'screenshot-companion.png',
+    url: `${BASE}/chat/career`,
+    waitMs: 4500,
+    guest: true,
+    click: '.top-pill.companion',
+    waitSel: '.overlay-badge.companion',
+    waitAfterClickMs: 1200,
+  },
+  {
+    name: 'screenshot-digital-employee.png',
+    url: `${BASE}/chat/career`,
+    waitMs: 4500,
+    guest: true,
+    click: '.top-pill.employee',
+    waitSel: '.overlay-badge.employee',
+    waitAfterClickMs: 1500,
+  },
 ]
 
 async function cdp(ws, method, params = {}, sessionId) {
@@ -51,7 +70,7 @@ async function fetchJson(url) {
 }
 
 async function guestLogin() {
-  const url = 'http://localhost:8123/api/session/login?username=' +
+  const url = 'http://127.0.0.1:8123/api/session/login?username=' +
     encodeURIComponent('游客') + '&password=' + encodeURIComponent('workpilot-local')
   try {
     const res = await fetch(url, { method: 'POST' })
@@ -66,6 +85,23 @@ async function guestLogin() {
     console.warn('guest login skipped:', e.message)
     return null
   }
+}
+
+async function waitForPage(ws, sessionId) {
+  for (let i = 0; i < 20; i++) {
+    const { result } = await cdp(ws, 'Runtime.evaluate', {
+      expression: `(() => {
+        const t = document.querySelector('#app')?.innerText?.trim() || '';
+        const hasTop = !!document.querySelector('.topbar, .logo-text, .login-page, .home, .chat-layout, .chat-core');
+        return { len: t.length, hasTop, href: location.href };
+      })()`,
+      returnByValue: true,
+    }, sessionId)
+    const v = result?.value || {}
+    if (v.len > 40 && v.hasTop) return v
+    await sleep(500)
+  }
+  return null
 }
 
 async function main() {
@@ -104,6 +140,7 @@ async function main() {
   })
 
   const auth = await guestLogin()
+  console.log('BASE=', BASE, 'auth=', auth?.username || 'none')
 
   for (const page of PAGES) {
     const { targetId } = await cdp(ws, 'Target.createTarget', { url: 'about:blank' })
@@ -120,7 +157,6 @@ localStorage.setItem('username', ${JSON.stringify(auth.username)});
 localStorage.setItem('role', ${JSON.stringify(auth.role)});`,
       }, sessionId)
     } else if (!page.guest) {
-      // Ensure login page isn't polluted by leftover auth from shared profile
       await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', {
         source: `localStorage.removeItem('token'); localStorage.removeItem('username'); localStorage.removeItem('role');`,
       }, sessionId)
@@ -129,22 +165,22 @@ localStorage.setItem('role', ${JSON.stringify(auth.role)});`,
     const nav = await cdp(ws, 'Page.navigate', { url: page.url }, sessionId)
     if (nav?.errorText) console.warn('nav warn', page.name, nav.errorText)
     await sleep(page.waitMs)
+    await waitForPage(ws, sessionId)
+    await sleep(800)
 
-    // Wait for meaningful content
-    for (let i = 0; i < 15; i++) {
+    if (page.click) {
       const { result } = await cdp(ws, 'Runtime.evaluate', {
         expression: `(() => {
-          const t = document.querySelector('#app')?.innerText?.trim() || '';
-          const hasTop = !!document.querySelector('.topbar, .logo-text, .login-page, .home, .chat-layout');
-          return { len: t.length, hasTop, href: location.href };
+          const el = document.querySelector(${JSON.stringify(page.click)});
+          if (!el) return { ok: false, reason: 'missing' };
+          el.click();
+          return { ok: true, text: (el.innerText || '').trim() };
         })()`,
         returnByValue: true,
       }, sessionId)
-      const v = result?.value || {}
-      if (v.len > 40 && v.hasTop) break
-      await sleep(500)
+      console.log('click', page.name, result?.value)
+      await sleep(page.waitAfterClickMs || 1200)
     }
-    await sleep(1000)
 
     const shot = await cdp(ws, 'Page.captureScreenshot', {
       format: 'png',

@@ -366,12 +366,13 @@ public class InfoValidator {
             // 尝试解析时间部分
             LocalDateTime baseTime = LocalDateTime.now().plusDays(daysToAdd);
             
-            // 转换中文数字为阿拉伯数字
+            // 转换中文数字为阿拉伯数字；去掉空白，兼容「明天下午 3 点」
             String normalized = timePart
                     .replace("零", "0").replace("〇", "0")
                     .replace("一", "1").replace("二", "2").replace("两", "2")
                     .replace("三", "3").replace("四", "4").replace("五", "5")
-                    .replace("六", "6").replace("七", "7").replace("八", "8").replace("九", "9");
+                    .replace("六", "6").replace("七", "7").replace("八", "8").replace("九", "9")
+                    .replaceAll("\\s+", "");
             
             // 尝试解析 "PM3点" 或 "PM3点30分" 这种格式
             if (normalized.matches(".*[AP]M\\d+点.*")) {

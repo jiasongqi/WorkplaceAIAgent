@@ -8,8 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
-import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -80,16 +78,14 @@ public class ArtifactShelf {
         if (condition == null) {
             condition = ArtifactQuery.builder().build();
         }
-        final ArtifactQuery c = condition;
-        return artifactRepository.findAll().stream()
-                .filter(a -> c.getUserId() == null || c.getUserId().equals(a.getUserId()))
-                .filter(a -> c.getChatId() == null || c.getChatId().equals(a.getChatId()))
-                .filter(a -> c.getType() == null || c.getType().equals(a.getType()))
-                .filter(a -> c.getScope() == null || c.getScope() == a.getScope())
-                .filter(a -> c.getStatus() == null || c.getStatus() == a.getStatus())
-                .sorted(Comparator.comparing(Artifact::getCreatedAt,
-                        Comparator.nullsLast(Comparator.naturalOrder())).reversed())
-                .toList();
+        return artifactRepository.find(condition);
+    }
+
+    /**
+     * 按发布去重键读取，供幂等发布入口使用。
+     */
+    public Optional<Artifact> findByDedupKey(String dedupKey) {
+        return artifactRepository.findByDedupKey(dedupKey);
     }
 
     /**

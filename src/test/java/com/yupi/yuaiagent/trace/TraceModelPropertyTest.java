@@ -40,7 +40,7 @@ class TraceModelPropertyTest {
     @Test
     @DisplayName("TraceStepType 应有 14 个取值")
     void stepTypeHasExactly14Values() {
-        assertThat(TraceStepType.values()).hasSize(14);
+        assertThat(TraceStepType.values()).hasSize(20);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

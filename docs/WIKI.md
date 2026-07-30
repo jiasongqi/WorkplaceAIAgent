@@ -1,8 +1,9 @@
 # WorkPilot 项目功能 Wiki
 
-> 更新日期：2026-07-20 (v1.6 — java-v3-db：PostgreSQL/JPA · Auth refresh/quota · HITL · SuperAgent SSE)  
+> 更新日期：2026-07-27 (v1.7 — 个人伙伴 · 数字员工 · 建议动作 · 反馈闭环写回)  
 > 品牌名：WorkPilot（职场生存智囊）  
-> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope + PostgreSQL（可选）
+> 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope + PostgreSQL（可选）  
+> 英文版：[WIKI.en.md](./WIKI.en.md)
 
 ---
 
@@ -23,6 +24,7 @@
 - [十三、配置清单](#十三配置清单)
 - [十四、评测与质量](#十四评测与质量)
 - [十五、Agent 注册与 Prompt 管理](#十五agent-注册与-prompt-管理)
+- [附录 · 产品截图](#附录--产品截图)
 
 ---
 
@@ -37,6 +39,8 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 | 离职规划 | 离职信撰写、交接清单、劳动权益 | EscapeAgent |
 | 预约咨询 | 信息收集追问、企业日历创建 | ConsultationAgent |
 | 通用职场 | 人际关系、压力管理、职业规划 | GeneralCareerAgent |
+| 个人伙伴 | 每用户一份可进化人设，注入主控上下文 | UserCompanion → Orchestrator |
+| 数字员工 | 模板创建专精员工，激活后委托对话 | DigitalEmployee + 子 Agent |
 | 复杂任务 | 联网搜索、PDF 生成、代码执行 | YuManus (超级智能体) |
 | 沟通助手 | 情感顾问、恋爱问题解答 | LoveMaster（隐藏路由） |
 
@@ -47,8 +51,8 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Frontend (Vue 3)                         │
-│  Home · CareerAdvisor · SuperAgent · Knowledge · Artifacts ...   │
-│  Favorites · Usage · TraceDetail · CompareView · LoveMaster      │
+│  Home · CareerAdvisor（伙伴/数字员工）· SuperAgent · Knowledge · ...   │
+│  Favorites · Usage（含反馈统计）· TraceDetail · CompareView              │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │ SSE / REST (JWT Auth)
 ┌───────────────────────────────┼─────────────────────────────────┐
@@ -56,7 +60,8 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 │  AiController · SessionController · DocumentController · ...     │
 ├───────────────────────────────┼─────────────────────────────────┤
 │                      AppService Layer                            │
-│  OrchestratorAppService · SessionAppService · FavoriteAppService │
+│  OrchestratorAppService · SessionAppService · FeedbackAppService       │
+│  DigitalEmployeeAppService · FavoriteAppService · ...                  │
 ├───────────────────────────────┼─────────────────────────────────┤
 │                      Agent Layer (Core)                          │
 │  ┌─────────────────────────────────────────────────────────┐    │
@@ -67,11 +72,13 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 │  │    ├─ WorkflowMatcher (工作流匹配)                        │    │
 │  │    ├─ TaskExecutor (V2任务执行)                           │    │
 │  │    ├─ ResultAggregator (结果聚合)                         │    │
-│  │    ├─ ContextInjectionService (上下文注入)                │    │
+│  │    ├─ ContextInjectionService (画像/伙伴/数字员工注入)           │    │
+│  │    ├─ SuggestedActions (回复后建议动作 SSE)                      │    │
 │  │    └─ QualityReviewHandler (质量审查)                     │    │
 │  ├─────────────────────────────────────────────────────────┤    │
 │  │  专业子 Agent: Resume · Negotiation · Escape · General   │    │
 │  │  AgentRunner 适配层: ResumeAgentRunner · Negotiation...  │    │
+│  │  用户侧: UserCompanion · DigitalEmployee（模板/版本）     │    │
 │  │  数据员工: DataAnalyst · CareerCoach · ProfileCurator     │    │
 │  └─────────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────────┤
@@ -113,9 +120,13 @@ WorkPilot 是一个全场景职场 AI 智囊平台，覆盖职场人从求职到
 ### 3.2 RAG 知识库 (L1)
 
 - 内置 11 篇职场文档（求职、在职、晋升、离职、谈薪、钝感力等）
-- Multi-Query 多路召回 + QueryRewriter 查询改写
-- 按文档状态分类过滤（求职/在职/通用）
-- 支持动态上传文档实时入库
+- **统一 `RetrievalPipeline`**：Query Rewriter → Multi-Query/HyDE → Rerank（含 `indexedAt` 时间衰减）
+- **`RagTool`** 供超级智能体检索；**`RagRetrievalAttemptTracker`** 防空检索循环
+- 动态上传 **Markdown / PDF**（PDF 表格启发式结构化 → Markdown chunk）
+- 文档按 **分类标签** 写入向量 metadata（通用/职场/简历等）
+- 前端 **知识库管理页** `/knowledge`：双主题、文件/文本上传、筛选搜索、删除
+
+**与 Perception 区分**：会话附件（简历/Offer）走 `PerceptionAppService` bind；持久化语料走 `/document/*`。
 
 ### 3.3 技能系统 (L9)
 
@@ -178,11 +189,48 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 | completionRate | 任务完成率 |
 | avgLatencyMs | 平均延迟 |
 
-### 3.10 用户反馈系统 (新增)
+### 3.10 用户反馈闭环
 
-- `Feedback` 模型：userId、chatId、messageId、rating(UP/DOWN)、comment、agentType、intent
-- `FeedbackRepository`：文件持久化 + 统计（approvalRate per agent）
-- `FeedbackController`：POST /feedback（提交）、GET /feedback/stats（统计）
+- `Feedback` 模型：userId、chatId、messageId、rating(`UP`/`DOWN`)、comment、agentType、intent  
+  - TODO：1–5 星评分（本期仍用 UP/DOWN）
+- `FeedbackController`：`POST /feedback`、`GET /feedback/stats`（JWT 取真实 userId）
+- `FeedbackAppService` 写回：
+  - **DOWN** → `ReflexionService`（反思负反馈，指导后续回答）
+  - **UP** → Fact 偏好（强化用户喜好）
+  - 统计按 agent / intent 聚合，用量页可展示
+- 前端：职场顾问消息气泡 👍/👎 → 调用反馈 API
+
+### 3.11 建议动作 (Suggested Actions)
+
+- Orchestrator 在回复完成后通过 SSE 事件 `suggested-actions` 下发后续 chips
+- 职场顾问开场冷启动 chips（优化简历 / 谈涨薪 / 离职规划 / 面试准备）
+- 点击 chip 即作为用户消息发送，降低「下一步做什么」的决策成本
+
+### 3.12 个人职场伙伴 (Companion)
+
+| 项 | 说明 |
+|----|------|
+| 定位 | 每用户一份「总是在」的职场伙伴，不是单独召唤的角色 |
+| 可配项 | displayName、tone、focus、personaPrompt、enabledSkills |
+| API | `GET/PUT /companion/me`（登录后自动认领） |
+| 注入 | `ContextInjectionService` → Orchestrator 系统上下文 |
+| UI | 侧栏「我的 AI 团队」、顶栏 pill、欢迎卡片、设置抽屉 |
+| 存储 | `t_user_companion`（Flyway `V2__companion_digital_employee.sql`） |
+
+保存后**下一轮对话**按新人设生效（无感进化，非微调）。
+
+### 3.13 数字员工 (Digital Employee)
+
+| 项 | 说明 |
+|----|------|
+| 定位 | 从系统 Agent 模板创建的专精员工；需「设为当前」或试用后参与对话 |
+| 模板 | `classpath:agents/*.yaml`（谈薪 / 简历 / 离职 / 通用等） |
+| API | `/digital-employee/templates` · `/mine` · `POST` 创建 · `PUT/{id}` · `POST/{id}/activate` · `POST/{id}/rollback` |
+| 版本 | `t_digital_employee_version`；更新人设 version+1；可回滚历史内容并生成新版本 |
+| 路由 | 意图 `DIGITAL_EMPLOYEE` + 激活员工注入 |
+| UI | 模板网格创建、员工卡片、内联人设编辑、风格预设 |
+
+**伙伴 vs 数字员工**：伙伴 = 默认人格与偏好；数字员工 = 可切换的专精角色（专人专事）。
 
 ---
 
@@ -206,10 +254,9 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
   │     └─ 明确意图 → 路由
   │
   ├─ ContextInjectionService: 上下文注入
-  │     ├─ 用户画像注入
-  │     ├─ 交付物注入
-  │     ├─ 跨 Agent 历史注入
-  │     └─ L27 分层记忆注入
+  │     ├─ 用户画像 / 交付物 / 跨 Agent 历史 / L27 分层记忆
+  │     ├─ 个人伙伴人设
+  │     └─ 当前激活数字员工
   │
   ├─ DynamicPromptProvider: 动态 System Prompt
   │     └─ 根据 intent 选择最优 prompt 模板
@@ -217,6 +264,8 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
   ├─ 单意图: 分发给对应 Agent
   │
   ├─ 多意图: 串行执行 + agent-turn SSE 事件
+  │
+  ├─ SuggestedActions: SSE `suggested-actions`
   │
   ├─ QualityReviewHandler: 质量审查（异步）
   │
@@ -229,6 +278,7 @@ INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETE
 - **快速路径**：`KeywordRouter.containsCareerKeyword()` 判断是否走 NLU，简单问候/模糊消息直接走 GENERAL Agent，避免 3-8s DashScope 延迟
 - **职责拆分**：`ContextInjectionService`（上下文注入）、`QualityReviewHandler`（质量审查）从 OrchestratorAgent 抽离，降低 God Class 复杂度
 - **V2 桥接**：`AgentRunner` 适配层将 V1 Agent 包装为 V2 `TaskExecutor` 可消费的 Runner
+- **闭环进化**：反馈与伙伴/员工配置写回记忆与上下文，**不**做模型微调
 
 ### 4.2 专业 Agent
 
@@ -259,23 +309,28 @@ ReAct 自主规划型 Agent，支持自主拆解复杂任务：
 BaseAgent → ReActAgent（思考-行动循环）→ ToolCallAgent → YuManus
 ```
 
-### 4.5 数据员工 Agent
+### 4.5 数据员工 Agent（五员工显式闭环）
 
-黑板模式协作，异步产出交付物：
+黑板模式协作，异步产出结构化交付物并通过 `ArtifactPublisher` 发布至 `PUBLISHED` 状态：
 
-| 数据员工 | 产出 |
-|---------|------|
-| DataAnalystAgent | 数据分析报告 |
-| CareerCoachAgent | 岗位辅导方案 |
-| ProfileCuratorAgent | 用户画像整理 |
-| PromotionPlannerAgent | 晋升路径规划 |
-| LearningResourceRecommenderAgent | 学习资源推荐 |
+| 数据员工 | 产出 | 发布机制 |
+|---------|------|----------|
+| DataAnalystAgent | 数据分析报告 | `ArtifactPublisher.publish()` |
+| CareerCoachAgent | 岗位辅导方案 | `ArtifactPublisher.publish()` |
+| ProfileCuratorAgent | 用户画像整理 | `ArtifactPublisher.publish()` |
+| PromotionPlannerAgent | 晋升路径规划 | `ArtifactPublisher.publish()` |
+| LearningResourceRecommenderAgent | 学习资源推荐 | `ArtifactPublisher.publish()` |
 
 **数据模型**：
 - `ProductionContext` — 执行上下文（userId、chatId、source、memoryAgentType、documentContent）
 - `ProductionResult` — 加工结果（success、artifact、errorMessage）
 - `AnalysisReport` — 结构化分析报告（summary、keyFindings、metrics、recommendations）
 - `AnalysisSource` — 输入来源枚举（CONVERSATION / UPLOADED_DOCUMENT）
+
+**智能回忆与 OFFERED/ADOPTED 分类账**：
+- **TASK 作用域**：当前会话任务交付物，对话上下文自动注入（会话级快速召回）
+- **USER_PROFILE 作用域**：用户跨会话累积的结构化资产，后续对话自动推荐（长期学习）
+- **OFFERED/ADOPTED 分类账**：不改变交付物生命周期，仅记录系统推荐次数（OFFERED）与用户采纳次数（ADOPTED），前端展示推荐/采纳计数
 
 ### 4.6 质量守护 (QualityGuardAgent)
 
@@ -425,14 +480,21 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 
 ## 八、协作与产出
 
-### 8.1 交付物货架（Blackboard Pattern）
+### 8.1 交付物货架与发布（Blackboard Pattern 与 ArtifactPublisher）
 
 ```
-Agent ──put(READY)──► ArtifactShelf ──query/get──► 下游 Agent / 前端
+生产者 Agent ──put(READY)──► ArtifactShelf ──ArtifactPublisher.publish()──► PUBLISHED
+                                  │                                          │
+                            智能回忆与推荐                        前端显示推荐/采纳计数
 ```
 
-- 作用域：USER_PROFILE（跨会话）/ TASK（会话级）
-- 生命周期：DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED
+- **ArtifactPublisher**：结构化可复用交付物发布至 `PUBLISHED` 状态（直接跳过 REVIEWING/APPROVED 中间态）
+- **作用域与智能回忆**：
+  - `TASK` 作用域：当前会话专项任务交付物，对话上下文自动注入（会话级快速召回）
+  - `USER_PROFILE` 作用域：用户跨会话累积的结构化资产，后续对话自动推荐（长期记忆）
+- **OFFERED/ADOPTED 分类账**：不改变交付物生命周期，仅记录系统推荐次数与用户采纳次数（前端展示点击率）
+- **五数据员工显式闭环**：按结构化交付物请求触发（DataAnalystAgent、CareerCoachAgent、ProfileCuratorAgent、PromotionPlannerAgent、LearningResourceRecommenderAgent）
+- 生命周期：DRAFT → REVIEWING → APPROVED → PUBLISHED → ARCHIVED（或 ArtifactPublisher 直接 DRAFT → PUBLISHED）
 
 ### 8.2 交付物生命周期管理 (L24)
 
@@ -481,10 +543,16 @@ APPROVED → PUBLISHED（发布）
 |------|------|
 | EmbeddingLoopDetector | 循环检测（余弦相似度 0.88） |
 | ToolResultClassifier | 工具结果分级（TIMEOUT/EMPTY/GARBAGE/NORMAL） |
+| ObservationSanitizer | 工具 Observation 清洗（去 HTML/Base64、截断标注） |
 | TokenBudgetManager | Token 预算分级（Normal/Compact/Compress） |
-| PromptInjectionDetector | Prompt 注入检测（Override/Hijack/Extraction 三类 15 个 Pattern） |
-| ProceduralMemory | 程序性记忆（工具调用模式追踪，成功率/延迟/意图关联） |
+| ConsecutiveFailureGuard | 连续工具失败熔断 → 可选 HITL park |
+| GoalAnchor | 每轮/每步重插任务目标 |
+| ToolIdempotencyStore / ToolSideEffectPolicy | 副作用幂等；只读工具才超时自动重试 |
+| PromptInjectionDetector | Prompt 注入检测（Override/Hijack/Extraction） |
+| ProceduralMemory | 程序性记忆（工具调用模式追踪） |
 | McpAuditLog | MCP 工具调用审计日志（环形缓冲 1000 条） |
+
+详见：`docs/mm-agent-tutorial-ch1-落地.md` · `docs/mm-agent-tutorial-ch3-落地.md` · L34 Perception。
 
 ### 9.4 事件总线 (L25)
 
@@ -500,7 +568,7 @@ APPROVED → PUBLISHED（发布）
 | 工作台 | `/` | 温暖首页，快捷场景入口 |
 | 职场顾问 | `/chat/career` | 多 Agent 智能对话（主页面） |
 | 超级智能体 | `/chat/super` | Manus 独立界面 + 执行进度（SSE `[DONE]` + 正文回传） |
-| 知识库 | `/knowledge` | 文档管理（上传/删除） |
+| 知识库 | `/knowledge` | 文档管理（MD/PDF 上传、文本粘贴、分类、筛选、删除；sage/dark 双主题） |
 | 交付物 | `/artifacts` | 交付物浏览 |
 | 收藏 | `/favorites` | 收藏消息管理 |
 | 用量 | `/usage` | 使用统计仪表盘 |
@@ -513,12 +581,45 @@ APPROVED → PUBLISHED（发布）
 
 - 实时流式对话（token 级推送）
 - 多 Agent 消息来源标识
+- 个人伙伴设置抽屉 + 数字员工面板（模板 / 编辑 / 激活）
+- 建议动作 chips（开场 + 回复后）
+- 消息 👍/👎 反馈
 - 语音输入（Web Speech API）
 - 文件上传到 RAG
 - 用户画像查看/清空
 - 轨迹时间线实时展示
 - 质量审查评分显示
 - 交付物侧栏预览
+
+### 附录 · 产品截图
+
+| 画面 | 文件 |
+|------|------|
+| 登录 | `docs/assets/screenshot-login.png` |
+| 工作台 | `docs/assets/screenshot-home.png` |
+| 职场顾问（伙伴 / 数字员工入口） | `docs/assets/screenshot-career.png` |
+| 个人伙伴设置 | `docs/assets/screenshot-companion.png` |
+| 数字员工模板 | `docs/assets/screenshot-digital-employee.png` |
+| 超级智能体 | `docs/assets/screenshot-super.png` |
+| 知识库 | `docs/assets/screenshot-knowledge.png` |
+| 主题 · 原版暗色 | `docs/assets/screenshot-theme-dark.png` |
+| 主题 · 胶囊增强 | `docs/assets/screenshot-theme-capsule.png` |
+| 主题 · 青荷绿 | `docs/assets/screenshot-theme-sage.png` |
+
+![职场顾问](./assets/screenshot-career.png)
+
+![个人伙伴](./assets/screenshot-companion.png)
+
+![数字员工](./assets/screenshot-digital-employee.png)
+
+#### 主题三套（原型 `theme-sage.html`）
+
+| 原版暗色 | 胶囊增强（默认） | 青荷绿 |
+|----------|------------------|--------|
+| ![dark](./assets/screenshot-theme-dark.png) | ![capsule](./assets/screenshot-theme-capsule.png) | ![sage](./assets/screenshot-theme-sage.png) |
+
+重新截图业务页：`BASE=http://localhost:3000 node yu-ai-agent-frontend/scripts/capture-docs-screenshots.mjs`  
+重新截图主题：`node yu-ai-agent-frontend/scripts/capture-theme-prototypes.mjs`
 
 ---
 
@@ -546,8 +647,15 @@ APPROVED → PUBLISHED（发布）
 | HITL 审批 | GET/POST | `/hitl/*` | JWT |
 | 评测 | GET/POST | `/eval/*` | JWT（suites 除外） |
 | 健康检查 | GET | `/health` | - |
-| 用户反馈 | POST | `/feedback` | - |
-| 反馈统计 | GET | `/feedback/stats` | - |
+| 用户反馈 | POST | `/feedback` | JWT |
+| 反馈统计 | GET | `/feedback/stats` | JWT |
+| 个人伙伴 | GET/PUT | `/companion/me` | JWT |
+| 数字员工模板 | GET | `/digital-employee/templates` | JWT |
+| 我的数字员工 | GET | `/digital-employee/mine` | JWT |
+| 创建数字员工 | POST | `/digital-employee` | JWT |
+| 更新人设 | PUT | `/digital-employee/{id}` | JWT |
+| 激活员工 | POST | `/digital-employee/{id}/activate` | JWT |
+| 版本回滚 | POST | `/digital-employee/{id}/rollback?version=` | JWT |
 
 ---
 
@@ -558,7 +666,7 @@ APPROVED → PUBLISHED（发布）
 | 模式 | 说明 |
 |------|------|
 | `file`（默认） | JSON/Kryo 落盘 `./tmp/**`，适合本地演示 |
-| `jdbc` | PostgreSQL + Flyway `V1__init_schema.sql` + JPA Entity/Repository |
+| `jdbc` | PostgreSQL + Flyway `V1__init_schema.sql` + `V2__companion_digital_employee.sql` + JPA |
 
 一键起库：`docker compose up -d postgres`（镜像 `pgvector/pgvector:pg16`）。
 
@@ -572,6 +680,9 @@ APPROVED → PUBLISHED（发布）
 | 预约 | `./tmp/appointments/` | `appointments` |
 | 交付物 | `./tmp/artifacts/artifacts.json` | `artifacts` |
 | 用户画像 | `./tmp/user-profiles/` | `user_profiles` |
+| 个人伙伴 | file/JDBC store | `t_user_companion` |
+| 数字员工 | file/JDBC store | `t_digital_employee` + `t_digital_employee_version` |
+| 用户反馈 | `./tmp/feedback/` 等 | Feedback store / JDBC |
 | 向量库 | PgVector / 内存 | PostgreSQL / SimpleVectorStore |
 | Agent 描述符 | YAML | `classpath:agents/*.yaml` |
 | 权限画像 | YAML | `classpath:permissions/*.yaml` |
@@ -595,6 +706,7 @@ APPROVED → PUBLISHED（发布）
 | `calendar.provider` | FEISHU | 日历服务商 |
 | `chat.memory.compression.token-threshold` | 4000 | 压缩阈值 |
 | `sandbox.require-docker` | false | Docker 强制 |
+| `app.cors.allowed-origins` | localhost:3000/3001… | 前端跨域来源 |
 | `memory.coordinator.enabled` | true | 分层记忆开关 |
 
 ---
@@ -707,21 +819,26 @@ k6 run --vus 10 --duration 30s stress-test.js
 
 | 范式 | 适用场景 | 执行流程 |
 |------|----------|----------|
-| **REACT** | 交互式任务、工具调用 | Think → Act → 循环 |
-| **PLAN_AND_SOLVE** | 复杂多步骤任务 | 规划 → 执行 → 验证 |
+| **REACT** | 交互式任务、工具调用 | Think → Act → 循环；步数耗尽 → Wrap-up |
+| **PLAN_AND_SOLVE** | 复杂多步骤任务 | 规划 → 执行 →（失败则 Replan 一次）→ 验证 |
 | **REFLECTION** | 高质量输出任务 | 生成 → 评估 → 反思 → 修正 |
 
-### 17.2 范式组件
+### 17.2 范式 / Loop 组件
 
 | 组件 | 职责 |
 |------|------|
 | `AgentParadigm` | 范式枚举 |
 | `ParadigmSelector` | 智能范式选择 (规则+关键词) |
-| `BaseParadigmAgent` | 范式 Agent 抽象基类 |
-| `PlanAndSolveAgent` | Plan-and-Solve 范式实现 |
+| `BaseParadigmAgent` | 范式 Agent 抽象基类（含 Depth Limit） |
+| `PlanAndSolveAgent` | Plan-and-Solve + Replanner |
 | `ReflectionAgent` | Reflection 范式实现 |
 | `ParadigmAgentFactory` | 范式 Agent 工厂 |
 | `ParadigmService` | 范式服务 (高层 API) |
+| `LoopWrapUp` / `AgentLoopResult` | 预算耗尽强制收尾与结构化终态 |
+| `AgentDepthContext` | 嵌套深度 ≤3 |
+| `CompletionClaimGuard` / `StepReflector` | 完成态防幻觉；非 NORMAL 步内 Reflect |
+
+详见：`docs/mm-agent-tutorial-ch4-落地.md`。
 
 ### 17.3 使用方式
 
@@ -1012,7 +1129,7 @@ agent_active_count
 
 ```
 L0  基础对话         单轮 / 多轮对话 + 对话记忆持久化
-L1  RAG 知识库       11篇职场文档检索 + Multi-Query 多路召回 + 查询改写
+L1  RAG 知识库       RetrievalPipeline + RagTool + PDF 表格 MVP + 知识库页 /knowledge
 L2  工具调用         联网搜索 / 文件 / 网页抓取 / 资源下载 / 终端 / PDF
 L3  MCP              图片搜索等外部 MCP 服务
 L4  Manus 超级智能体  ReAct 自主规划 + 工具循环

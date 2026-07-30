@@ -29,7 +29,7 @@ const routes = [
     path: '/knowledge',
     name: 'KnowledgeBase',
     component: () => import('../views/KnowledgeBase.vue'),
-    meta: { title: '知识库 - WorkPilot' }
+    meta: { title: '知识库 - WorkPilot', requiresAuth: true }
   },
   {
     path: '/artifacts',

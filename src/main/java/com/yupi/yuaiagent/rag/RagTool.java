@@ -1,115 +1,74 @@
 package com.yupi.yuaiagent.rag;
 
+import com.yupi.yuaiagent.hitl.AgentRequestContext;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.tool.function.FunctionToolCallback;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
-
-import java.util.List;
-import java.util.stream.Collectors;
+import org.springframework.util.StringUtils;
 
 /**
- * RAG Tool — decoupled RAG retrieval as a reusable tool for any Agent.
+ * RAG Tool — decoupled knowledge retrieval for any Agent via {@link RetrievalPipeline}.
  *
- * <p>Instead of hardcoding RAG into ResumeAgent, this tool can be registered
- * alongside other tools and called by any agent that needs knowledge retrieval.</p>
- *
- * <p>Features:</p>
- * <ul>
- *     <li>Configurable similarity threshold and topK</li>
- *     <li>Optional status filter (e.g., "求职", "在职")</li>
- *     <li>HyDE support for better retrieval quality</li>
- *     <li>Multi-query expansion via MultiQueryRetriever</li>
- * </ul>
- *
- * @author jsq
+ * <p>Pipeline: query rewrite → vector recall → rerank → formatted snippets with source refs.</p>
  */
 @Slf4j
 public class RagTool {
 
-    private final VectorStore vectorStore;
-    private final HyDERetriever hydeRetriever;
-    private final double defaultSimilarityThreshold;
-    private final int defaultTopK;
+    private static final String EMPTY_HINT =
+            "未找到相关文档。请尝试换个关键词或上传相关文档。";
+    private static final String BLOCKED_HINT_TEMPLATE =
+            "已连续 %d 次未在知识库中找到相关信息。请向用户询问更具体的关键词或引导上传文档，勿再重复检索。";
 
-    public RagTool(VectorStore vectorStore, HyDERetriever hydeRetriever) {
-        this(vectorStore, hydeRetriever, 0.5, 5);
-    }
+    private final RetrievalPipeline retrievalPipeline;
+    private final RagRetrievalAttemptTracker attemptTracker;
 
-    public RagTool(VectorStore vectorStore, HyDERetriever hydeRetriever,
-                   double defaultSimilarityThreshold, int defaultTopK) {
-        this.vectorStore = vectorStore;
-        this.hydeRetriever = hydeRetriever;
-        this.defaultSimilarityThreshold = defaultSimilarityThreshold;
-        this.defaultTopK = defaultTopK;
+    public RagTool(RetrievalPipeline retrievalPipeline, RagRetrievalAttemptTracker attemptTracker) {
+        this.retrievalPipeline = retrievalPipeline;
+        this.attemptTracker = attemptTracker;
     }
 
     /**
      * Search knowledge base with a query.
-     *
-     * @param query    search query
-     * @param topK     max results (0 = use default)
-     * @param filter   status filter (null = no filter)
-     * @param useHyDE  whether to use HyDE for retrieval
-     * @return formatted search results
      */
     public String search(String query, int topK, String filter, boolean useHyDE) {
-        int effectiveTopK = topK > 0 ? topK : defaultTopK;
+        String chatId = AgentRequestContext.chatId();
+        if (attemptTracker.shouldBlock(chatId)) {
+            return String.format(BLOCKED_HINT_TEMPLATE, attemptTracker.maxEmptyRetries());
+        }
+
+        RetrievalOptions base = RetrievalOptions.toolDefaults();
+        RetrievalOptions options = new RetrievalOptions(
+                filter,
+                topK > 0 ? topK : base.topK(),
+                false,
+                useHyDE,
+                base.similarityThreshold()
+        );
 
         try {
-            List<Document> results;
-
-            if (useHyDE && hydeRetriever != null) {
-                results = hydeRetriever.retrieve(query);
-            } else {
-                SearchRequest.Builder requestBuilder = SearchRequest.builder()
-                        .query(query)
-                        .topK(effectiveTopK);
-
-                if (filter != null && !filter.isBlank()) {
-                    requestBuilder.filterExpression("status == '" + filter + "'");
-                }
-
-                results = vectorStore.similaritySearch(requestBuilder.build());
+            RetrievalPipeline.RetrievalResult result = retrievalPipeline.retrieve(query, options);
+            if (!result.hasHits()) {
+                attemptTracker.recordEmpty(chatId);
+                return EMPTY_HINT;
             }
-
-            if (results.isEmpty()) {
-                return "未找到相关文档。请尝试换个关键词或上传相关文档。";
-            }
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("找到 ").append(results.size()).append(" 条相关结果：\n\n");
-            for (int i = 0; i < results.size(); i++) {
-                Document doc = results.get(i);
-                sb.append("[").append(i + 1).append("] ");
-                sb.append(doc.getText());
-                if (doc.getMetadata() != null && doc.getMetadata().containsKey("filename")) {
-                    sb.append(" (来源: ").append(doc.getMetadata().get("filename")).append(")");
-                }
-                sb.append("\n\n");
-            }
-
-            return sb.toString();
+            attemptTracker.recordSuccess(chatId);
+            return result.formattedResults();
         } catch (Exception e) {
             log.error("[RagTool] Search failed: {}", e.getMessage());
             return "知识库检索失败：" + e.getMessage();
         }
     }
 
-    /**
-     * Register this as a Spring AI ToolCallback.
-     * Uses @Tool annotation pattern consistent with other tools.
-     */
-    @org.springframework.ai.tool.annotation.Tool(description = "Search the knowledge base for relevant career/job documents. Use this when the user asks about resume, interview, salary, resignation, or career advice.")
+    @org.springframework.ai.tool.annotation.Tool(description = """
+            Search the internal knowledge base (uploaded career/job documents) via vector retrieval.
+            WHEN TO USE: user asks about content that may already be in the knowledge base — resumes, interview FAQs, salary notes, resignation templates.
+            DO NOT USE: live web facts (use searchWeb); a concrete public URL (use scrapeWebPage); reading a local sandbox file (use readFile / readFileChunk).
+            RETURNS: top snippets with optional filename source. Read-only; safe to retry unless output says stop retrying.""")
     public String searchKnowledgeBase(
-            @org.springframework.ai.tool.annotation.ToolParam(description = "Search query") String query) {
-        return search(query, 3, null, false);
+            @org.springframework.ai.tool.annotation.ToolParam(description = "Short retrieval query; do not paste entire documents") String query) {
+        if (!StringUtils.hasText(query)) {
+            return EMPTY_HINT;
+        }
+        return search(query, 0, null, false);
     }
 
-    /**
-     * Input type for the RAG tool.
-     */
     public record RagToolInput(String query, int topK, String filter, boolean useHyDE) {}
 }

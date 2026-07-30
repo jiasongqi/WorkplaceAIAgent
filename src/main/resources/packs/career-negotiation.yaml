@@ -1,0 +1,10 @@
+packId: career-negotiation
+displayName: 谈薪谈判专家包
+description: 涨薪与 offer 谈判策略
+agentCodes:
+  - negotiation-agent
+skillNames:
+  - salary-research
+permissionProfiles:
+  - negotiation-agent
+enabledByDefault: true

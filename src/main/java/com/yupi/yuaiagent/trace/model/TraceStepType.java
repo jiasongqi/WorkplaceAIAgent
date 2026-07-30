@@ -50,6 +50,11 @@ public enum TraceStepType {
     SUB_AGENT_EXECUTION("子Agent执行"),
 
     /**
+     * RAG query rewrite — sync LLM rewrite before retrieval / specialist answer (TTFT-critical).
+     */
+    QUERY_REWRITE("查询重写"),
+
+    /**
      * Tool call phase — an external tool is invoked.
      */
     TOOL_CALL("工具调用"),

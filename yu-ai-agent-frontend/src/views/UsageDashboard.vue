@@ -67,6 +67,34 @@
             </div>
           </div>
         </div>
+
+        <!-- Feedback closed-loop -->
+        <div v-if="feedbackStats" class="section">
+          <h2 class="section-title"><WpIcon name="star" :size="16" /> 回答反馈</h2>
+          <div class="summary-row">
+            <div class="summary-card">
+              <div class="card-value">{{ feedbackStats.thumbsUp || 0 }}</div>
+              <div class="card-label">点赞</div>
+            </div>
+            <div class="summary-card">
+              <div class="card-value">{{ feedbackStats.thumbsDown || 0 }}</div>
+              <div class="card-label">点踩</div>
+            </div>
+            <div class="summary-card">
+              <div class="card-value">{{ formatRate(feedbackStats.approvalRate) }}</div>
+              <div class="card-label">好评率</div>
+            </div>
+          </div>
+          <div v-if="feedbackStats.byAgentType?.length" class="type-list" style="margin-top:12px">
+            <div v-for="row in feedbackStats.byAgentType" :key="row.key" class="type-row">
+              <span class="type-name">{{ row.key }}</span>
+              <div class="type-bar-track">
+                <div class="type-bar-fill agent-bar" :style="{ width: Math.max(8, (row.approvalRate || 0) * 100) + '%' }"></div>
+              </div>
+              <span class="type-count">{{ formatRate(row.approvalRate) }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -75,11 +103,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getUsageStats } from '../api'
+import { getUsageStats, getFeedbackStats } from '../api'
 import WpIcon from '../components/WpIcon.vue'
 
 const router = useRouter()
 const stats = ref({})
+const feedbackStats = ref(null)
 const loading = ref(true)
 
 const goBack = () => router.push('/')
@@ -87,8 +116,12 @@ const goBack = () => router.push('/')
 const loadStats = async () => {
   loading.value = true
   try {
-    const res = await getUsageStats()
-    stats.value = res.data?.data || {}
+    const [usageRes, fbRes] = await Promise.all([
+      getUsageStats(),
+      getFeedbackStats().catch(() => null)
+    ])
+    stats.value = usageRes.data?.data || {}
+    feedbackStats.value = fbRes?.data?.data || null
   } catch (e) {
     console.error('加载用量统计失败', e)
   } finally {
@@ -101,6 +134,11 @@ const formatDuration = (ms) => {
   if (ms < 1000) return ms + 'ms'
   if (ms < 60000) return (ms / 1000).toFixed(1) + 's'
   return (ms / 60000).toFixed(1) + 'min'
+}
+
+const formatRate = (rate) => {
+  if (rate == null || rate < 0) return '—'
+  return Math.round(rate * 100) + '%'
 }
 
 const formatDay = (dateStr) => {

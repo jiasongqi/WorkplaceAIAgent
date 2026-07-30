@@ -1,7 +1,11 @@
 package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.guard.EmbeddingLoopDetector;
+import com.yupi.yuaiagent.guard.ObservationSanitizer;
 import com.yupi.yuaiagent.guard.ToolResultClassifier;
+import com.yupi.yuaiagent.agent.goal.GoalAnchor;
+import com.yupi.yuaiagent.agent.loop.ChatUsageExtractor;
+import com.yupi.yuaiagent.tools.ToolSideEffectPolicy;
 import com.yupi.yuaiagent.trace.model.TraceSpan;
 import com.yupi.yuaiagent.trace.model.TraceStepType;
 import cn.hutool.core.collection.CollUtil;
@@ -18,16 +22,13 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -44,22 +45,19 @@ public class ToolCallAgent extends ReActAgent {
     // 保存工具调用信息的响应结果（要调用那些工具）
     private ChatResponse toolCallChatResponse;
 
-    // 工具调用管理者
-    private final ToolCallingManager toolCallingManager;
-
-    // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文
+    // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文（并行 Fan-out 见 ParallelToolCallingSupport）
     private final ChatOptions chatOptions;
 
     // 终止工具方法名常量，与 TerminateTool.doTerminate() 保持一致
     private static final String TERMINATE_TOOL_NAME = "doTerminate";
 
-    /** Tool execution timeout in seconds — prevents slow MCP/tools from blocking the agent. */
+    /** Per-tool execution timeout in seconds — prevents slow MCP/tools from blocking the agent. */
     private static final long TOOL_TIMEOUT_SECONDS = 30;
 
-    /** Maximum number of automatic retries on timeout (direction is correct, just network issue). */
+    /** Maximum number of automatic retries on timeout for read-only tool batches only. */
     private static final int MAX_TIMEOUT_RETRIES = 2;
 
-    // Executor for async tool execution with timeout
+    // Executor for async / parallel tool execution
     private Executor toolExecutor;
 
     // Guard components — optional, non-invasive integration (Req 4.1, 4.2, 4.8)
@@ -69,6 +67,9 @@ public class ToolCallAgent extends ReActAgent {
     @Autowired(required = false)
     private EmbeddingLoopDetector embeddingLoopDetector;
 
+    @Autowired(required = false)
+    private ObservationSanitizer observationSanitizer;
+
     public ToolCallAgent(ToolCallback[] availableTools) {
         this(availableTools, java.util.concurrent.ForkJoinPool.commonPool());
     }
@@ -77,7 +78,6 @@ public class ToolCallAgent extends ReActAgent {
         super();
         this.availableTools = availableTools;
         this.toolExecutor = toolExecutor;
-        this.toolCallingManager = ToolCallingManager.builder().build();
         // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文
         this.chatOptions = DashScopeChatOptions.builder()
                 .withInternalToolExecutionEnabled(false)
@@ -121,11 +121,17 @@ public class ToolCallAgent extends ReActAgent {
         List<Message> messageList = getMessageList();
         Prompt prompt = new Prompt(messageList, this.chatOptions);
         try {
+            // Goal Anchor: re-attach goal on every think() so long loops don't forget the mission
+            String systemPrompt = getSystemPrompt();
+            if (StrUtil.isNotBlank(getTurnGoal())) {
+                systemPrompt = systemPrompt + "\n\n" + GoalAnchor.buildBlock(getTurnGoal(), null, getName());
+            }
             ChatResponse chatResponse = getChatClient().prompt(prompt)
-                    .system(getSystemPrompt())
+                    .system(systemPrompt)
                     .toolCallbacks(availableTools)
                     .call()
                     .chatResponse();
+            recordThinkTokenUsage(chatResponse, assistantMessageText(chatResponse));
             // 记录响应，用于等下 Act
             this.toolCallChatResponse = chatResponse;
             // 3、解析工具调用结果，获取要调用的工具
@@ -153,7 +159,37 @@ public class ToolCallAgent extends ReActAgent {
         } catch (Exception e) {
             log.error(getName() + "的思考过程遇到了问题：" + e.getMessage());
             getMessageList().add(new AssistantMessage(friendlyLlmError(e.getMessage())));
+            if (getConsecutiveFailureGuard() != null) {
+                getConsecutiveFailureGuard().recordFailure("think:" + e.getMessage());
+                if (getConsecutiveFailureGuard().shouldStop()) {
+                    setState(AgentState.FINISHED);
+                    escalateOnConsecutiveFailure();
+                }
+            }
             return false;
+        }
+    }
+
+    private static String assistantMessageText(ChatResponse chatResponse) {
+        if (chatResponse == null || chatResponse.getResult() == null
+                || chatResponse.getResult().getOutput() == null) {
+            return null;
+        }
+        return chatResponse.getResult().getOutput().getText();
+    }
+
+    private void recordThinkTokenUsage(ChatResponse chatResponse, String fallbackText) {
+        if (getRunBudget() == null) {
+            return;
+        }
+        int tokens = ChatUsageExtractor.extractTotalTokens(chatResponse);
+        if (tokens <= 0) {
+            tokens = ChatUsageExtractor.estimateFromText(fallbackText);
+        }
+        getRunBudget().record(tokens);
+        if (getRunBudget().isExhausted()) {
+            log.warn("[ToolCallAgent] run token budget exhausted after think name={} used={}",
+                    getName(), getRunBudget().getTokensUsed());
         }
     }
 
@@ -196,58 +232,67 @@ public class ToolCallAgent extends ReActAgent {
             }
         }
 
-        // 调用工具（with timeout protection + auto-retry for TIMEOUT）
-        boolean isTimeout = false;
+        // Resolve whether this batch is safe to auto-retry on timeout (read-only only)
+        List<AssistantMessage.ToolCall> pendingCalls =
+                toolCallChatResponse.getResult().getOutput().getToolCalls();
+        boolean retryableBatch = pendingCalls.stream()
+                .allMatch(tc -> ToolSideEffectPolicy.isRetryableOnTimeout(tc.name()));
+
+        // Parallel fan-out (Ch3) with per-tool timeout; auto-retry only for read-only batches
         Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
         ToolExecutionResult toolExecutionResult = null;
         int retryCount = 0;
-        int maxAttempts = MAX_TIMEOUT_RETRIES + 1; // Total attempts = retries + 1
-        
+        int maxAttempts = retryableBatch ? (MAX_TIMEOUT_RETRIES + 1) : 1;
+
         while (retryCount < maxAttempts) {
-            try {
-                final Prompt toolPrompt = prompt;
-                toolExecutionResult = CompletableFuture
-                        .supplyAsync(() -> toolCallingManager.executeToolCalls(toolPrompt, toolCallChatResponse), toolExecutor)
-                        .orTimeout(TOOL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                        .join();
-                break; // 成功，退出重试循环
-            } catch (java.util.concurrent.CompletionException e) {
-                if (e.getCause() instanceof TimeoutException) {
-                    retryCount++;
-                    if (retryCount < maxAttempts) {
-                        // 自动重试：方向对，网络问题，不换关键词
-                        log.warn("[ToolCall] tool execution timed out (attempt {}/{}), retrying same call...",
-                                retryCount, MAX_TIMEOUT_RETRIES);
-                        continue;
-                    }
-                    // 重试用尽，走失败流程
-                    log.error("[ToolCall] tool execution timed out after {}s, {} retries exhausted",
-                            TOOL_TIMEOUT_SECONDS, MAX_TIMEOUT_RETRIES);
-                    if (toolCallSpan != null && getTraceRecorder() != null) {
-                        getTraceRecorder().failSpan(getTraceContext(), toolCallSpan,
-                                "Tool execution timed out after " + TOOL_TIMEOUT_SECONDS + "s (retries exhausted)");
-                    }
-                    // --- Guard: ToolResultClassifier — classify timeout result ---
-                    if (toolResultClassifier != null) {
-                        try {
-                            toolResultClassifier.classifyAndGuide(null, true, getMessageList());
-                        } catch (Exception ex) {
-                            log.warn("[ToolCallAgent] result classification failed, skipping: {}", ex.getMessage());
-                        }
-                    }
-                    return "工具执行超时（" + TOOL_TIMEOUT_SECONDS + "秒，已重试" + MAX_TIMEOUT_RETRIES + "次），请换个方式重试";
-                }
-                throw e;
+            toolExecutionResult = ParallelToolCallingSupport.execute(
+                    prompt, toolCallChatResponse, availableTools, toolExecutor, TOOL_TIMEOUT_SECONDS);
+            boolean anyTimeout = lastResponsesTimedOut(toolExecutionResult);
+            if (!anyTimeout) {
+                break;
             }
+            retryCount++;
+            if (retryCount < maxAttempts) {
+                log.warn("[ToolCall] read-only batch timed out (attempt {}/{}), retrying...",
+                        retryCount, MAX_TIMEOUT_RETRIES);
+                continue;
+            }
+            log.error("[ToolCall] tool execution timed out after {}s (retries exhausted, retryable={})",
+                    TOOL_TIMEOUT_SECONDS, retryableBatch);
+            if (toolCallSpan != null && getTraceRecorder() != null) {
+                getTraceRecorder().failSpan(getTraceContext(), toolCallSpan,
+                        "Tool execution timed out after " + TOOL_TIMEOUT_SECONDS + "s");
+            }
+            if (toolResultClassifier != null) {
+                try {
+                    toolResultClassifier.classifyAndGuide(null, true, getMessageList());
+                } catch (Exception ex) {
+                    log.warn("[ToolCallAgent] result classification failed, skipping: {}", ex.getMessage());
+                }
+            }
+            if (getConsecutiveFailureGuard() != null) {
+                getConsecutiveFailureGuard().recordFailure("TIMEOUT after retries");
+                if (getConsecutiveFailureGuard().shouldStop()) {
+                    setState(AgentState.FINISHED);
+                    escalateOnConsecutiveFailure();
+                    return getConsecutiveFailureGuard().stopMessage();
+                }
+            }
+            // Still commit conversation so model can self-correct / switch to start* async tools
+            setMessageList(sanitizeHistory(toolExecutionResult.conversationHistory()));
+            return "工具执行超时（" + TOOL_TIMEOUT_SECONDS + "秒）。"
+                    + (retryableBatch ? "只读工具已重试" + MAX_TIMEOUT_RETRIES + "次。" : "副作用工具未自动重试（防重复执行）。")
+                    + "可改用 startScrapeWebPage / startDownloadResource / startGeneratePDF + checkAsyncToolTask。";
         }
-        // 记录消息上下文，conversationHistory 已经包含了助手消息和工具调用返回的结果
-        setMessageList(toolExecutionResult.conversationHistory());
-        ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
+
+        // Sanitize observations before they pollute context (Ch3 Sanitizer Layer)
+        List<Message> sanitizedHistory = sanitizeHistory(toolExecutionResult.conversationHistory());
+        setMessageList(sanitizedHistory);
+        ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(sanitizedHistory);
         // 判断是否调用了终止工具
         boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
                 .anyMatch(response -> response.name().equals(TERMINATE_TOOL_NAME));
         if (terminateToolCalled) {
-            // 任务结束，更改状态
             setState(AgentState.FINISHED);
         }
         String results = toolResponseMessage.getResponses().stream()
@@ -282,13 +327,87 @@ public class ToolCallAgent extends ReActAgent {
                         embeddingLoopDetector.recordFailure(sessionId, sig, grade.name() + " - " + results);
                     }
                 }
+                if (getConsecutiveFailureGuard() != null) {
+                    if (grade == ToolResultClassifier.ResultGrade.NORMAL) {
+                        getConsecutiveFailureGuard().recordSuccess();
+                    } else {
+                        // Ch4 Reflect: explicit critique before next Think
+                        com.yupi.yuaiagent.agent.loop.StepReflector.reflectIfNeeded(
+                                grade, results, getMessageList());
+                        getConsecutiveFailureGuard().recordFailure(grade.name() + ":" + results);
+                        if (getConsecutiveFailureGuard().shouldStop()) {
+                            setState(AgentState.FINISHED);
+                            escalateOnConsecutiveFailure();
+                            return getConsecutiveFailureGuard().stopMessage();
+                        }
+                    }
+                } else if (grade != ToolResultClassifier.ResultGrade.NORMAL) {
+                    com.yupi.yuaiagent.agent.loop.StepReflector.reflectIfNeeded(
+                            grade, results, getMessageList());
+                }
             } catch (Exception e) {
                 log.warn("[ToolCallAgent] result classification failed, skipping: {}", e.getMessage());
             }
+        } else if (getConsecutiveFailureGuard() != null) {
+            getConsecutiveFailureGuard().recordSuccess();
         }
 
         log.debug(results);
         return results;
+    }
+
+    private List<Message> sanitizeHistory(List<Message> history) {
+        if (history == null || history.isEmpty() || observationSanitizer == null) {
+            return history;
+        }
+        List<Message> out = new ArrayList<>(history.size());
+        for (Message m : history) {
+            if (m instanceof ToolResponseMessage trm) {
+                List<ToolResponseMessage.ToolResponse> cleaned = trm.getResponses().stream()
+                        .map(r -> new ToolResponseMessage.ToolResponse(
+                                r.id(), r.name(), observationSanitizer.sanitize(r.responseData())))
+                        .collect(Collectors.toList());
+                out.add(new ToolResponseMessage(cleaned, trm.getMetadata()));
+            } else {
+                out.add(m);
+            }
+        }
+        return out;
+    }
+
+    private static boolean lastResponsesTimedOut(ToolExecutionResult result) {
+        if (result == null || result.conversationHistory() == null || result.conversationHistory().isEmpty()) {
+            return false;
+        }
+        Message last = CollUtil.getLast(result.conversationHistory());
+        if (!(last instanceof ToolResponseMessage trm)) {
+            return false;
+        }
+        return trm.getResponses().stream()
+                .anyMatch(r -> r.responseData() != null && r.responseData().contains("timed out"));
+    }
+
+    /**
+     * Park for human when consecutive failures trip the fuse (optional HITL).
+     */
+    private void escalateOnConsecutiveFailure() {
+        if (getHumanHandoffService() == null || !StrUtil.isNotBlank(getChatId())) {
+            return;
+        }
+        try {
+            var guard = getConsecutiveFailureGuard();
+            String reason = "consecutive_tool_failures";
+            String summary = guard != null ? guard.stopMessage() : "连续工具失败";
+            getHumanHandoffService().park(
+                    getChatId(),
+                    StrUtil.blankToDefault(getUserId(), "anonymous"),
+                    null,
+                    reason,
+                    summary);
+            log.warn("[ToolCallAgent] HITL parked after consecutive failures chatId={}", getChatId());
+        } catch (Exception e) {
+            log.warn("[ToolCallAgent] HITL escalate skipped: {}", e.getMessage());
+        }
     }
 
     private static String friendlyLlmError(String raw) {

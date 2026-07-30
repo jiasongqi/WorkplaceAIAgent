@@ -11,39 +11,52 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
- * 终端操作工具 — 通过沙箱执行命令，不再直接调用 ProcessBuilder。
- * <p>
- * 安全架构升级：
- * <ul>
- *     <li>Docker 可用时 → DockerSandbox（完全隔离）</li>
- *     <li>Docker 不可用时 → LocalProcessSandbox（5层防护降级方案）</li>
- *     <li>HITL 网关：高危命令执行前需人工审批（HumanApprovalService）</li>
- * </ul>
- *
- * @author jsq
+ * 终端操作工具 — 沙箱执行 + HITL + 幂等去重。
  */
 @Slf4j
 public class TerminalOperationTool {
 
     private final SandboxFactory sandboxFactory;
-    /** Nullable — when absent, HITL gating is skipped (e.g. unit tests / disabled feature). */
     private final HumanApprovalService approvalService;
+    private final ToolIdempotencyStore idempotencyStore;
 
     public TerminalOperationTool(SandboxFactory sandboxFactory) {
-        this(sandboxFactory, null);
+        this(sandboxFactory, null, null);
     }
 
     public TerminalOperationTool(SandboxFactory sandboxFactory, HumanApprovalService approvalService) {
-        this.sandboxFactory = sandboxFactory;
-        this.approvalService = approvalService;
+        this(sandboxFactory, approvalService, null);
     }
 
-    @Tool(description = "Execute a command in the terminal (sandboxed). High-risk commands may require human approval first - if the tool returns a pending-approval message, obtain approvalId via POST /api/hitl/approve and retry with the same command and approvalId.")
+    public TerminalOperationTool(SandboxFactory sandboxFactory,
+                                 HumanApprovalService approvalService,
+                                 ToolIdempotencyStore idempotencyStore) {
+        this.sandboxFactory = sandboxFactory;
+        this.approvalService = approvalService;
+        this.idempotencyStore = idempotencyStore;
+    }
+
+    @Tool(description = """
+            Execute a shell command in the sandbox (side effect). High-risk commands require human approval — \
+            if pending-approval is returned, obtain approvalId via POST /api/hitl/approve and retry with the same command and approvalId.
+            WHEN TO USE: user explicitly needs shell/file-system automation in the sandbox.
+            DO NOT USE: for web search, scraping, or PDF generation (dedicated tools exist).
+            NOT safe to blindly retry on timeout — duplicates are blocked via idempotency within TTL.""")
     public String executeTerminalCommand(
             @ToolParam(description = "Command to execute in the terminal") String command,
-            @ToolParam(description = "Approval ID obtained from a prior human approval request, if any. Leave empty if none is available yet.") String approvalId) {
+            @ToolParam(description = "Approval ID from prior HITL approval, if any; leave empty if none") String approvalId) {
+
+        String fingerprint = command + "::" + (approvalId == null ? "" : approvalId);
+        if (idempotencyStore != null) {
+            String key = idempotencyStore.key("executeTerminalCommand", fingerprint);
+            Optional<String> cached = idempotencyStore.find(key);
+            if (cached.isPresent()) {
+                return cached.get() + "\n[System Note: idempotent replay — command was not re-executed]";
+            }
+        }
 
         if (approvalService != null && approvalService.requiresApproval(HumanApprovalService.ActionType.TERMINAL_COMMAND)) {
             boolean approved = approvalService.consumeIfApproved(
@@ -73,13 +86,19 @@ public class TerminalOperationTool {
 
         SandboxResult result = sandbox.execute(request);
 
+        String out;
         if (result.isSuccess()) {
-            return result.getStdout();
+            out = result.getStdout();
         } else if (result.isKilled()) {
-            return "命令执行超时被终止。\n" + result.getStderr();
+            out = "命令执行超时被终止。\n" + result.getStderr();
         } else {
             String errorInfo = result.getErrorMessage() != null ? result.getErrorMessage() : result.getStderr();
-            return "命令执行失败（exitCode=" + result.getExitCode() + "）：\n" + errorInfo;
+            out = "命令执行失败（exitCode=" + result.getExitCode() + "）：\n" + errorInfo;
         }
+
+        if (idempotencyStore != null && result.isSuccess()) {
+            idempotencyStore.remember(idempotencyStore.key("executeTerminalCommand", fingerprint), out);
+        }
+        return out;
     }
 }

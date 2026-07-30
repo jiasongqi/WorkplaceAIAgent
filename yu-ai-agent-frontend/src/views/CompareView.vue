@@ -238,12 +238,12 @@ const saveResult = async () => {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 16px; border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
-.a-header { background: rgba(59,130,246,0.05); }
+.a-header { background: var(--gold-soft); }
 .b-header { background: rgba(16,185,129,0.05); }
 .panel-label { font-size: 14px; font-weight: 600; }
 .panel-status { font-size: 12px; padding: 2px 8px; border-radius: 8px; }
 .panel-status.done { background: rgba(16,185,129,0.15); color: #059669; }
-.panel-status.running { background: rgba(59,130,246,0.15); color: #2563eb; }
+.panel-status.running { background: var(--gold-soft); color: var(--gold-text); }
 .panel-status.error { background: rgba(239,68,68,0.15); color: #dc2626; }
 
 .panel-content {

@@ -149,7 +149,7 @@
             <artifactId>jsoup</artifactId>
             <version>1.19.1</version>
         </dependency>
-        <!-- PDF 鐢熸垚搴?-->
+        <!-- PDF 生成库 -->
         <!-- https://mvnrepository.com/artifact/com.itextpdf/itext-core -->
         <dependency>
             <groupId>com.itextpdf</groupId>
@@ -162,6 +162,18 @@
             <groupId>com.itextpdf</groupId>
             <artifactId>font-asian</artifactId>
             <version>9.1.0</version>
+        </dependency>
+        <!-- PDF 文字提取（感知层） -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+        <!-- Word .docx 文字提取（感知层） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
         </dependency>
         <dependency>
             <groupId>cn.hutool</groupId>

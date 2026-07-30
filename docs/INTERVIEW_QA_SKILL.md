@@ -1,16 +1,16 @@
 ---
 name: workpilot-interview-qa
-description: WorkPilot（全场景职场生存智囊）面试问答手册。覆盖架构设计、技术实现、场景设计三大类 50+ 问题，含 STAR 法则回答模板和高频追问。适用于 AI Agent 方向面试准备。
-version: 1.5.0
-tags: [interview, agent, architecture, career]
+description: WorkPilot（全场景职场生存智囊）面试问答手册。覆盖架构设计、技术实现、场景设计三大类 50+ 问题，含 STAR 法则回答模板和高频追问。适用于 AI Agent 方向面试准备。含 2026-07 Perception/Goal/熔断、Tool Call、Agent Loop 迭代专题。
+version: 1.7.0
+tags: [interview, agent, architecture, career, perception, reliability, tool-call, agent-loop]
 ---
 
 # WorkPilot 面试问答手册
 
 > 项目：全场景职场生存智囊（WorkPilot）
-> 技术栈：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope
+> 技术栈：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope + PDFBox/POI（感知层）
 > 定位：全场景职场 AI 智囊平台，覆盖求职到离职全生命周期
-> 更新：v1.5 — 新增性能评估、经典范式、上下文工程、工具注册相关问题
+> 更新：v1.7 — Ch1 Perception/Goal/熔断 + Ch3 Tool Schema/并行/幂等/Submit-Poll + Ch4 Loop Wrap-up/Replanner/Depth；详见 `docs/interview-perception-goal-reliability.md`
 
 ---
 
@@ -18,15 +18,15 @@ tags: [interview, agent, architecture, career]
 
 ### 30 秒版
 
-> WorkPilot 是一个全场景职场 AI 智囊平台，基于 Java 21 + Spring AI 构建。核心是一个 OrchestratorAgent 主控编排 5 个专业子 Agent（简历、薪资、离职、咨询、通用），通过 NLU 意图理解管道做智能路由。亮点是四层记忆系统（滑动窗口 + 事实存储 + 摘要 + 向量化经验）和投票式安全访问控制。
+> WorkPilot 是一个全场景职场 AI 智囊平台，基于 Java 21 + Spring AI 构建。核心是 OrchestratorAgent 主控编排多个专业子 Agent，经 Keyword 快路径 / NLU 做智能路由。亮点包括四层记忆、投票式访问控制，以及 **Perception 感知层**、**Goal Anchor / 连续失败熔断**、**工具工程（Schema/并行/幂等）** 与 **Agent Loop Wrap-up / Replanner**。
 
 ### 1 分钟版
 
-> WorkPilot 覆盖职场人从求职到离职的全生命周期。技术上，OrchestratorAgent 做意图路由，先走 KeywordRouter 快速路径（零 LLM），复杂消息走 NLU Pipeline（单次 LLM 调用完成意图识别 + 槽位提取 + 路由生成）。记忆系统是四层架构：L1 滑动窗口保持连贯、L2 事实存储精确匹配、L3 摘要要点清单、L4 向量化经验语义检索，通过 MemoryCoordinator 并行查询 + Token 预算分配。安全方面采用投票式访问控制（Agent 权限 + MCP 信任 + 调用配额），一票否决。还有工作流引擎（6 种节点）、沙箱执行（三级策略）、质量守护（5 维评分 + 红队对抗）等。
+> WorkPilot 覆盖职场人从求职到离职的全生命周期。技术上，OrchestratorAgent 做意图路由：先 KeywordRouter（零 LLM），复杂消息走 NLU Pipeline。记忆是四层：滑动窗口 / 事实 / 摘要 / 向量经验，带 Token 预算。安全上有投票式访问控制与 HITL。对照多模态 Agent 教程落地了：**感知预处理**（bind SharedState 规避 SSE URL 限制）、**Goal Anchor**、**ConsecutiveFailureGuard**；工具侧 Schema 契约、同轮并行、Observation 清洗、副作用幂等、Submit-Poll；Loop 侧步数耗尽 Wrap-up、P&E Replanner、Depth Limit、完成态防幻觉。
 
 ### 3 分钟版
 
-> 在 1 分钟版基础上补充：数据员工采用黑板模式协作，上游 Agent 产出交付物放上 ArtifactShelf，下游按需取用，交付物有完整生命周期管理（DRAFT→REVIEWING→APPROVED→PUBLISHED→ARCHIVED）。评测中心 EvalCenter 支持 YAML 评测套件 + 回归检测。Prompt 版本管理支持灰度发布和 A/B 测试。全链路执行轨迹通过 TraceRecorder 记录 10+ 种 StepType，实时 SSE 推送前端时间线可视化。前端 Vue 3，10 个页面，支持流式对话、语音输入、多 Agent 消息来源标识。
+> 在 1 分钟版基础上补充：数据员工黑板与 Artifact；EvalCenter 路由门禁；TraceRecorder；前端 Vue 3 流式。可靠性上区分 LoopDetector（重复调用）与 ConsecutiveFailureGuard（连续失败）。工具超时**不是一律重试**——只读可重试，副作用靠幂等。联调修过「上传简历却触发意图澄清」。扫描件 OCR / 真 VLM / Browser Agent 仍是演进项，面试诚实说明。
 
 ---
 
@@ -38,7 +38,8 @@ tags: [interview, agent, architecture, career]
 - 四层架构：Frontend (Vue 3) → API Layer (Controller) → AppService Layer → Agent Layer (Core) → Infrastructure Layer
 - Agent 层核心：OrchestratorAgent 做意图路由，5 个专业子 Agent 各司其职
 - 基础设施层：ChatMemory、VectorStore、Trace、Sandbox、Access Control、MemoryCoordinator
-- 关键类：`OrchestratorAgent`（主控）、`NluPipeline`（意图理解）、`MemoryCoordinator`（记忆协调）
+- **感知层**：`PerceptionController` → `PerceptionAppService` → `DocumentPerceptionService`（不破坏分层）
+- 关键类：`OrchestratorAgent`（主控）、`NluPipeline`（意图理解）、`MemoryCoordinator`（记忆协调）、`GoalAnchor` / `DocumentPerceptionService`
 
 **追问**：为什么选择这种分层而不是微服务？
 > 项目定位是单体应用（个人作品集），单体内模块化足够。AppService 层做业务编排，Agent 层做 AI 逻辑，职责清晰。未来可按模块拆微服务。
@@ -78,6 +79,11 @@ tags: [interview, agent, architecture, career]
 - **快速路径**：`KeywordRouter.containsCareerKeyword()` 判断，简单消息跳过 NLU LLM，直接走 GENERAL Agent
 - **完整路径**：单次 LLM 调用完成 intent 排名 + slots + domain + action
 - **管道组件**：AliasResolver → UnifiedNluExtractor → IntentReranker → IntentAmbiguityDetector → RouteTemplate → ContextShiftDetector → IntentRequirementRegistry → ClarificationHandler
+- **2026-07 增量**：会话已 bind 感知材料时，`suggestIntentFromPerception` 在 Keyword 之前补强路由，避免模糊短句落入 Ambiguity 澄清
+
+**追问**：上传文件后用户只说「帮我看看」怎么办？
+> 感知 bind 后 SharedState 带 `docKind`；路由层读感知意图；前端默认话术也会带「简历/Offer」关键词。三层兜底。
+
 - **关键决策**：1 次 LLM（非 2-3 次），延迟减半；别名不改原文；Confidence = Top1-Top2 差值；澄清用模板（零 LLM）
 - 关键类：`NluPipeline`、`UnifiedNluExtractor`、`RouteHint`
 
@@ -105,14 +111,31 @@ tags: [interview, agent, architecture, career]
 ### Q6: RAG 检索链路是怎么设计的？
 
 **回答要点**：
-- **QueryRewriter**：查询改写，提升召回率
-- **MultiQueryRetriever**：一个问题扩展为多个查询并行检索后合并去重
-- **向量库**：PgVector（生产）/ SimpleVectorStore（开发）可切换
-- **文档管理**：动态上传实时入库，按状态分类过滤（求职/在职/通用）
-- 内置 11 篇职场文档
+- **`RetrievalPipeline`（统一入口）**：Query Rewrite → Multi-Query / HyDE / 直搜 → 合并去重 → `RerankService`
+- **`QueryRewriter` + `MultiQueryRetriever`**：扩展查询提升召回
+- **`RerankService`**：关键词重叠 + 文档质量 + 位置偏差 + **`indexedAt` 时间衰减**
+- **`RagTool`**：`searchKnowledgeBase` 已注册，超级智能体可显式检索
+- **`RagRetrievalAttemptTracker`**：同 chat 空检索最多 2 次，防 Ch5「检索循环」
+- **语料**：classpath 11 篇 MD + 动态 `POST /document/upload`（MD/PDF）；PDF 表格 → Markdown chunk
+- **前端**：`/knowledge` 分类上传、筛选、双主题
 
 **追问**：RAG 检索不到怎么办？
-> 当前没有显式的"检索不足拒绝回答"机制。改进方向：设置相似度阈值，低于阈值时拒绝回答或要求用户补充信息。
+> Pipeline 返回空时 Tracker 计数；达上限提示停止重试。回答侧应明确「未命中知识库」而非编造。改进：相似度阈值 + 拒答/澄清。
+
+**追问**：会话上传的简历和知识库有什么区别？
+> 简历走 **Perception bind**（SessionSharedState，会话级）；知识库走 **DocumentAppService**（持久向量语料，全用户 RAG 共享）。面试常考这个边界。
+
+---
+
+### Q6b: 知识库管理页和后端怎么配合？
+
+**回答要点**：
+- 前端 `KnowledgeBase.vue`：`listDocuments` / `uploadDocument(file, status)` / `addTextDocument` / `deleteDocument`
+- 后端 `DocumentMetadataManager` SHA-256 去重；状态机 UPLOADING→…→INDEXED / FAILED_*
+- PDF：`PdfTableHeuristicExtractor` → `chunkType=table` + sidecar JSON
+- 删除为软删除；向量 purge 尚未做（诚实边界）
+
+**教程对照**：[mm-agent-tutorial-ch5-落地.md](./mm-agent-tutorial-ch5-落地.md) · [场景对照总结](./mm-agent-tutorial-场景对照总结.md)
 
 ---
 
@@ -136,12 +159,17 @@ tags: [interview, agent, architecture, career]
 - **访问控制**：投票式决策（一票否决），三维投票器（AgentPolicyVoter + McpPolicyVoter + QuotaPolicyVoter）
 - **沙箱执行**：三级策略（UNSANDBOXED / PROCESS_SANDBOX / DOCKER_SANDBOX）
 - **循环检测**：`EmbeddingLoopDetector`，余弦相似度 0.88，滑动窗口 5 条
+- **连续失败熔断**：`ConsecutiveFailureGuard`（与 Loop 互补；可 HITL park）
 - **工具结果分级**：`ToolResultClassifier`（TIMEOUT / EMPTY / GARBAGE / NORMAL）
 - **Token 预算**：`TokenBudgetManager` 三级策略（Normal / Compact / Compress）
+- **注入防护**：文本 `PromptInjectionDetector` + 视觉 `VisualPromptSanitizer`
 - **事件总线**：`EventBusAdapter` 异步发布治理事件
 
 **追问**：投票式决策和 RBAC 有什么区别？
 > RBAC 是静态角色映射，投票式是动态多维度决策。比如一个 Agent 有权限（AgentPolicyVoter 通过）但 MCP 服务不信任（McpPolicyVoter 拒绝），最终拒绝。每个维度独立评估，一票否决。
+
+**追问**：LoopDetector 和连续失败熔断有何不同？
+> Loop 管「同一调用模式重复」；ConsecutiveFailure 管「结果持续异常」。互补，不是替代。
 
 ---
 
@@ -391,7 +419,7 @@ tags: [interview, agent, architecture, career]
 
 ### Q29: 如何保证 Agent 不会陷入死循环？
 
-> 三层防护：1）ReActAgent.maxIterations 限制（默认 10 次）；2）EmbeddingLoopDetector 余弦相似度检测（0.88 阈值）；3）TokenBudgetManager 三级预算控制。检测到循环后注入引导性消息（非简单终止），让 LLM 自主修正。
+> 多层防护：1）`maxSteps` 硬上限，触顶 **Wrap-up** 而非 Crash；2）`EmbeddingLoopDetector` Stall 检测；3）`ConsecutiveFailureGuard` 连续失败熔断（可 HITL）；4）`TokenBudgetManager` + `ObservationSanitizer`；5）`AgentDepthContext` Depth Limit；6）TerminateTool。详见 Q44/Q59–Q70 与 `interview-perception-goal-reliability.md`。
 
 ### Q30: 为什么选 DashScope 而不是 OpenAI？
 
@@ -667,11 +695,12 @@ tags: [interview, agent, architecture, career]
   - 关键词重叠 (60%)：Jaccard 相似度 + 查询覆盖率
   - 文档质量 (20%)：长度适中 + 结构化程度
   - 位置偏差 (20%)：原始检索顺序
-- **使用场景**：检索后重排序，提升 Top-K 文档相关性
+  - **时间衰减（Ch5）**：metadata `indexedAt` 越新权重越高（可配置开关）
+- **接入**：`RetrievalPipeline` 检索后统一 Rerank；非孤立组件
 - **组件**：`RerankService`
 
 **追问**：为什么不用 Cohere Rerank 或 BGE Reranker？
-> 当前是轻量级实现，不依赖外部 API。生产环境建议集成专业 rerank 模型（如 Cohere Rerank API 或 BGE Reranker），准确率更高。架构上 `RerankService` 是接口，可轻松替换实现。
+> 当前是轻量级实现，不依赖外部 API。生产环境建议集成专业 rerank 模型。架构上 `RerankService` 可替换实现；Pipeline 已统一调用点。
 
 ---
 
@@ -703,3 +732,79 @@ tags: [interview, agent, architecture, career]
 
 **追问**：为什么不直接用 LLM 分类查询类型？
 > 1）节省 LLM 调用成本；2）关键词启发式足够准确；3）分类错误影响不大（只是预算分配，不影响功能）。未来可加入 LLM 分类作为高级选项。
+
+---
+
+## 七、Ch5 RAG / 知识库专题（v1.8 · 2026-07-30）
+
+> 落地笔记：[mm-agent-tutorial-ch5-落地.md](./mm-agent-tutorial-ch5-落地.md) · 总览：[场景对照总结](./mm-agent-tutorial-场景对照总结.md)
+
+### Q71: 为什么要把 RAG 收成 RetrievalPipeline？
+
+**要点**：教程 Ch5 强调改写、多路召回、融合、防循环；原先 QueryRewriter/Rerank/RagTool 分散且 RagTool 未注册。Pipeline 单一入口 → Agent、Advisor、AiChat 共用 → 可测、可配 `rag.pipeline.*`。
+
+### Q72: L4 经验记忆 query 为什么不用 conversationId？
+
+**要点**：用 conversationId 检索几乎召不回相关经验。`ExperienceQueryBuilder` 从**当前用户消息**抽关键词；不够再读 L3 摘要。对应教程「L2→L3 经验检索 query 要贴近任务语义」。
+
+### Q73: PDF 表格怎么进向量库？
+
+**要点**：MVP 用 PDFBox 启发式对齐列 → `TableToMarkdownConverter` → 整表 chunk（`chunkType=table`）+ JSON sidecar。复杂版式/扫描件诚实说未覆盖，可上 Tabula/DocMind。
+
+### Q74: 知识库页和 Perception 上传有何不同？
+
+**要点**：Perception = 会话级 bind，给本轮 Agent 读；知识库 = 持久语料，RAG 全站检索。用户路径：顾问 📎 vs `/knowledge` 运营入库。
+
+### Q75: 如何向面试官讲 mm_agent_tutorial 学习收获？
+
+**要点**：按 **场景对照总结** 四条路径口述——① 顾问 RAG ② 简历感知 ③ 知识库页 ④ 超级智能体工具；每路径点 1 个教程章 + 1 个 Gotcha + 1 个诚实边界。避免声称「完整多模态 Agent」。
+
+---
+
+## 八、感知 / 工具 / Loop 迭代专题（v1.7 · 2026-07）
+
+> 完整 STAR、术语表、Q55–Q70 见 **[interview-perception-goal-reliability.md](./interview-perception-goal-reliability.md)**。  
+> 落地笔记：`mm-agent-tutorial-ch1-落地.md` · `ch3` · `ch4` · `ch5`。本节为速查。
+
+### Q55: 最近重要迭代？
+
+**Ch1**：Goal Anchor、ConsecutiveFailureGuard→HITL、DocumentPerception + preprocess-and-bind。  
+**Ch3**：Schema 契约、并行 Fan-out、ObservationSanitizer、幂等、file_id、Submit-Poll。  
+**Ch4**：LoopWrapUp、P&E Replanner、CompletionClaimGuard、StepReflector、Depth Limit。  
+**Ch5**：RetrievalPipeline、RagTool、L4 query 修复、PDF 表格 MVP、KnowledgeBase 双主题页。  
+**没做（诚实）**：扫描 OCR、真 VLM 精读、Browser/VLA Agent、删文档 purge 向量。
+
+### Q56: Perception 层用了哪些技术？
+
+PDFBox、Apache POI、启发式 IE、SharedState bind、JWT bind API；前端 FormData。
+
+### Q57: 联调踩坑？
+
+模糊默认话术 → Ambiguity；SSE GET URL 限制；SharedState 截断砍感知块。讲 **控制面/传输层/预算** 三类根因。
+
+### Q58: Goal Anchor vs System Prompt？
+
+System Prompt 静态；Goal Anchor **每轮注入 + ReAct 每步重挂**，抗 Context Forgetting。
+
+### Q59: 如何保证不陷入死循环？
+
+`maxSteps`(+Wrap-up)、LoopDetector、ConsecutiveFailureGuard、Depth Limit。
+
+### Q60–Q65（Ch3 速记）
+
+- Schema 即 Prompt；search/scrape/RAG/read 边界写清  
+- 同轮多 tool 真并行；长任务 Submit-Poll  
+- 只读超时可重试，副作用幂等  
+- 大文件 `file_id` + `readFileChunk`  
+
+### Q66–Q70（Ch4 速记）
+
+- 预算耗尽 → Wrap-up PARTIAL_SUCCESS  
+- 长流程用 P&E + Replanner，短链路 ReAct  
+- 「I have done it」靠 Prompt + CompletionClaimGuard  
+- Stall ≠ 连续失败熔断（正交）  
+- Depth Limit 默认 ≤3  
+
+### 专业名词（口述清单）
+
+Perception · Goal Anchor · Fail-fast Fuse · Schema Engineering · Parallel Fan-out · Observation Sanitizer · Idempotency · Submit-Poll · Pass-by-Reference · Wrap-up · Replanner · Stall Detection · Depth Limit · Completion Claim Hallucination

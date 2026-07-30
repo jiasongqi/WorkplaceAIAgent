@@ -8,9 +8,10 @@ import org.springframework.ai.tool.annotation.Tool;
 public class TerminateTool {
 
     @Tool(description = """
-            Terminate the interaction when the request is met OR if the assistant cannot proceed further with the task.
-            "When you have finished all the tasks, call this tool to end the work.
-            """)
+            Terminate the agent loop when the user request is fully met OR you cannot proceed further.
+            WHEN TO USE: all required steps are done, or blockers require stopping and reporting to the user.
+            DO NOT USE: mid-task while more tools are still needed; do not invent other terminate tool names.
+            If no tool is needed, answer the user directly instead of calling tools.""")
     public String doTerminate() {
         return "任务结束";
     }

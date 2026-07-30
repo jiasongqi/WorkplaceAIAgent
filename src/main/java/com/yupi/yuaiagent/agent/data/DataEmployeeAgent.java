@@ -1,9 +1,14 @@
 package com.yupi.yuaiagent.agent.data;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yupi.yuaiagent.artifact.ArtifactPublishPolicy;
+import com.yupi.yuaiagent.artifact.ArtifactPublisher;
 import com.yupi.yuaiagent.artifact.ArtifactShelf;
+import com.yupi.yuaiagent.artifact.ArtifactTypeCatalog;
 import com.yupi.yuaiagent.artifact.model.Artifact;
 import com.yupi.yuaiagent.artifact.model.ArtifactScope;
-import com.yupi.yuaiagent.artifact.model.ArtifactStatus;
+import com.yupi.yuaiagent.trace.TraceContext;
+import com.yupi.yuaiagent.trace.TraceContextHolder;
 
 /**
  * 数据员工 Agent 抽象基类。
@@ -23,10 +28,15 @@ public abstract class DataEmployeeAgent {
     /**
      * 共享交付物货架（黑板），由子类构造时透传注入。
      */
-    protected final ArtifactShelf artifactShelf;
+    protected final ArtifactPublisher artifactPublisher;
 
     protected DataEmployeeAgent(ArtifactShelf artifactShelf) {
-        this.artifactShelf = artifactShelf;
+        this(new ArtifactPublisher(artifactShelf,
+                new ArtifactPublishPolicy(ArtifactTypeCatalog.defaults(), new ObjectMapper())));
+    }
+
+    protected DataEmployeeAgent(ArtifactPublisher artifactPublisher) {
+        this.artifactPublisher = artifactPublisher;
     }
 
     /**
@@ -72,7 +82,6 @@ public abstract class DataEmployeeAgent {
         }
         // 统一设置/确认放货字段，子类只需产出主体内容
         artifact.setProducer(producerName());                       // Req 7.3：producer 恒为数据员工标识名
-        artifact.setStatus(ArtifactStatus.READY);                   // Req 8.5：放货完成状态为 READY
         if (artifact.getScope() == null) {
             artifact.setScope(ArtifactScope.TASK);                  // Req 7.4：默认会话内任务交付物
         }
@@ -85,7 +94,9 @@ public abstract class DataEmployeeAgent {
                 artifact.setChatId(context.chatId());
             }
         }
-        // 放货（Req 7.2）
-        return artifactShelf.put(artifact);
+        TraceContext traceContext = TraceContextHolder.get();
+        String traceId = traceContext != null && traceContext.getTrace() != null
+                ? traceContext.getTrace().getTraceId() : null;
+        return artifactPublisher.publish(artifact, traceId);
     }
 }

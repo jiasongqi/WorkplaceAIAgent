@@ -8,7 +8,8 @@ permissionProfile: "negotiation-agent"
 capabilities:
   - "negotiation"
   - "salary-analysis"
-skillBindings: []
+skillBindings:
+  - "salary-research"
 mcpBindings: []
 intentKeywords:
   - "薪资"

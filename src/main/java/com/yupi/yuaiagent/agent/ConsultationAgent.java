@@ -115,6 +115,8 @@ public class ConsultationAgent {
     private final AppointmentRepository appointmentRepository;
     /** Nullable — when absent, HITL gating for calendar creation is skipped (e.g. unit tests). */
     private final HumanApprovalService approvalService;
+    /** Nullable — session shared scratchpad for cross-agent appointment visibility. */
+    private final com.yupi.yuaiagent.sessionstate.SessionSharedStateService sessionSharedStateService;
     
     // 会话状态存储（chatId -> 状态）
     private final Map<String, ConsultationState> sessionStates = new ConcurrentHashMap<>();
@@ -135,7 +137,7 @@ public class ConsultationAgent {
                              CalendarServiceFactory calendarServiceFactory,
                              AppointmentRepository appointmentRepository) {
         this(chatModel, chatMemoryManager, templateConfig, infoValidator,
-                calendarServiceFactory, appointmentRepository, null);
+                calendarServiceFactory, appointmentRepository, null, null);
     }
 
     /**
@@ -146,12 +148,26 @@ public class ConsultationAgent {
                              CalendarServiceFactory calendarServiceFactory,
                              AppointmentRepository appointmentRepository,
                              HumanApprovalService approvalService) {
+        this(chatModel, chatMemoryManager, templateConfig, infoValidator,
+                calendarServiceFactory, appointmentRepository, approvalService, null);
+    }
+
+    /**
+     * 构造函数（HITL + 会话共享状态）
+     */
+    public ConsultationAgent(ChatModel chatModel, ChatMemoryManager chatMemoryManager,
+                             FollowUpTemplateConfig templateConfig, InfoValidator infoValidator,
+                             CalendarServiceFactory calendarServiceFactory,
+                             AppointmentRepository appointmentRepository,
+                             HumanApprovalService approvalService,
+                             com.yupi.yuaiagent.sessionstate.SessionSharedStateService sessionSharedStateService) {
         this.chatMemory = chatMemoryManager.getMemory("consultation");
         this.templateConfig = templateConfig;
         this.infoValidator = infoValidator;
         this.calendarServiceFactory = calendarServiceFactory;
         this.appointmentRepository = appointmentRepository;
         this.approvalService = approvalService;
+        this.sessionSharedStateService = sessionSharedStateService;
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(new MyLoggerAdvisor())
@@ -229,6 +245,11 @@ public class ConsultationAgent {
         if (isCancelBooking(message) && state != ConsultationState.INITIAL && state != ConsultationState.COMPLETED) {
             clearSession(chatId);
             return "好的，已取消本次预约流程。之后想约随时说「我想预约咨询」即可。";
+        }
+
+        // 查已有日程/预约：读持久化记录，不重新开填表（预约完成后 COMPLETED 也会走到这里）
+        if (isScheduleInquiry(message)) {
+            return renderExistingAppointments(chatId);
         }
 
         // 「有什么可以预约」：先介绍目录，并进入预约会话锁定，避免下一句「选3」被路由到通用顾问
@@ -755,6 +776,17 @@ public class ConsultationAgent {
             // 持久化预约记录
             appointmentRepository.save(appointment);
             log.info("预约记录保存成功：{}", appointment.getAppointmentId());
+
+            // 写入会话共享状态，供同对话框其他专家读取
+            if (sessionSharedStateService != null) {
+                try {
+                    AgentRequestContext.Holder ctx = AgentRequestContext.get();
+                    String uid = ctx != null ? ctx.userId() : null;
+                    sessionSharedStateService.upsertAppointment(chatId, uid, appointment);
+                } catch (Exception e) {
+                    log.warn("写入会话共享状态失败（不影响预约）：{}", e.getMessage());
+                }
+            }
             
             // 进入完成状态
             sessionStates.put(chatId, ConsultationState.COMPLETED);
@@ -785,16 +817,76 @@ public class ConsultationAgent {
     }
 
     /**
-     * 处理完成阶段
+     * 处理完成阶段：已落库的预约仍可查询；若用户在问日程则列出，否则提示可新开预约。
      */
     private String handleCompleted(String message, String chatId) {
-        // 清理会话状态
+        if (isScheduleInquiry(message)) {
+            return renderExistingAppointments(chatId);
+        }
+        // 清理进行中会话状态（预约记录仍在 AppointmentRepository）
         sessionStates.remove(chatId);
         sessionInfos.remove(chatId);
         optionalAskedFields.remove(chatId);
         currentQuestionFields.remove(chatId);
-        
-        return "您的预约已完成。如需新的预约，请告诉我。";
+
+        return "您的预约已完成。如需查看日程请说「看下我的日程」；如需新预约，请告诉我。";
+    }
+
+    /** 用户在查已有预约/日程，而不是新开填表 */
+    static boolean isScheduleInquiry(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String m = message.trim();
+        if (isServiceCatalogInquiry(m)) {
+            return false;
+        }
+        // 明确新开预约意图时，不当作查日程
+        if (m.matches("(?s).*(?:我想预约|帮我预约|预约一次|约个顾问|重新预约).*")) {
+            return false;
+        }
+        return m.matches("(?s).*(?:日程|行程|日历).*(?:安排|查看|看看)?.*")
+                || m.matches("(?s).*(?:看|查|查看|看看).*(?:日程|行程|日历|预约).*")
+                || m.contains("我的预约")
+                || m.contains("预约进度")
+                || m.contains("预约编号")
+                || m.contains("已预约")
+                || m.contains("约好了吗")
+                || m.contains("约到几点");
+    }
+
+    private String renderExistingAppointments(String chatId) {
+        List<Appointment> list = appointmentRepository != null
+                ? appointmentRepository.findByChatId(chatId)
+                : List.of();
+        if (list == null || list.isEmpty()) {
+            return "当前会话还没有已确认的预约记录。\n\n"
+                    + "若要新建，直接说例如：「预约职业方向梳理，明天下午 3 点」。";
+        }
+
+        StringBuilder sb = new StringBuilder("### 您的预约日程\n\n");
+        int i = 1;
+        for (Appointment a : list) {
+            String time = a.getAppointmentTime() != null
+                    ? infoValidator.formatDateTime(a.getAppointmentTime())
+                    : "时间待定";
+            String topic = (a.getTopic() != null && !a.getTopic().isBlank()) ? a.getTopic() : "一对一咨询";
+            String statusLabel = a.getStatus() != null ? a.getStatus().getDescription() : "未知";
+            sb.append(i++).append(". **").append(topic).append("**\n")
+                    .append("   - 预约编号：`").append(a.getAppointmentId()).append("`\n")
+                    .append("   - 预约人：").append(a.getName() != null ? a.getName() : "—").append("\n")
+                    .append("   - 时间：").append(time).append("\n")
+                    .append("   - 状态：").append(statusLabel).append("\n");
+            if (a.getContact() != null && !a.getContact().isBlank()) {
+                sb.append("   - 联系方式：").append(a.getContact()).append("\n");
+            }
+            if (a.getCalendarLink() != null && !a.getCalendarLink().isBlank()) {
+                sb.append("   - 日历：").append(a.getCalendarLink()).append("\n");
+            }
+            sb.append("\n");
+        }
+        sb.append("如需修改或取消，请直接说明预约编号或时间；也可以说「我想再预约一次」。");
+        return sb.toString().trim();
     }
 
     /**

@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 交付物实体（共享交付物货架的核心数据模型）
@@ -54,6 +55,42 @@ public class Artifact {
      * 内容：结构化 JSON 字符串或纯文本，二者皆以 String 承载
      */
     private String content;
+
+    /**
+     * 用于召回注入的短摘要，避免把完整正文塞入上下文。
+     */
+    private String summary;
+
+    /**
+     * 是否允许跨轮次重复召回。
+     */
+    private boolean reusable;
+
+    /**
+     * 允许消费该交付物的目标 Agent。
+     */
+    @Builder.Default
+    private List<String> targetAgents = List.of();
+
+    /**
+     * 发布幂等键。
+     */
+    private String dedupKey;
+
+    /**
+     * 结构化内容 schema 版本。
+     */
+    private Integer schemaVersion;
+
+    /**
+     * 过期时间；为空表示长期有效。
+     */
+    private LocalDateTime expiresAt;
+
+    /**
+     * 生产该交付物的 Trace。
+     */
+    private String sourceTraceId;
 
     /**
      * 状态

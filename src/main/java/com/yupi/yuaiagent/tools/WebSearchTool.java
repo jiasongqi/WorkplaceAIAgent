@@ -8,7 +8,6 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -17,7 +16,6 @@ import java.util.stream.Collectors;
  */
 public class WebSearchTool {
 
-    // SearchAPI 的搜索接口地址
     private static final String SEARCH_API_URL = "https://www.searchapi.io/api/v1/search";
 
     private final String apiKey;
@@ -26,9 +24,15 @@ public class WebSearchTool {
         this.apiKey = apiKey;
     }
 
-    @Tool(description = "Search for information from Baidu Search Engine")
+    @Tool(description = """
+            Search the public web (Baidu via SearchAPI) for real-time facts, news, salary/market data, \
+            company updates, or events after the model's knowledge cutoff.
+            WHEN TO USE: user asks for current events, live market figures, or external references not in the knowledge base.
+            DO NOT USE: general career common-sense; internal uploaded docs (use searchKnowledgeBase / RAG); \
+            when you already have a concrete URL (use scrapeWebPage or startScrapeWebPage instead).
+            RETURNS: up to 5 results with title, snippet, and link. Read-only and safe to retry on timeout.""")
     public String searchWeb(
-            @ToolParam(description = "Search query keyword") String query) {
+            @ToolParam(description = "Concise search query keywords in Chinese or English; avoid pasting long documents") String query) {
         int maxRetries = 3;
         Exception lastException = null;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -40,7 +44,6 @@ public class WebSearchTool {
                 String response = HttpUtil.get(SEARCH_API_URL, paramMap, 10_000);
                 JSONObject jsonObject = JSONUtil.parseObj(response);
                 JSONArray organicResults = jsonObject.getJSONArray("organic_results");
-                // 只取前 5 条，且只提取 title / snippet / link 三个有效字段，减少 token 噪音
                 int limit = Math.min(5, organicResults.size());
                 String result = organicResults.subList(0, limit).stream().map(obj -> {
                     JSONObject item = (JSONObject) obj;
@@ -54,7 +57,7 @@ public class WebSearchTool {
                 lastException = e;
                 if (attempt < maxRetries) {
                     try {
-                        Thread.sleep(1000L * attempt); // 1s, 2s, 3s backoff
+                        Thread.sleep(1000L * attempt);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;

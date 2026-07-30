@@ -4,8 +4,10 @@ import com.yupi.yuaiagent.artifact.ArtifactShelf;
 import com.yupi.yuaiagent.artifact.model.Artifact;
 import com.yupi.yuaiagent.artifact.model.ArtifactQuery;
 import com.yupi.yuaiagent.artifact.model.ArtifactSummary;
+import com.yupi.yuaiagent.auth.AuthService;
 import com.yupi.yuaiagent.auth.JwtUtil;
 import com.yupi.yuaiagent.common.Response;
+import com.yupi.yuaiagent.service.ArtifactAppService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
@@ -16,26 +18,24 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 管理员交付物 REST 接口（Req 17）。
- * <p>
- * 供管理界面查询与查看各数据员工产出的交付物。所有接口均做管理员权限校验：
- * 从 {@code Authorization: Bearer <token>} 头取出 JWT，先用 {@link JwtUtil#validateToken(String)}
- * 校验有效性，再用 {@link JwtUtil#getUsername(String)} 取 username，约定 username 等于
- * 配置项 {@code admin.username}（默认 {@code admin}）才视为管理员。
- * <p>
- * 当前项目尚无完整的角色体系，故采用上述简化的"管理员用户名"约定。无有效 JWT 或非管理员
- * 一律返回 403 且不返回任何交付物数据（Req 17.4 / 17.5）。
+ * 交付物 REST：用户侧 mine 接口 + 管理员 list/detail。
  *
  * @author jsq
  */
 @RestController
 @RequestMapping("/artifact")
 @Slf4j
-@Tag(name = "产物管理", description = "Agent生成产物的管理（仅管理员）")
+@Tag(name = "产物管理", description = "Agent生成产物的查询（用户侧 mine + 管理员）")
 public class ArtifactController {
 
     @Resource
     private ArtifactShelf artifactShelf;
+
+    @Resource
+    private ArtifactAppService artifactAppService;
+
+    @Resource
+    private AuthService authService;
 
     @Resource
     private JwtUtil jwtUtil;
@@ -45,6 +45,26 @@ public class ArtifactController {
      */
     @Value("${admin.username:admin}")
     private String adminUsername;
+
+    @GetMapping("/mine")
+    @Operation(summary = "我的产物列表", description = "按当前用户 + 可选 chatId 查询交付物摘要")
+    public Response<List<ArtifactSummary>> listMine(
+            @RequestParam(required = false) String chatId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(artifactAppService.listMine(userId, chatId));
+    }
+
+    @GetMapping("/mine/{artifactId}")
+    @Operation(summary = "我的产物详情", description = "校验归属后返回完整交付物")
+    public Response<Artifact> mineDetail(
+            @PathVariable String artifactId,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String userId = authService.authenticate(token, authHeader);
+        return Response.success(artifactAppService.getMine(userId, artifactId));
+    }
 
     /**
      * 管理员按 userId / chatId / type 查询交付物列表，返回轻量摘要（Req 17.1 / 17.2）。

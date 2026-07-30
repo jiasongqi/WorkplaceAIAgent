@@ -52,9 +52,23 @@ public class ArtifactSummary {
     private LocalDateTime createdAt;
 
     /**
+     * 被智能召回推荐的次数。
+     */
+    private long offeredCount;
+
+    /**
+     * 被下游 Agent 明确采用的次数。
+     */
+    private long adoptedCount;
+
+    /**
      * 由完整 {@link Artifact} 构建轻量摘要（仅保留展示字段）。
      */
     public static ArtifactSummary from(Artifact artifact) {
+        return from(artifact, 0, 0);
+    }
+
+    public static ArtifactSummary from(Artifact artifact, long offeredCount, long adoptedCount) {
         return ArtifactSummary.builder()
                 .artifactId(artifact.getArtifactId())
                 .type(artifact.getType())
@@ -62,6 +76,8 @@ public class ArtifactSummary {
                 .title(artifact.getTitle())
                 .status(artifact.getStatus())
                 .createdAt(artifact.getCreatedAt())
+                .offeredCount(offeredCount)
+                .adoptedCount(adoptedCount)
                 .build();
     }
 }

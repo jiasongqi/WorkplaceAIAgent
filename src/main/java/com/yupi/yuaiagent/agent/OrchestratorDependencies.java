@@ -1,6 +1,7 @@
 package com.yupi.yuaiagent.agent;
 
 import com.yupi.yuaiagent.access.AccessDecisionService;
+import com.yupi.yuaiagent.auth.UserQuotaService;
 import com.yupi.yuaiagent.calendar.CalendarServiceFactory;
 import com.yupi.yuaiagent.chatmemory.ChatMemoryManager;
 import com.yupi.yuaiagent.config.FollowUpTemplateConfig;
@@ -13,6 +14,8 @@ import com.yupi.yuaiagent.profile.UserProfileService;
 import com.yupi.yuaiagent.quality.QualityGuardAgent;
 import com.yupi.yuaiagent.quality.QualityModeResolver;
 import com.yupi.yuaiagent.quality.QualityReviewRepository;
+import com.yupi.yuaiagent.perception.PerceptionHybridContextService;
+import com.yupi.yuaiagent.rag.PipelineRagAdvisorFactory;
 import com.yupi.yuaiagent.rag.QueryRewriter;
 import com.yupi.yuaiagent.repository.AppointmentRepository;
 import com.yupi.yuaiagent.skill.SkillExecutor;
@@ -41,6 +44,7 @@ public record OrchestratorDependencies(
         VectorStore vectorStore,
         ToolCallback[] tools,
         QueryRewriter queryRewriter,
+        PipelineRagAdvisorFactory pipelineRagAdvisorFactory,
         ChatMemoryManager chatMemoryManager,
         FollowUpTemplateConfig templateConfig,
         InfoValidator infoValidator,
@@ -64,6 +68,9 @@ public record OrchestratorDependencies(
         ConversationContextBuilder contextBuilder,
         TaskExecutor taskExecutor,
         ResultAggregator resultAggregator,
+        com.yupi.yuaiagent.workflow.dag.DagCompiler dagCompiler,
+        com.yupi.yuaiagent.workflow.dag.DagWorkflowExecutor dagWorkflowExecutor,
+        boolean workflowDagEnabled,
         AccessDecisionService accessDecisionService,
         Executor agentExecutor,
         MemoryCoordinator memoryCoordinator,
@@ -71,6 +78,22 @@ public record OrchestratorDependencies(
         com.yupi.yuaiagent.agent.collaboration.AgentCollaborationCoordinator collaborationCoordinator,
         com.yupi.yuaiagent.agent.reflexion.ReflexionService reflexionService,
         com.yupi.yuaiagent.metrics.AgentExecutionMetrics agentExecutionMetrics,
-        com.yupi.yuaiagent.hitl.HumanApprovalService humanApprovalService
+        com.yupi.yuaiagent.hitl.HumanApprovalService humanApprovalService,
+        com.yupi.yuaiagent.companion.UserCompanionService userCompanionService,
+        com.yupi.yuaiagent.service.DigitalEmployeeAppService digitalEmployeeAppService,
+        com.yupi.yuaiagent.service.ExpertPackAppService expertPackAppService,
+        com.yupi.yuaiagent.sessionstate.SessionSharedStateService sessionSharedStateService,
+        com.yupi.yuaiagent.hitl.HumanHandoffService humanHandoffService,
+        com.yupi.yuaiagent.agent.manifest.AgentManifestRegistry agentManifestRegistry,
+        com.yupi.yuaiagent.artifact.ArtifactPublisher artifactPublisher,
+        com.yupi.yuaiagent.artifact.recall.ArtifactRecallService artifactRecallService,
+        com.yupi.yuaiagent.artifact.adoption.ArtifactAdoptionService artifactAdoptionService,
+        com.yupi.yuaiagent.agent.data.DataAnalystAgent dataAnalystAgent,
+        com.yupi.yuaiagent.agent.data.CareerCoachAgent careerCoachAgent,
+        com.yupi.yuaiagent.agent.data.ProfileCuratorAgent profileCuratorAgent,
+        com.yupi.yuaiagent.agent.data.PromotionPlannerAgent promotionPlannerAgent,
+        com.yupi.yuaiagent.agent.data.LearningResourceRecommenderAgent learningResourceRecommenderAgent,
+        UserQuotaService userQuotaService,
+        PerceptionHybridContextService perceptionHybridContextService
 ) {
 }

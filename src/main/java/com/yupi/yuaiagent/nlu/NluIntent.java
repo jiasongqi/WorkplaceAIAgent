@@ -36,6 +36,9 @@ public enum NluIntent {
     CAREER_GENERAL(AgentIntent.GENERAL, "career advice, workplace relationships, planning"),
     EMOTIONAL_SUPPORT(AgentIntent.GENERAL, "workplace stress, emotional support"),
 
+    // Digital employee
+    DIGITAL_EMPLOYEE(AgentIntent.DIGITAL_EMPLOYEE, "create or manage personal digital employees"),
+
     // Unknown
     UNKNOWN(AgentIntent.GENERAL, "");
 

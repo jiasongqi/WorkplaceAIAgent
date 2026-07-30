@@ -2,6 +2,7 @@ package com.yupi.yuaiagent.agent.data;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yupi.yuaiagent.advisor.MyLoggerAdvisor;
+import com.yupi.yuaiagent.artifact.ArtifactPublisher;
 import com.yupi.yuaiagent.artifact.ArtifactShelf;
 import com.yupi.yuaiagent.artifact.model.Artifact;
 import com.yupi.yuaiagent.artifact.model.ArtifactScope;
@@ -100,7 +101,18 @@ public class CareerCoachAgent extends DataEmployeeAgent {
                             ArtifactShelf artifactShelf) {
         super(artifactShelf);
         this.chatMemoryManager = chatMemoryManager;
-        this.chatClient = ChatClient.builder(dashscopeChatModel)
+        this.chatClient = buildChatClient(dashscopeChatModel);
+    }
+
+    public CareerCoachAgent(ChatModel dashscopeChatModel, ChatMemoryManager chatMemoryManager,
+                            ArtifactPublisher artifactPublisher) {
+        super(artifactPublisher);
+        this.chatMemoryManager = chatMemoryManager;
+        this.chatClient = buildChatClient(dashscopeChatModel);
+    }
+
+    private ChatClient buildChatClient(ChatModel dashscopeChatModel) {
+        return ChatClient.builder(dashscopeChatModel)
                 .defaultAdvisors(new MyLoggerAdvisor())
                 .build();
     }

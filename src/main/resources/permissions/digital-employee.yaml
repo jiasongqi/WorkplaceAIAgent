@@ -1,0 +1,13 @@
+# Digital employee runtime permission profile (template-backed instances)
+agentCode: digital-employee
+displayName: "数字员工"
+description: "用户创建的专精数字员工，工具边界与通用顾问对齐并略收紧"
+version: "1.0"
+allowedToolPatterns:
+  - "general.*"
+  - "rag.query"
+minMcpTrustScore: 40
+maxToolCallsPerRequest: 8
+filesystemAccess: false
+networkAccess: false
+admin: false

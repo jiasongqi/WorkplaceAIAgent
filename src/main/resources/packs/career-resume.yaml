@@ -1,0 +1,11 @@
+packId: career-resume
+displayName: 求职简历专家包
+description: 简历优化与面试准备相关技能与权限
+agentCodes:
+  - resume-agent
+skillNames:
+  - interview-prep
+  - resume-review
+permissionProfiles:
+  - resume-agent
+enabledByDefault: true

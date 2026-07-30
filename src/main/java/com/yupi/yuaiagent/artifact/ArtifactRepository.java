@@ -1,17 +1,24 @@
 package com.yupi.yuaiagent.artifact;
 
 import com.yupi.yuaiagent.artifact.model.Artifact;
+import com.yupi.yuaiagent.artifact.model.ArtifactQuery;
 import com.yupi.yuaiagent.artifact.model.ArtifactScope;
 import com.yupi.yuaiagent.artifact.model.ArtifactStatus;
 import com.yupi.yuaiagent.repository.entity.ArtifactEntity;
 import com.yupi.yuaiagent.repository.jpa.ArtifactJpaRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,7 +48,7 @@ public class ArtifactRepository {
         if (artifact.getArtifactId() == null || artifact.getArtifactId().isEmpty()) {
             artifact.setArtifactId(UUID.randomUUID().toString());
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.Clock.systemUTC());
 
         // Check existing
         Optional<ArtifactEntity> existingOpt = jpaRepo.findByArtifactId(artifact.getArtifactId());
@@ -64,6 +71,7 @@ public class ArtifactRepository {
     /**
      * 根据 ID 查找交付物
      */
+    @Transactional(readOnly = true)
     public Optional<Artifact> findById(String artifactId) {
         return jpaRepo.findByArtifactId(artifactId).map(this::toDomain);
     }
@@ -71,8 +79,50 @@ public class ArtifactRepository {
     /**
      * 查找所有交付物
      */
+    @Transactional(readOnly = true)
     public List<Artifact> findAll() {
         return jpaRepo.findAll().stream().map(this::toDomain).toList();
+    }
+
+    /**
+     * 使用 JPA Specification 在数据库中完成可选条件过滤。
+     */
+    @Transactional(readOnly = true)
+    public List<Artifact> find(ArtifactQuery query) {
+        ArtifactQuery q = query != null ? query : ArtifactQuery.builder().build();
+        Specification<ArtifactEntity> specification = (root, ignored, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (q.getUserId() != null) predicates.add(cb.equal(root.get("userId"), q.getUserId()));
+            if (q.getChatId() != null) predicates.add(cb.equal(root.get("conversationId"), q.getChatId()));
+            if (q.getType() != null) predicates.add(cb.equal(root.get("type"), q.getType()));
+            if (q.getScope() != null) predicates.add(cb.equal(root.get("scope"), q.getScope().name()));
+            if (q.getStatus() != null) predicates.add(cb.equal(root.get("status"), q.getStatus().name()));
+            if (q.getReusable() != null) predicates.add(cb.equal(root.get("reusable"), q.getReusable()));
+            if (q.getTargetAgent() != null && !q.getTargetAgent().isBlank()) {
+                String pattern = "%," + q.getTargetAgent().trim().toUpperCase() + ",%";
+                predicates.add(cb.like(cb.upper(cb.concat(cb.concat(",", root.get("targetAgents")), ",")), pattern));
+            }
+            if (q.getActiveAt() != null) {
+                OffsetDateTime activeAt = q.getActiveAt().atOffset(ZoneOffset.UTC);
+                predicates.add(cb.or(cb.isNull(root.get("expiresAt")),
+                        cb.greaterThan(root.get("expiresAt"), activeAt)));
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        int limit = q.getLimit() != null ? Math.max(1, q.getLimit()) : 100;
+        return jpaRepo.findAll(specification,
+                        PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Artifact> findByDedupKey(String dedupKey) {
+        if (dedupKey == null || dedupKey.isBlank()) {
+            return Optional.empty();
+        }
+        return jpaRepo.findByDedupKey(dedupKey).map(this::toDomain);
     }
 
     /**
@@ -82,7 +132,7 @@ public class ArtifactRepository {
     public Optional<Artifact> updateStatus(String artifactId, ArtifactStatus status) {
         return jpaRepo.findByArtifactId(artifactId).map(entity -> {
             entity.setStatus(status.name());
-            entity.setUpdatedAt(OffsetDateTime.now());
+            entity.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
             ArtifactEntity saved = jpaRepo.save(entity);
             return toDomain(saved);
         });
@@ -99,6 +149,13 @@ public class ArtifactRepository {
         e.setTitle(a.getTitle());
         e.setType(a.getType());
         e.setContent(a.getContent());
+        e.setSummary(a.getSummary());
+        e.setReusable(a.isReusable());
+        e.setTargetAgents(encodeTargetAgents(a.getTargetAgents()));
+        e.setDedupKey(a.getDedupKey());
+        e.setSchemaVersion(a.getSchemaVersion());
+        e.setExpiresAt(toOffsetDateTime(a.getExpiresAt()));
+        e.setSourceTraceId(a.getSourceTraceId());
         e.setStatus(a.getStatus() != null ? a.getStatus().name() : null);
         e.setScope(a.getScope() != null ? a.getScope().name() : null);
         if (a.getCreatedAt() != null) {
@@ -119,6 +176,13 @@ public class ArtifactRepository {
                 .title(e.getTitle())
                 .type(e.getType())
                 .content(e.getContent())
+                .summary(e.getSummary())
+                .reusable(e.isReusable())
+                .targetAgents(decodeTargetAgents(e.getTargetAgents()))
+                .dedupKey(e.getDedupKey())
+                .schemaVersion(e.getSchemaVersion())
+                .expiresAt(toLocalDateTime(e.getExpiresAt()))
+                .sourceTraceId(e.getSourceTraceId())
                 .status(e.getStatus() != null ? ArtifactStatus.valueOf(e.getStatus()) : null)
                 .scope(e.getScope() != null ? ArtifactScope.valueOf(e.getScope()) : null)
                 .createdAt(toLocalDateTime(e.getCreatedAt()))
@@ -128,5 +192,31 @@ public class ArtifactRepository {
 
     private LocalDateTime toLocalDateTime(OffsetDateTime odt) {
         return odt != null ? odt.toLocalDateTime() : null;
+    }
+
+    private OffsetDateTime toOffsetDateTime(LocalDateTime value) {
+        return value != null ? value.atOffset(ZoneOffset.UTC) : null;
+    }
+
+    private String encodeTargetAgents(List<String> agents) {
+        if (agents == null || agents.isEmpty()) {
+            return "";
+        }
+        return agents.stream()
+                .filter(a -> a != null && !a.isBlank())
+                .map(a -> a.trim().toUpperCase())
+                .distinct()
+                .sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private List<String> decodeTargetAgents(String encoded) {
+        if (encoded == null || encoded.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(encoded.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 }

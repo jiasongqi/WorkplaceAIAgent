@@ -29,11 +29,28 @@ public record CollaborationResult(
         PARALLEL_DEBATE,
         /** Primary failed or quality rejected; another agent retried with reason */
         FAILOVER,
+        /** Quality NACK → same expert repaired once (Request-Reply-Repair) */
+        SELF_REPAIR,
         /** Single expert path (no collaboration needed) */
         SINGLE
     }
 
     public boolean usedFailover() {
         return mode == Mode.FAILOVER && failoverIntent != null;
+    }
+
+    public boolean usedSelfRepair() {
+        return mode == Mode.SELF_REPAIR;
+    }
+
+    /** Intent that produced the final answer after quality recovery. */
+    public AgentIntent effectiveIntent() {
+        if (usedSelfRepair()) {
+            return primaryIntent;
+        }
+        if (failoverIntent != null) {
+            return failoverIntent;
+        }
+        return primaryIntent;
     }
 }

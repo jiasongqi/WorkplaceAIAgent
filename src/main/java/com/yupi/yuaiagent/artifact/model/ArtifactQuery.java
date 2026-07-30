@@ -3,6 +3,8 @@ package com.yupi.yuaiagent.artifact.model;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 /**
  * 交付物查询条件封装
  * <p>
@@ -39,4 +41,24 @@ public class ArtifactQuery {
      * 状态；为 null 时不按 status 约束
      */
     private ArtifactStatus status;
+
+    /**
+     * 目标 Agent；由数据库过滤 targetAgents。
+     */
+    private String targetAgent;
+
+    /**
+     * 是否可复用。
+     */
+    private Boolean reusable;
+
+    /**
+     * 仅返回在该时刻尚未过期的数据。
+     */
+    private LocalDateTime activeAt;
+
+    /**
+     * 数据库查询上限。
+     */
+    private Integer limit;
 }

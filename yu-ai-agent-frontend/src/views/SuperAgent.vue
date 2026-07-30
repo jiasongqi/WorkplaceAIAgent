@@ -35,17 +35,29 @@
         </div>
 
         <div class="input-area">
-          <textarea
-            v-model="inputMessage"
-            @keydown.enter.exact.prevent="sendMessage"
-            @keydown.shift.enter="inputMessage += '\n'"
-            placeholder="输入任务描述... (Enter 发送，Shift+Enter 换行)"
-            :disabled="isStreaming"
-            rows="2"
-          ></textarea>
-          <button @click="sendMessage" :disabled="isStreaming || !inputMessage.trim()" class="send-btn">
-            {{ isStreaming ? '执行中...' : '执行' }}
-          </button>
+          <div v-if="attachedFile" class="attach-row">
+            <span>📎 {{ attachedFile.name }}</span>
+            <select v-model="attachHint" :disabled="isStreaming">
+              <option value="resume">简历</option>
+              <option value="offer">Offer</option>
+            </select>
+            <button type="button" @click="attachedFile = null" :disabled="isStreaming">×</button>
+          </div>
+          <div class="input-row">
+            <input ref="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,.gif" hidden @change="onFileSelected" />
+            <button type="button" class="attach-btn" @click="fileInput?.click()" :disabled="isStreaming" title="上传材料（感知预处理）">📎</button>
+            <textarea
+              v-model="inputMessage"
+              @keydown.enter.exact.prevent="sendMessage"
+              @keydown.shift.enter="inputMessage += '\n'"
+              placeholder="输入任务描述... (可先上传简历/Offer)"
+              :disabled="isStreaming || perceptionBusy"
+              rows="2"
+            ></textarea>
+            <button @click="sendMessage" :disabled="isStreaming || perceptionBusy || (!inputMessage.trim() && !attachedFile)" class="send-btn">
+              {{ perceptionBusy ? '感知中...' : (isStreaming ? '执行中...' : '执行') }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -96,7 +108,7 @@ import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { chatWithManus } from '../api'
+import { chatWithManus, preprocessPerception } from '../api'
 import WpIcon from '../components/WpIcon.vue'
 
 useHead({ title: 'AI超级智能体 - 职场生存智囊' })
@@ -109,12 +121,16 @@ const messages = ref([])
 const steps = ref([])
 const isStreaming = ref(false)
 const isThinking = ref(false)
+const attachedFile = ref(null)
+const fileInput = ref(null)
+const attachHint = ref('resume')
+const perceptionBusy = ref(false)
 
 let eventSource = null
 
 // 初始欢迎消息
 messages.value.push({
-  content: '你好！我是 AI 超级智能体，可以帮你完成复杂任务：联网搜索、生成 PDF、执行代码、下载文件等。请描述你的需求。',
+  content: '你好！我是 AI 超级智能体，可以帮你完成复杂任务：联网搜索、生成 PDF、执行代码、下载文件等。也可先上传简历/Offer 做感知预处理。',
   isUser: false,
   time: Date.now()
 })
@@ -124,11 +140,59 @@ const addMessage = (content, isUser) => {
   scrollToBottom()
 }
 
-const sendMessage = () => {
-  if (!inputMessage.value.trim() || isStreaming.value) return
+const onFileSelected = (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (file.size > 10 * 1024 * 1024) {
+    alert('文件不能超过 10MB')
+    e.target.value = ''
+    return
+  }
+  attachedFile.value = file
+  const name = (file.name || '').toLowerCase()
+  if (/offer|薪|salary/.test(name)) attachHint.value = 'offer'
+  else if (/resume|简历|cv/.test(name)) attachHint.value = 'resume'
+  e.target.value = ''
+}
+
+const sendMessage = async () => {
+  if (isStreaming.value || perceptionBusy.value) return
   const msg = inputMessage.value.trim()
+  const file = attachedFile.value
+  if (!msg && !file) return
+
   inputMessage.value = ''
-  addMessage(msg, true)
+  attachedFile.value = null
+
+  let finalMsg = msg
+  const displayMsg = file
+    ? (msg ? `📎 ${file.name}\n${msg}` : `📎 ${file.name}\n请根据材料完成分析`)
+    : msg
+
+  if (file) {
+    perceptionBusy.value = true
+    try {
+      const res = await preprocessPerception(file, attachHint.value)
+      const data = res.data?.data
+      if (!data?.promptBlock) throw new Error(res.data?.message || '感知结果为空')
+      // Manus 走 GET SSE：截断 promptBlock，避免 URL 过长
+      let block = data.promptBlock
+      if (block.length > 2500) {
+        block = block.slice(0, 2500) + '\n…（感知文本已截断，建议用职场顾问页上传以绑定完整材料）'
+      }
+      const userAsk = msg || '请根据感知预处理结果完成分析并给出可执行建议。'
+      finalMsg = `${block}\n\n【用户补充】\n${userAsk}`
+    } catch (e) {
+      perceptionBusy.value = false
+      addMessage(`⚠️ 感知预处理失败: ${e.response?.data?.message || e.message || '请重试'}`, false)
+      if (!msg) return
+      finalMsg = msg
+    } finally {
+      perceptionBusy.value = false
+    }
+  }
+
+  addMessage(displayMsg, true)
   isThinking.value = true
   isStreaming.value = true
   steps.value = []
@@ -139,7 +203,7 @@ const sendMessage = () => {
   messages.value.push({ content: '', isUser: false, time: Date.now() })
   const aiMsgIndex = messages.value.length - 1
 
-  eventSource = chatWithManus(msg)
+  eventSource = chatWithManus(finalMsg || msg)
   let streamFinished = false
 
   const finishStream = () => {
@@ -307,11 +371,11 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   font-size: 16px; flex-shrink: 0;
   background: var(--layer2);
 }
-.user-avatar { background: linear-gradient(135deg, rgba(245,158,11,0.3), rgba(217,119,6,0.15)); color: var(--t1); font-size: 12px; font-weight: 600; }
+.user-avatar { background: var(--user-orb); color: var(--t1); font-size: 12px; font-weight: 600; }
 
 .message-bubble { padding: 16px 20px; border-radius: var(--r-lg); max-width: 100%; }
 .ai-bubble { background: var(--layer1); border: 1px solid var(--glass-border); border-top-left-radius: 4px; color: var(--t1); }
-.user-bubble { background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.03)); border: 1px solid rgba(245,158,11,0.08); color: var(--t1); }
+.user-bubble { background: linear-gradient(135deg, var(--gold-soft), var(--gold-dim)); border: 1px solid var(--gold-border-soft); color: var(--t1); }
 
 .message-content { font-size: 14px; line-height: 1.75; word-break: break-word; }
 
@@ -351,9 +415,26 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
 
 .input-area {
-  display: flex; gap: 10px; padding: 16px 22px 24px;
-  border-top: 1px solid var(--glass-border); align-items: flex-end;
+  display: flex; flex-direction: column; gap: 8px; padding: 16px 22px 24px;
+  border-top: 1px solid var(--glass-border);
 }
+.attach-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--t2);
+  background: var(--layer2); border-radius: var(--r-sm); padding: 6px 10px;
+}
+.attach-row select {
+  border: 1px solid var(--glass-border); background: var(--layer1); color: var(--t2);
+  border-radius: 6px; font-size: 12px; padding: 2px 6px;
+}
+.attach-row button { background: none; border: none; color: var(--t4); cursor: pointer; font-size: 16px; }
+.input-row { display: flex; align-items: flex-end; gap: 10px; }
+.attach-btn {
+  width: 40px; height: 44px; border-radius: var(--r-md);
+  border: 1px solid var(--glass-border); background: var(--layer1); color: var(--t2);
+  cursor: pointer; flex-shrink: 0;
+}
+.attach-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .input-area textarea {
   flex: 1; border: 1px solid var(--glass-border); border-radius: var(--r-lg);
   padding: 12px 18px; font-size: 14px; resize: none; outline: none;
@@ -361,7 +442,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   background: var(--layer1); color: var(--t1);
 }
 .input-area textarea::placeholder { color: var(--t4); }
-.input-area textarea:focus { border-color: rgba(245,158,11,0.28); box-shadow: 0 0 0 3px var(--gold-dim); }
+.input-area textarea:focus { border-color: var(--gold-border); box-shadow: 0 0 0 3px var(--gold-dim); }
 .input-area textarea:disabled { opacity: 0.5; }
 
 .send-btn {
@@ -370,7 +451,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   white-space: nowrap; height: 44px;
   box-shadow: 0 4px 14px var(--gold-glow);
 }
-.send-btn:hover:not(:disabled) { transform: scale(1.03); box-shadow: 0 6px 22px rgba(245,158,11,0.35); }
+.send-btn:hover:not(:disabled) { transform: scale(1.03); box-shadow: 0 6px 22px var(--gold-glow-strong); }
 .send-btn:active:not(:disabled) { transform: scale(0.97); }
 .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
@@ -396,7 +477,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
   border-radius: var(--r-sm); padding: 10px 12px;
 }
 .step-item.done { border-color: rgba(52,211,153,0.3); }
-.step-item.running { border-color: rgba(245,158,11,0.4); animation: pulse 1.5s infinite; }
+.step-item.running { border-color: var(--gold-border); animation: pulse 1.5s infinite; }
 .step-item.error { border-color: rgba(248,113,113,0.3); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
@@ -413,7 +494,7 @@ onBeforeUnmount(() => { if (eventSource) eventSource.close() })
 
 .step-tool { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .tool-label { font-size: 11px; color: var(--t4); }
-.tool-name { font-size: 11px; color: #60a5fa; background: rgba(96,165,250,0.1); padding: 1px 6px; border-radius: 4px; }
+.tool-name { font-size: 11px; color: var(--gold-text); background: var(--gold-soft); padding: 1px 6px; border-radius: 4px; }
 
 .step-detail { font-size: 12px; color: var(--t4); margin-top: 4px; line-height: 1.4; }
 
