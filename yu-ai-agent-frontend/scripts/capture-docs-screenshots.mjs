@@ -183,7 +183,16 @@ Object.defineProperty(Location.prototype, 'href', {
   await sleep(3000)
   await shot(ws, sessionId, 'screenshot-super.png')
   await cdp(ws, 'Page.navigate', { url: `${BASE}/knowledge` }, sessionId)
-  await sleep(3000)
+  for (let i = 0; i < 40; i++) {
+    if (await evalJs(ws, sessionId, `!!document.querySelector('.kb-page .kb-header')`)) break
+    await sleep(400)
+  }
+  await sleep(800)
+  console.log('knowledge', await evalJs(ws, sessionId, `({
+    href: location.href,
+    title: document.querySelector('.page-title')?.textContent?.trim() || '',
+    hasKb: !!document.querySelector('.kb-page'),
+  })`))
   await shot(ws, sessionId, 'screenshot-knowledge.png')
 
   // Login page without auth
