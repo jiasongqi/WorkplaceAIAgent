@@ -1,7 +1,7 @@
 ---
 name: workpilot-interview-qa
-description: WorkPilot（全场景职场生存智囊）面试问答手册。覆盖架构设计、技术实现、场景设计三大类 50+ 问题，含 STAR 法则回答模板和高频追问。适用于 AI Agent 方向面试准备。含 2026-07 Perception/Goal/熔断、Tool Call、Agent Loop 迭代专题。
-version: 1.7.0
+description: WorkPilot（全场景职场生存智囊）面试问答手册。按项目架构、Agent 核心、上下文与记忆、RAG、工具工程、安全可靠性、平台工程、场景设计分类，覆盖 75 道主问题与 1 道补充问题，含 STAR 法则回答模板和高频追问。
+version: 1.8.1
 tags: [interview, agent, architecture, career, perception, reliability, tool-call, agent-loop]
 ---
 
@@ -10,7 +10,39 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 > 项目：全场景职场生存智囊（WorkPilot）
 > 技术栈：Java 21 + Spring Boot 3.4 + Spring AI 1.0 + Vue 3 + DashScope + PDFBox/POI（感知层）
 > 定位：全场景职场 AI 智囊平台，覆盖求职到离职全生命周期
-> 更新：v1.7 — Ch1 Perception/Goal/熔断 + Ch3 Tool Schema/并行/幂等/Submit-Poll + Ch4 Loop Wrap-up/Replanner/Depth；详见 `docs/interview-perception-goal-reliability.md`
+> 代码同步基线：2026-07-30 · `7a68eb2`（RAG Pipeline / Knowledge Base UI）
+> 更新：v1.8.1 — 统一 75 题分类与编号顺序；纳入 Perception/Goal/熔断、Tool Schema/并行/幂等/Submit-Poll、Loop Wrap-up/Replanner/Depth、RAG Pipeline。
+
+---
+
+## 使用导航
+
+### 题库分类
+
+| 分类 | 题号 | 重点 |
+|------|------|------|
+| 项目与核心架构 | Q1–Q10 | 分层、多 Agent、NLU、记忆、RAG、工作流、安全、质量 |
+| 工程实现与基础设施 | Q11–Q20 | SSE、序列化、JWT、向量库、Tool Calling、MCP、Trace |
+| 场景设计与扩展 | Q21–Q25 | 新 Agent、幻觉、A/B、数据隔离、可观测性 |
+| 通用高频追问 | Q26–Q35 | 技术选型、降级、循环、评测、挑战、灰度 |
+| 平台能力专题 | Q36–Q43 | 指标、Agent 范式、上下文工程、工具注册 |
+| 代码审查与工程深挖 | Q44–Q54 | 循环、超时、并发、注入、Reflexion、Rerank |
+| 感知、工具与 Agent Loop | Q55–Q70 | Perception、Goal、Schema、并行、幂等、Wrap-up、Replanner |
+| RAG 与知识库专题 | Q71–Q75 | Pipeline、经验检索、PDF 表格、会话材料与知识库边界 |
+
+### 可信度标记
+
+- `[闭环]`：当前代码主路径已接入并可运行。
+- `[部分]`：核心能力存在，但部分分支、配置或持久化尚未闭环。
+- `[脚手架]`：类或接口已存在，未接入主链路，不应表述为生产能力。
+- `[演进]`：尚未实现，只能作为后续方案回答。
+- 未经压测或评测报告支撑的百分比、延迟和容量数字，只能作为目标或本地观察，不要当作已验证结果。
+
+### 推荐复习顺序
+
+1. **先会讲项目**：项目介绍 + Q1、Q3、Q4。
+2. **再讲核心亮点**：Q5、Q6、Q15、Q29、Q55–Q75。
+3. **最后准备深挖**：Q36–Q54 + STAR 案例。
 
 ---
 
@@ -30,7 +62,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-## 二、架构设计类 Q&A
+## 二、项目与核心架构（Q1–Q10）
 
 ### Q1: 项目整体架构是怎样的？
 
@@ -195,7 +227,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-## 三、技术实现类 Q&A
+## 三、工程实现与基础设施（Q11–Q20）
 
 ### Q11: SSE 流式响应是怎么实现的？
 
@@ -305,7 +337,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-## 四、场景设计类 Q&A
+## 四、场景设计与扩展（Q21–Q25）
 
 ### Q21: 如何扩展一个新的 Agent？
 
@@ -332,12 +364,13 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-### Q23: 如何做 A/B 测试？
+### Q23: 如何做 A/B 测试？`[脚手架]`
 
 **回答要点**：
 - **PromptRegistry**：多版本 Prompt，按 trafficPercent 加权随机选择
 - **WorkflowMatcher**：Rule / LLM / FALLBACK 三种匹配策略可切换
 - **EvalCenter**：回归测试对比不同版本效果
+- **诚实边界**：相关组件已存在，但尚未接入真实流量分桶和主聊天发布闭环
 
 ---
 
@@ -403,7 +436,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-## 六、面试高频追问
+## 六、通用高频追问（Q26–Q35）
 
 ### Q26: 为什么不直接用 LangChain？
 
@@ -441,13 +474,13 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 > 1）Prompt 模板支持语言参数化；2）RAG 知识库按语言分文档；3）NLU Pipeline 的 AliasResolver 支持中英文别名；4）前端 i18n 国际化。当前项目以中文为主，但架构上没有硬编码中文的障碍。
 
-### Q35: 如何做灰度发布？
+### Q35: 如何做灰度发布？`[脚手架]`
 
-> PromptRegistry 支持多版本 + trafficPercent 加权随机。WorkflowMatcher 支持 Rule/LLM/FALLBACK 三种策略切换。EvalCenter 回归测试验证新版本效果。可以先 10% 流量切到新 Prompt，观察 EvalReport 的 passRate 和 regression，再逐步放量。
+> 当前 `PromptRegistry` 已具备多版本与 `trafficPercent` 数据结构，但未接入主聊天真实流量。面试应表述为灰度设计方案：先由 EvalCenter 做离线回归，再接入用户/会话级稳定分桶，从 10% 流量逐步放量，并观察通过率、回归项、错误率和延迟。
 
 ---
 
-## 七、新增功能相关 Q&A (v1.5)
+## 七、平台能力专题（Q36–Q43）
 
 ### Q36: 性能评估框架是怎么设计的？
 
@@ -541,7 +574,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-### Q41: 工具注册机制是怎么设计的？
+### Q41: 工具注册机制是怎么设计的？`[部分]`
 
 **回答要点**：
 - **动态注册表**：`ToolRegistry` 支持运行时注册/注销工具
@@ -551,11 +584,11 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 - **健康监控**：支持 HEALTHY/DEGRADED/UNHEALTHY 状态管理
 
 **追问**：和原来的 ToolRegistration 有什么区别？
-> 原来是静态 @Bean 注册，所有工具硬编码。新机制支持：1）运行时动态注册/注销；2）按能力标签查找工具；3）工具健康状态管理；4）自动从 Spring Context 发现。更灵活，支持工具市场场景。
+> 原来是静态 @Bean 注册，所有工具硬编码。新机制支持：1）运行时动态注册/注销；2）按能力标签查找工具；3）工具健康状态管理；4）自动从 Spring Context 发现。当前 Agent 主调用链仍以 `ToolRegistration` 为准，动态注册表属于部分接入能力。
 
 ---
 
-### Q42: 如何用范式选择器优化不同任务？
+### Q42: 如何用范式选择器优化不同任务？`[脚手架]`
 
 **回答要点**：
 - **自动选择**：`ParadigmSelector.select(intent, message, confidence)`
@@ -563,7 +596,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
   - CONTENT_GENERATION / SKILL_ASSESSMENT → REFLECTION
   - 其他 → REACT
 - **用户指定**：`ParadigmService.executeWithParadigm(message, "reflection", userId)`
-- **集成点**：在 OrchestratorAgent 中注入 ParadigmService，根据 NLU 结果选择范式
+- **规划集成点**：未来在 `OrchestratorAgent` 中注入 `ParadigmService`，根据 NLU 结果选择范式；当前主路由尚未调用它
 
 **追问**：什么时候用 REACT，什么时候用 PLAN_AND_SOLVE？
 > REACT 适合需要实时调整的任务（工具调用、交互式问答），边想边做。PLAN_AND_SOLVE 适合复杂多步骤任务（职业规划、简历优化），先规划再执行。关键区别：REACT 灵活但可能循环，PLAN_AND_SOLVE 结构化但不够灵活。
@@ -589,16 +622,18 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-## 八、代码审查维度相关 Q&A
+## 八、代码审查与工程深挖（Q44–Q54）
 
 ### Q44: 如何保证 Agent 不会陷入死循环？（代码审查维度四）
 
 **回答要点**：
-- **三层防护**：
-  1. `ReActAgent.maxIterations` 限制（默认 10 次）
-  2. `EmbeddingLoopDetector` 余弦相似度检测（0.88 阈值，滑动窗口 5 条）
-  3. `TokenBudgetManager` 三级预算控制（Normal/Compact/Compress）
-- **引导性干预**：检测到循环后注入纠错提示，让 LLM 自主修正，而非简单终止
+- **多层防护**：
+  1. `maxSteps` 硬上限，耗尽后由 `LoopWrapUp` 输出部分结果
+  2. `EmbeddingLoopDetector` 检测重复或停滞调用
+  3. `ConsecutiveFailureGuard` 熔断连续异常结果
+  4. `TokenBudgetManager` 控制上下文预算
+  5. `AgentDepthContext` 限制 Agent 嵌套深度
+- **完成态校验**：`CompletionClaimGuard` 防止模型口头声称已经完成但没有工具证据
 - **ToolResultClassifier**：分级处理工具结果（TIMEOUT/EMPTY/GARBAGE/NORMAL）
 
 ---
@@ -607,7 +642,8 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 **回答要点**：
 - **超时机制**：`CompletableFuture.orTimeout(30, TimeUnit.SECONDS)`
-- **自动重试**：超时后自动重试 2 次（`MAX_TIMEOUT_RETRIES`）
+- **分类重试**：只读工具超时后最多重试 2 次（`MAX_TIMEOUT_RETRIES`）
+- **副作用保护**：写文件、终端执行等副作用工具不自动重试，依靠幂等键避免重复执行
 - **降级策略**：重试用尽后返回友好错误信息
 - **Trace 记录**：超时事件记录到 TraceSpan
 - **结果分级**：`ToolResultClassifier` 将超时标记为 TIMEOUT 级别
@@ -704,10 +740,10 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-### Q53: 范式选择器怎么集成到现有系统？
+### Q53: 范式选择器怎么集成到现有系统？`[脚手架]`
 
 **回答要点**：
-- **集成点**：`OrchestratorAgent` 注入 `ParadigmService`
+- **规划集成点**：让 `OrchestratorAgent` 注入 `ParadigmService`；当前代码中二者尚未接线
 - **选择逻辑**：
   1. NLU 意图映射：DATA_QUERY → PLAN_AND_SOLVE
   2. 关键词启发式："分析"/"对比" → PLAN_AND_SOLVE
@@ -735,33 +771,7 @@ tags: [interview, agent, architecture, career, perception, reliability, tool-cal
 
 ---
 
-## 七、Ch5 RAG / 知识库专题（v1.8 · 2026-07-30）
-
-> 落地笔记：[mm-agent-tutorial-ch5-落地.md](./mm-agent-tutorial-ch5-落地.md) · 总览：[场景对照总结](./mm-agent-tutorial-场景对照总结.md)
-
-### Q71: 为什么要把 RAG 收成 RetrievalPipeline？
-
-**要点**：教程 Ch5 强调改写、多路召回、融合、防循环；原先 QueryRewriter/Rerank/RagTool 分散且 RagTool 未注册。Pipeline 单一入口 → Agent、Advisor、AiChat 共用 → 可测、可配 `rag.pipeline.*`。
-
-### Q72: L4 经验记忆 query 为什么不用 conversationId？
-
-**要点**：用 conversationId 检索几乎召不回相关经验。`ExperienceQueryBuilder` 从**当前用户消息**抽关键词；不够再读 L3 摘要。对应教程「L2→L3 经验检索 query 要贴近任务语义」。
-
-### Q73: PDF 表格怎么进向量库？
-
-**要点**：MVP 用 PDFBox 启发式对齐列 → `TableToMarkdownConverter` → 整表 chunk（`chunkType=table`）+ JSON sidecar。复杂版式/扫描件诚实说未覆盖，可上 Tabula/DocMind。
-
-### Q74: 知识库页和 Perception 上传有何不同？
-
-**要点**：Perception = 会话级 bind，给本轮 Agent 读；知识库 = 持久语料，RAG 全站检索。用户路径：顾问 📎 vs `/knowledge` 运营入库。
-
-### Q75: 如何向面试官讲 mm_agent_tutorial 学习收获？
-
-**要点**：按 **场景对照总结** 四条路径口述——① 顾问 RAG ② 简历感知 ③ 知识库页 ④ 超级智能体工具；每路径点 1 个教程章 + 1 个 Gotcha + 1 个诚实边界。避免声称「完整多模态 Agent」。
-
----
-
-## 八、感知 / 工具 / Loop 迭代专题（v1.7 · 2026-07）
+## 九、感知、工具与 Agent Loop（Q55–Q70）
 
 > 完整 STAR、术语表、Q55–Q70 见 **[interview-perception-goal-reliability.md](./interview-perception-goal-reliability.md)**。  
 > 落地笔记：`mm-agent-tutorial-ch1-落地.md` · `ch3` · `ch4` · `ch5`。本节为速查。
@@ -808,3 +818,29 @@ System Prompt 静态；Goal Anchor **每轮注入 + ReAct 每步重挂**，抗 C
 ### 专业名词（口述清单）
 
 Perception · Goal Anchor · Fail-fast Fuse · Schema Engineering · Parallel Fan-out · Observation Sanitizer · Idempotency · Submit-Poll · Pass-by-Reference · Wrap-up · Replanner · Stall Detection · Depth Limit · Completion Claim Hallucination
+
+---
+
+## 十、RAG 与知识库（Q71–Q75）
+
+> 落地笔记：[mm-agent-tutorial-ch5-落地.md](./mm-agent-tutorial-ch5-落地.md) · 总览：[场景对照总结](./mm-agent-tutorial-场景对照总结.md)
+
+### Q71: 为什么要把 RAG 收成 RetrievalPipeline？
+
+**要点**：教程 Ch5 强调改写、多路召回、融合、防循环；原先 QueryRewriter/Rerank/RagTool 分散且 RagTool 未注册。Pipeline 单一入口 → Agent、Advisor、AiChat 共用 → 可测、可配 `rag.pipeline.*`。
+
+### Q72: L4 经验记忆 query 为什么不用 conversationId？
+
+**要点**：用 conversationId 检索几乎召不回相关经验。`ExperienceQueryBuilder` 从**当前用户消息**抽关键词；不够再读 L3 摘要。对应教程「L2→L3 经验检索 query 要贴近任务语义」。
+
+### Q73: PDF 表格怎么进向量库？
+
+**要点**：MVP 用 PDFBox 启发式对齐列 → `TableToMarkdownConverter` → 整表 chunk（`chunkType=table`）+ JSON sidecar。复杂版式/扫描件诚实说未覆盖，可上 Tabula/DocMind。
+
+### Q74: 知识库页和 Perception 上传有何不同？
+
+**要点**：Perception = 会话级 bind，给本轮 Agent 读；知识库 = 持久语料，RAG 全站检索。用户路径：顾问 📎 vs `/knowledge` 运营入库。
+
+### Q75: 如何向面试官讲 mm_agent_tutorial 学习收获？
+
+**要点**：按 **场景对照总结** 四条路径口述——① 顾问 RAG ② 简历感知 ③ 知识库页 ④ 超级智能体工具；每路径点 1 个教程章 + 1 个 Gotcha + 1 个诚实边界。避免声称「完整多模态 Agent」。

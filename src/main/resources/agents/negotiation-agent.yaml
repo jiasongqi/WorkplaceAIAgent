@@ -1,9 +1,10 @@
 agentCode: negotiation-agent
 agentVersion: "1.0.0"
 displayName: "薪资谈判专家"
-description: "薪资谈判、涨薪分析、薪酬对标"
+description: "擅长谈薪、涨薪、薪酬分析与话术。输入需要当前薪资/期望。"
 promptVersion: "negotiation-v1"
 agentType: "TOOL_CALL"
+intent: "NEGOTIATION"
 permissionProfile: "negotiation-agent"
 capabilities:
   - "negotiation"
@@ -16,6 +17,15 @@ intentKeywords:
   - "涨薪"
   - "谈判"
   - "薪酬"
+routingKeywords:
+  - "谈薪"
+  - "涨薪"
+  - "薪资"
+  - "薪酬"
+  - "年终奖"
+  - "hc"
+inputRequirements:
+  - "text"
 metadata:
   icon: "💰"
   category: "career"

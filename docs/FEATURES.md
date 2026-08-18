@@ -5,7 +5,7 @@
 >
 > 技术底座：Java 21 + Spring Boot 3.4 + Spring AI 1.0（Alibaba DashScope）+ Vue 3 + PDFBox / POI（感知层）。
 > 品牌名：WorkPilot
-> 文档同步：2026-07-29 · Ch1 Perception/Goal/熔断 · Ch3 Tool Schema/并行/幂等/Submit-Poll · Ch4 Loop Wrap-up/Replanner/Depth
+> 文档同步：2026-08-18 · 桌面萌宠 · 预约查日程/目录分流 · 平台 `platform.*` 开关 · sage/dark 双主题
 
 ---
 
@@ -38,7 +38,7 @@ L0 基础对话         单轮 / 多轮对话 + 对话记忆持久化
                        └─ L17 多 Agent 运行时 [闭环]   群聊模式 + Task Orchestrator + 工作流引擎
                        └─ L18 工作流引擎 [部分]   DAG 就绪队列（JOB_CHANGE/INTERVIEW）+ 开关；legacy 6 节点脚手架
                        └─ L19 沙箱执行  Docker/本地进程隔离 + 5层防护
-                       └─ L20 访问控制与治理  投票式决策 + Agent权限 + MCP信任 + Quota配额
+                       └─ L20 访问控制与治理 [闭环]  投票式决策接到 ToolCallAgent / Escape / Negotiation
                        └─ L21 Agent 注册中心 [脚手架]   YAML声明式 + Marketplace就绪
                        └─ L22 评测中心 [部分]   路由门禁闭环 + 内容评测可选 live 闭环
                        └─ L23 Prompt 版本管理 [脚手架]   多版本 + 灰度发布 + A/B测试
@@ -187,6 +187,14 @@ BaseAgent  →  ReActAgent（思考-行动循环）  →  ToolCallAgent（工具
 ## L6 · 预约咨询（状态机 + 企业日历）
 
 `ConsultationAgent` 通过追问状态机收集信息并对接企业日历。支持从对话历史提取已有信息，确认阶段可自由提问。
+
+**入口分流（先于状态机）**：
+
+| 用户意图 | 检测 | 行为 |
+|----------|------|------|
+| 查已有预约 / 今天日程 | `isScheduleInquiry` | 读 `AppointmentRepository`，列出当天或全部记录，**不**开填表 |
+| 有什么可预约 / 服务目录 | `isServiceCatalogInquiry` | 返回 5 类一对一咨询服务目录，进入 `COLLECTING_INFO` 收集 topic |
+| 明确新开预约 | Keyword/NLU → CONSULTATION | 状态机：姓名 → 联系方式 → 时间 → 确认 → 创建 |
 
 ```
 INITIAL → COLLECTING_INFO → CONFIRMING → CREATING_APPOINTMENT → COMPLETED
@@ -525,6 +533,12 @@ Tool 执行的隔离环境，防止恶意命令影响宿主系统。
 
 统一的访问决策服务，聚合多个安全维度的投票结果。
 
+**热路径（已接线）**：
+- `ToolCallAgent.think()` 用 `PermittedToolFilter` 对 LLM **隐藏** DENY 工具
+- `ParallelToolCallingSupport` 执行前再校验一次；拒绝时返回 permission denied observation，不调用工具
+- `YuManus`（`yu-manus` 画像，admin）与 `EscapeAgent` / `NegotiationAgent` 按 YAML 过滤 `ToolCallback[]`
+- YAML 中的 `rag.query` / `web.search` / `file.read` 等别名由 `ToolNameMatcher` 映射到真实 `@Tool` 方法名
+
 **决策策略**：一票否决（any DENY → reject），全部弃权 → reject（默认安全）。
 
 | 投票器 | 职责 |
@@ -563,6 +577,24 @@ YAML 声明式 Agent 描述符，支持 Agent Marketplace 场景。
 **查询能力**：按编码获取、按能力标签查找、按意图关键词匹配。
 
 **关键类**：`AgentRegistry`（接口）、`InMemoryAgentRegistry`（内存实现）、`AgentDescriptor`（描述符）
+
+**插件平台迁移（2026）**：`application.yml` 中 `platform.*` 开关控制 `AgentManifestRegistry`、`AgentRunnerRegistry`、`ManifestLoader` 等是否接管路由元数据（默认 `legacy` / `off`，不改变现有行为）。详见 [workpilot-plugin-platform-refactor-plan.md](./workpilot-plugin-platform-refactor-plan.md)。
+
+---
+
+## 产品体验 · 桌面萌宠 & 双主题
+
+横切前端体验，不单独占 L 层编号。
+
+| 组件 | 说明 |
+|------|------|
+| `CompanionPet.vue` | 全局悬浮入口（`AppLayout`），可拖拽、收起、右键菜单 |
+| `PetRoom.vue` | SVG 小房间场景；CSS 变量 `--pet-room-*` 随 **sage / dark** 切换 |
+| `CatPet.vue` / `PilotPet.vue` | 皮肤：小猫（PNG 多姿态）/ 领航员（SVG） |
+| `useCompanion.js` | SSE 状态驱动 idle/thinking/celebrate；presence onChair/away |
+| `useTheme.js` | 顶栏 🌿/🌙 切换 sage ↔ dark，`localStorage` 持久化 |
+
+设置入口：职场顾问 →「我的伙伴」抽屉（`/api/companion/me`），非独立 Vue 路由。
 
 ---
 
@@ -842,7 +874,7 @@ MemoryCoordinator.assembleContext(userId, chatId, agentType)
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `spring.ai.dashscope.chat.options.model` | `qwen3.5-plus-2026-04-20` | 主模型（多模态） |
+| `spring.ai.dashscope.chat.options.model` | `qwen3.7-max` | 主模型 |
 | `spring.ai.ollama.chat.model` | `gemma3:1b` | 本地模型 |
 | `server.port` / `context-path` | `8123` / `/api` | 服务端口与上下文 |
 | `jwt.secret` | 环境变量注入 | JWT 密钥 |

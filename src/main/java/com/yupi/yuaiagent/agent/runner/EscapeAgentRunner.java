@@ -14,6 +14,11 @@ public class EscapeAgentRunner implements AgentRunner {
     private final EscapeAgent escapeAgent;
 
     @Override
+    public String agentCode() {
+        return "ESCAPE";
+    }
+
+    @Override
     public AgentOutput run(ConversationContext context, String userMessage) {
         String chatId = StringUtils.hasText(context.chatId()) ? context.chatId() : "default";
         String injection = context.injection() != null ? context.injection() : "";

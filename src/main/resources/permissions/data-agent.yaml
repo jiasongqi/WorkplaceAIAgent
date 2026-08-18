@@ -3,10 +3,11 @@ displayName: "数据员工"
 description: "数据查询、分析、报告生成"
 version: "1.0"
 allowedToolPatterns:
-  - "data.*"
-  - "data.query"
   - "rag.query"
+  - "searchKnowledgeBase"
   - "file.read"
+  - "readFile"
+  - "readFileChunk"
 minMcpTrustScore: 50
 maxToolCallsPerRequest: 30
 filesystemAccess: true

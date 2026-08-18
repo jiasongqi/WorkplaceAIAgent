@@ -103,9 +103,9 @@ class TraceIntegrationTest {
         traceRepository.save(ctx.getTrace());
 
         // Load
-        var loaded = traceRepository.findById(traceId);
+        var loaded = traceRepository.findById(ctx.getTrace().getTraceId());
         assertTrue(loaded.isPresent(), "Trace should be found after save");
-        assertEquals(traceId, loaded.get().getTraceId());
+        assertEquals(ctx.getTrace().getTraceId(), loaded.get().getTraceId());
         assertEquals(TraceStatus.SUCCESS, loaded.get().getStatus());
         assertEquals(1, loaded.get().getSpans().size());
         assertEquals("no_match", loaded.get().getSpans().get(0).getMetadata().get("result"));

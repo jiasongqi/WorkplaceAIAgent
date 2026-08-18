@@ -42,6 +42,8 @@ public class DagWorkflowExecutor {
     private final Executor agentExecutor;
 
     private volatile Map<String, AgentRunner> agentRunners = Map.of();
+    private volatile com.yupi.yuaiagent.agent.AgentRunnerRegistry runnerRegistry;
+    private volatile boolean failIfMissingRunner;
 
     public DagWorkflowExecutor(WorkflowRepository workflowRepository,
                                ResultAggregator resultAggregator,
@@ -54,6 +56,11 @@ public class DagWorkflowExecutor {
 
     public void setAgentRunners(Map<String, AgentRunner> runners) {
         this.agentRunners = runners != null ? Map.copyOf(runners) : Map.of();
+    }
+
+    public void setRunnerRegistry(com.yupi.yuaiagent.agent.AgentRunnerRegistry runnerRegistry, boolean failIfMissingRunner) {
+        this.runnerRegistry = runnerRegistry;
+        this.failIfMissingRunner = failIfMissingRunner;
     }
 
     /**
@@ -246,7 +253,7 @@ public class DagWorkflowExecutor {
                                 String userMessage,
                                 Map<String, ExpertOpinion> opinionsByNode,
                                 Set<String> artifactIds) {
-        AgentRunner runner = agentRunners.get(node.agentId());
+        AgentRunner runner = resolveRunner(node.agentId());
         if (runner == null) {
             throw new IllegalStateException("No AgentRunner for agentId=" + node.agentId());
         }
@@ -330,6 +337,14 @@ public class DagWorkflowExecutor {
                     .filter(id -> id != null && !id.isBlank())
                     .forEach(artifactIds::add);
         }
+    }
+
+    private AgentRunner resolveRunner(String agentId) {
+        AgentRunner mapped = agentRunners.get(agentId);
+        if (mapped != null) {
+            return mapped;
+        }
+        return runnerRegistry == null ? null : runnerRegistry.get(agentId).orElse(null);
     }
 
     private static String truncate(String s, int max) {

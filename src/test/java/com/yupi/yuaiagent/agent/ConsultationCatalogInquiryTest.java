@@ -1,6 +1,11 @@
 package com.yupi.yuaiagent.agent;
 
+import com.yupi.yuaiagent.agent.model.Appointment;
 import org.junit.jupiter.api.Test;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,7 +56,62 @@ class ConsultationCatalogInquiryTest {
     void detectsScheduleInquiry() {
         assertThat(ConsultationAgent.isScheduleInquiry("看下我的日程安排")).isTrue();
         assertThat(ConsultationAgent.isScheduleInquiry("查看我的预约")).isTrue();
+        assertThat(ConsultationAgent.isScheduleInquiry("今天有我的预约吗")).isTrue();
+        assertThat(ConsultationAgent.isScheduleInquiry("今天有我的已预约课程吗")).isTrue();
         assertThat(ConsultationAgent.isScheduleInquiry("我想预约明天三点简历咨询")).isFalse();
         assertThat(ConsultationAgent.isScheduleInquiry("有什么可以预约")).isFalse();
+    }
+
+    @Test
+    void scheduleInquiryIsNotCatalogInquiry() {
+        assertThat(ConsultationAgent.isServiceCatalogInquiry("今天有我的已预约课程吗")).isFalse();
+        assertThat(ConsultationAgent.isServiceCatalogInquiry("今天有我的预约吗")).isFalse();
+        assertThat(ConsultationAgent.isServiceCatalogInquiry("我不确定自己的职业方向 有什么可以预约的课程"))
+                .isTrue();
+    }
+
+    @Test
+    void detectsTodayScheduleInquiry() {
+        assertThat(ConsultationAgent.isTodayScheduleInquiry("今天有我的预约吗")).isTrue();
+        assertThat(ConsultationAgent.isTodayScheduleInquiry("今天有我的已预约课程吗")).isTrue();
+        assertThat(ConsultationAgent.isTodayScheduleInquiry("今天还有预约吗")).isTrue();
+        assertThat(ConsultationAgent.isTodayScheduleInquiry("看下我的日程安排")).isFalse();
+    }
+
+    @Test
+    void todayFilterExcludesPastAppointments() {
+        LocalDate today = LocalDate.of(2026, 8, 14);
+        Appointment past = Appointment.builder()
+                .appointmentId("past-1")
+                .topic("职业方向梳理")
+                .appointmentTime(LocalDateTime.of(2026, 7, 29, 15, 0))
+                .status(Appointment.AppointmentStatus.CONFIRMED)
+                .build();
+        Appointment todayAppt = Appointment.builder()
+                .appointmentId("today-1")
+                .topic("谈薪咨询")
+                .appointmentTime(LocalDateTime.of(2026, 8, 14, 10, 0))
+                .status(Appointment.AppointmentStatus.CONFIRMED)
+                .build();
+
+        List<Appointment> filtered = ConsultationAgent.filterAppointmentsForInquiry(
+                List.of(past, todayAppt),
+                true,
+                today
+        );
+
+        assertThat(filtered).extracting(Appointment::getAppointmentId).containsExactly("today-1");
+    }
+
+    @Test
+    void allScheduleInquiryKeepsPastButMarksThemExpired() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 14, 11, 0);
+        Appointment past = Appointment.builder()
+                .appointmentId("past-1")
+                .appointmentTime(LocalDateTime.of(2026, 7, 29, 15, 0))
+                .status(Appointment.AppointmentStatus.CONFIRMED)
+                .build();
+
+        assertThat(ConsultationAgent.resolveDisplayStatus(past, now)).isEqualTo("已过期");
     }
 }

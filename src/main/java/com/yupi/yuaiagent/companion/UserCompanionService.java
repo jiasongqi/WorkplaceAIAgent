@@ -9,12 +9,19 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class UserCompanionService {
+
+    private static final Set<String> SELECTABLE_SKINS = Set.of("cat", "pilot");
+    private static final Set<String> PRESENCE_VALUES = Set.of("onChair", "away");
+    private static final String DEFAULT_SKIN = "cat";
+    private static final int MAX_GIFTS = 50;
 
     private final UserCompanionJpaRepository companionRepository;
 
@@ -34,7 +41,7 @@ public class UserCompanionService {
             entity.setPersonaPrompt(request.personaPrompt());
         }
         if (request.stylePrefs() != null) {
-            entity.setStylePrefs(new HashMap<>(request.stylePrefs()));
+            entity.setStylePrefs(normalizeStylePrefs(mergePreferences(entity.getStylePrefs(), request.stylePrefs())));
         }
         if (request.enabledSkills() != null) {
             entity.setEnabledSkills(new ArrayList<>(request.enabledSkills()));
@@ -81,6 +88,12 @@ public class UserCompanionService {
         Map<String, Object> prefs = new HashMap<>();
         prefs.put("tone", "简洁直接");
         prefs.put("focus", "简历、谈薪、职业方向");
+        prefs.put("pet", normalizePet(Map.of(
+                "enabled", true,
+                "skin", "cat",
+                "motion", "full",
+                "bubbleLevel", "key"
+        )));
         entity.setStylePrefs(prefs);
         entity.setEnabledSkills(new ArrayList<>());
         entity.setVersion(1);
@@ -92,10 +105,112 @@ public class UserCompanionService {
                 e.getUserId(),
                 e.getDisplayName(),
                 e.getPersonaPrompt(),
-                e.getStylePrefs(),
-                e.getEnabledSkills() != null ? e.getEnabledSkills() : List.of(),
+                normalizeStylePrefs(e.getStylePrefs()),
+                e.getEnabledSkills() != null ? List.copyOf(e.getEnabledSkills()) : List.of(),
                 e.getVersion()
         );
+    }
+
+    private static Map<String, Object> normalizeStylePrefs(Map<String, Object> prefs) {
+        Map<String, Object> next = mergePreferences(Map.of(), prefs);
+        Object pet = next.get("pet");
+        next.put("pet", normalizePet(pet instanceof Map<?, ?> map ? toStringMap(map) : Map.of()));
+        return next;
+    }
+
+    private static Map<String, Object> normalizePet(Map<String, Object> pet) {
+        Map<String, Object> next = new HashMap<>(pet == null ? Map.of() : pet);
+        Object enabled = next.get("enabled");
+        next.put("enabled", enabled instanceof Boolean flag ? flag : true);
+        next.put("skin", resolveSkin(next.get("skin")));
+        next.put("motion", textOrDefault(next.get("motion"), "full"));
+        next.put("bubbleLevel", textOrDefault(next.get("bubbleLevel"), "key"));
+        next.put("world", normalizeWorld(next.get("world")));
+        return next;
+    }
+
+    private static Map<String, Object> normalizeWorld(Object raw) {
+        Map<String, Object> world = raw instanceof Map<?, ?> map ? toStringMap(map) : new HashMap<>();
+        Map<String, Object> next = new HashMap<>();
+        String presence = world.get("presence") instanceof String value ? value : "onChair";
+        next.put("presence", PRESENCE_VALUES.contains(presence) ? presence : "onChair");
+        next.put("chair", textOrDefault(world.get("chair"), "wood"));
+        next.put("rug", textOrDefault(world.get("rug"), "plain"));
+        next.put("gifts", normalizeGifts(world.get("gifts")));
+        return next;
+    }
+
+    private static List<Object> normalizeGifts(Object raw) {
+        if (!(raw instanceof List<?> list)) {
+            return new ArrayList<>();
+        }
+        List<Object> gifts = new ArrayList<>();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            Map<String, Object> gift = toStringMap(map);
+            Object id = gift.get("id");
+            if (!(id instanceof String giftId) || !StringUtils.hasText(giftId) || !seen.add(giftId)) {
+                continue;
+            }
+            gifts.add(gift);
+            if (gifts.size() >= MAX_GIFTS) {
+                break;
+            }
+        }
+        return gifts;
+    }
+
+    private static String resolveSkin(Object skin) {
+        return skin instanceof String id && SELECTABLE_SKINS.contains(id) ? id : DEFAULT_SKIN;
+    }
+
+    private static String textOrDefault(Object value, String fallback) {
+        return value instanceof String text && StringUtils.hasText(text) ? text : fallback;
+    }
+
+    private static Map<String, Object> mergePreferences(
+            Map<String, Object> current,
+            Map<String, Object> updates
+    ) {
+        Map<String, Object> merged = new HashMap<>();
+        if (current != null) {
+            current.forEach((key, value) -> merged.put(key, copyPreferenceValue(value)));
+        }
+        if (updates == null) {
+            return merged;
+        }
+        updates.forEach((key, value) -> {
+            Object existing = merged.get(key);
+            if (existing instanceof Map<?, ?> existingMap && value instanceof Map<?, ?> updateMap) {
+                merged.put(key, mergePreferences(toStringMap(existingMap), toStringMap(updateMap)));
+            } else {
+                merged.put(key, copyPreferenceValue(value));
+            }
+        });
+        return merged;
+    }
+
+    private static Object copyPreferenceValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return mergePreferences(Map.of(), toStringMap(map));
+        }
+        if (value instanceof List<?> list) {
+            return new ArrayList<>(list);
+        }
+        return value;
+    }
+
+    private static Map<String, Object> toStringMap(Map<?, ?> source) {
+        Map<String, Object> result = new HashMap<>();
+        source.forEach((key, value) -> {
+            if (key instanceof String stringKey) {
+                result.put(stringKey, value);
+            }
+        });
+        return result;
     }
 
     public record UserCompanionView(

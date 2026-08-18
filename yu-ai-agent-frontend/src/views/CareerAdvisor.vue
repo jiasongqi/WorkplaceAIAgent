@@ -357,8 +357,8 @@
             @keydown.shift.enter="inputMessage += '\n'"
             @keydown.escape="slashOpen = false"
             @input="onInputChange"
-            @focus="barFocused = true"
-            @blur="barFocused = false; slashOpen = false"
+            @focus="onComposerFocus"
+            @blur="onComposerBlur"
             placeholder="继续聊… 输入 / 唤起快捷命令"
             :disabled="isStreaming"
             rows="1"
@@ -500,6 +500,34 @@
             <label class="team-field">
               <span class="field-label">人设补充</span>
               <textarea v-model="companionForm.personaPrompt" rows="4" class="team-input team-textarea" placeholder="例如：回答先给结论，再给步骤；不确定时先问我"></textarea>
+            </label>
+            <div class="team-field">
+              <span class="field-label">网页伙伴</span>
+              <label class="companion-toggle">
+                <input v-model="companionForm.petEnabled" type="checkbox" />
+                <span>在页面中显示陪伴萌宠</span>
+              </label>
+            </div>
+            <div class="team-field">
+              <span class="field-label">外形</span>
+              <CompanionSkinPicker v-model="companionForm.petSkin" />
+              <p class="companion-skin-note">你在页面上时，猫会坐在椅子上陪你；切到别的标签页，它会出门。回来后会自己坐回来。</p>
+            </div>
+            <label class="team-field">
+              <span class="field-label">动效等级</span>
+              <select v-model="companionForm.petMotion" class="team-input">
+                <option value="full">完整动画</option>
+                <option value="reduced">减少动态效果</option>
+                <option value="off">静态模式</option>
+              </select>
+            </label>
+            <label class="team-field">
+              <span class="field-label">伙伴气泡</span>
+              <select v-model="companionForm.petBubbleLevel" class="team-input">
+                <option value="key">仅关键节点</option>
+                <option value="all">全部状态</option>
+                <option value="none">关闭气泡</option>
+              </select>
             </label>
           </div>
           <div v-if="companionMsg" class="team-toast ok">{{ companionMsg }}</div>
@@ -652,18 +680,32 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, computed, shallowReactive } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed, shallowReactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import TraceTimelineView from '../components/TraceTimelineView.vue'
+import CompanionSkinPicker from '../components/companion/CompanionSkinPicker.vue'
 import WpIcon from '../components/WpIcon.vue'
-import { login, getMe, createSession, listSessions, deleteSession, chatWithOrchestrator, resumeOrchestratorChat, getMyProfile, clearMyProfile, getChatMessages, renameSession, archiveSession, listArchivedSessions, searchSessions, preprocessPerceptionAndBind, addFavorite, removeFavorite, unarchiveSession, submitFeedback, getMyCompanion, updateMyCompanion, listDigitalEmployeeTemplates, listMyDigitalEmployees, createDigitalEmployee, updateDigitalEmployee, rollbackDigitalEmployee, setActiveDigitalEmployee, listMyArtifacts, getMyArtifactDetail, listExpertPacks, setExpertPackEnabled, listSkills, draftSkillFromTrace, saveDraftSkill, listMyTasks, getSandboxPolicy } from '../api'
+import { login, getMe, createSession, listSessions, deleteSession, chatWithOrchestrator, resumeOrchestratorChat, getMyProfile, clearMyProfile, getChatMessages, renameSession, archiveSession, listArchivedSessions, searchSessions, preprocessPerceptionAndBind, addFavorite, removeFavorite, unarchiveSession, submitFeedback, listDigitalEmployeeTemplates, listMyDigitalEmployees, createDigitalEmployee, updateDigitalEmployee, rollbackDigitalEmployee, setActiveDigitalEmployee, listMyArtifacts, getMyArtifactDetail, listExpertPacks, setExpertPackEnabled, listSkills, draftSkillFromTrace, saveDraftSkill, listMyTasks, getSandboxPolicy } from '../api'
+import { useCompanion } from '../composables/useCompanion'
 
 useHead({ title: '职场顾问 - WorkPilot' })
 
 const router = useRouter()
+const companion = useCompanion()
+const {
+  companionForm,
+  companionMsg,
+  companionSaving,
+  consumeSettingsRequest,
+  loadCompanion,
+  notify: notifyCompanion,
+  saveCompanion,
+  setActivity: setCompanionActivity,
+  settingsRequested
+} = companion
 const messagesContainer = ref(null)
 const inputMessage = ref('')
 const barFocused = ref(false)
@@ -807,9 +849,6 @@ const coldStartChips = [
   { id: 'interview', label: '面试准备', message: '帮我模拟一次面试，我在准备后端开发岗位' },
 ]
 const showCompanionDrawer = ref(false)
-const companionForm = ref({ displayName: '你的职场伙伴', tone: '简洁直接', focus: '', personaPrompt: '' })
-const companionSaving = ref(false)
-const companionMsg = ref('')
 const showEmployeePanel = ref(false)
 const employeeTemplates = ref([])
 const myEmployees = ref([])
@@ -817,6 +856,23 @@ const employeeBusy = ref(false)
 const employeeMsg = ref('')
 const editingEmployee = ref(null)
 const employeeEditForm = ref({ name: '', persona: '' })
+
+const onComposerFocus = () => {
+  barFocused.value = true
+  if (!isStreaming.value) setCompanionActivity('listening')
+}
+
+const onComposerBlur = () => {
+  barFocused.value = false
+  slashOpen.value = false
+  if (!isStreaming.value) setCompanionActivity('idle')
+}
+
+watch(settingsRequested, requested => {
+  if (!requested) return
+  showCompanionDrawer.value = true
+  consumeSettingsRequest()
+}, { immediate: true })
 
 const personaPresets = [
   {
@@ -1119,6 +1175,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (eventSource) eventSource.close()
+  setCompanionActivity('idle')
   clearThinkingEscalate()
 })
 
@@ -1379,43 +1436,6 @@ const rateMessage = async (msg, rating) => {
   }
 }
 
-const loadCompanion = async () => {
-  try {
-    const res = await getMyCompanion()
-    const data = res.data?.data
-    if (data) {
-      companionForm.value = {
-        displayName: data.displayName || '你的职场伙伴',
-        tone: data.stylePrefs?.tone || '简洁直接',
-        focus: data.stylePrefs?.focus || '',
-        personaPrompt: data.personaPrompt || ''
-      }
-    }
-  } catch (e) {
-    console.warn('load companion failed', e)
-  }
-}
-
-const saveCompanion = async () => {
-  companionSaving.value = true
-  companionMsg.value = ''
-  try {
-    await updateMyCompanion({
-      displayName: companionForm.value.displayName,
-      personaPrompt: companionForm.value.personaPrompt,
-      stylePrefs: {
-        tone: companionForm.value.tone,
-        focus: companionForm.value.focus
-      }
-    })
-    companionMsg.value = '已保存，下一轮对话生效'
-  } catch (e) {
-    companionMsg.value = e.message || '保存失败'
-  } finally {
-    companionSaving.value = false
-  }
-}
-
 const loadEmployees = async () => {
   try {
     const [tplRes, listRes] = await Promise.all([
@@ -1575,6 +1595,7 @@ const stopGeneration = () => {
   if (eventSource) { eventSource.close(); eventSource = null }
   isStreaming.value = false
   isThinking.value = false
+  setCompanionActivity('idle')
   clearThinkingEscalate()
   // Append interruption marker to last AI message
   const lastMsg = messages.value[messages.value.length - 1]
@@ -1659,6 +1680,7 @@ const sendMessage = async () => {
   addMessage(displayMsg, true)
   isThinking.value = true
   isStreaming.value = true
+  setCompanionActivity('thinking')
   setThinkingPhase(file ? '感知完成，正在路由专家…' : '正在分析…', { resetEscalate: false })
   startThinkingEscalate()
   currentAgent.value = { name: '分析中...', type: 'general' }
@@ -1687,6 +1709,7 @@ const sendMessage = async () => {
       const text = (e.data || '').replace(/^\[|\]$/g, '')
       if (text.includes('路由到')) {
         setThinkingPhase('专家已就位，正在准备回答…')
+        notifyCompanion('routed', { ttl: 700 })
         addMessage(e.data, false, 'routing')
         const routeMatch = text.match(/路由到(.+?)$/)
         if (routeMatch) currentAgent.value = { name: routeMatch[1], type: 'general' }
@@ -1702,6 +1725,7 @@ const sendMessage = async () => {
         const data = JSON.parse(e.data)
         currentAgentInfo = { agentType: data.agentType, agentName: data.agentName }
         currentAgent.value = { name: data.agentName, type: data.agentType }
+        notifyCompanion('routed', { ttl: 700 })
         aiMsgIndex = -1
       } catch (err) {}
     })
@@ -1710,6 +1734,7 @@ const sendMessage = async () => {
       try {
         const data = JSON.parse(e.data)
         currentAssistantMessageId = data.assistantMessageId
+        setCompanionActivity('working')
         setThinkingPhase('正在写下回答…')
         if (aiMsgIndex === -1 || isResume) {
           if (aiMsgIndex === -1) {
@@ -1793,9 +1818,14 @@ const sendMessage = async () => {
     es.addEventListener('quality-review', (e) => {
       try { qualityReview.value = JSON.parse(e.data) } catch (err) {}
     })
-    es.addEventListener('quality-blocked', (e) => { qualityBlocked.value = e.data })
+    es.addEventListener('quality-blocked', (e) => {
+      qualityBlocked.value = e.data
+      notifyCompanion('alert', { ttl: 4000, message: '这条回答需要再核实一下。' })
+    })
     es.addEventListener('clarification', (e) => {
       isThinking.value = false
+      setCompanionActivity('idle')
+      notifyCompanion('confused', { ttl: 1800, message: '我还需要你补充一点信息。' })
       clearThinkingEscalate()
       addMessage(e.data, false, 'clarification')
       isStreaming.value = false; es.close()
@@ -1822,6 +1852,8 @@ const sendMessage = async () => {
       clearThinkingEscalate()
       if (e.data === '[DONE]') {
         isStreaming.value = false
+        setCompanionActivity('idle')
+        notifyCompanion('celebrate', { ttl: 900, message: '完成啦，看看是否符合你的预期。' })
         es.close()
         if (aiMsgIndex >= 0 && messages.value[aiMsgIndex]?.status === 'STREAMING') {
           messages.value[aiMsgIndex].status = 'COMPLETE'
@@ -1858,9 +1890,11 @@ const sendMessage = async () => {
 
     es.onerror = () => {
       es.close()
+      notifyCompanion('error', { ttl: 1800, message: '连接有点波动，我正在恢复。' })
       const hasContent = aiMsgIndex >= 0 && messages.value[aiMsgIndex]?.content
       if (currentAssistantMessageId && resumeAttempts < 2) {
         resumeAttempts += 1
+        setCompanionActivity('thinking')
         setThinkingPhase('连接中断，正在续传…')
         isThinking.value = true
         startThinkingEscalate()
@@ -1872,6 +1906,7 @@ const sendMessage = async () => {
         return
       }
       isThinking.value = false
+      setCompanionActivity('idle')
       clearThinkingEscalate()
       isStreaming.value = false
       if (aiMsgIndex >= 0) {
@@ -2698,6 +2733,26 @@ const handleClearProfile = async () => {
 .team-input:focus {
   border-color: var(--gold-border);
   box-shadow: 0 0 0 3px var(--gold-dim);
+}
+.companion-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--layer2);
+  color: var(--t2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.companion-toggle input { accent-color: var(--gold); }
+.companion-skin-note {
+  margin: 0;
+  color: var(--t3);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .team-textarea { resize: vertical; min-height: 96px; line-height: 1.55; }
 .team-toast {

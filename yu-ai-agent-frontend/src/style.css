@@ -91,6 +91,33 @@
   --sidebar-active-bg: var(--gold-soft);
   --sidebar-divider: var(--glass-border);
   --glass-bg: rgba(15,17,29,0.7);
+
+  /* Companion pet room */
+  --pet-room-border: rgba(245, 158, 11, 0.22);
+  --pet-room-bg: linear-gradient(180deg, #171a28 0%, #12151f 56%, #0f111d 100%);
+  --pet-room-wall: #252838;
+  --pet-room-wall-side: #1a1d28;
+  --pet-room-floor: #2a2d3a;
+  --pet-room-window: #3d4a6b;
+  --pet-room-window-stroke: rgba(245, 158, 11, 0.35);
+  --pet-room-window-light: rgba(245, 158, 11, 0.18);
+  --pet-room-plant: #2d6b4a;
+  --pet-room-plant-pot: #8b6914;
+  --pet-room-shelf: rgba(245, 158, 11, 0.55);
+  --pet-room-door: #6b4423;
+  --pet-room-door-stroke: rgba(245, 158, 11, 0.4);
+  --pet-room-knob: #fbbf24;
+  --pet-room-rug: rgba(245, 158, 11, 0.08);
+  --pet-chair-wood: #8b5a2b;
+  --pet-chair-wood-stroke: #5c3d1e;
+  --pet-chair-velvet: #5a3d5a;
+  --pet-chair-velvet-stroke: #3d2a3d;
+  --pet-chair-leg: #5c3d1e;
+  --pet-status-bg: rgba(15, 17, 29, 0.9);
+  --pet-status-text: var(--gold-text);
+  --pet-sprite-shadow: 0 3px 6px rgba(0, 0, 0, 0.55);
+  --pet-widget-shadow: 0 14px 28px rgba(0, 0, 0, 0.45);
+  --pet-ground-shadow: rgba(0, 0, 0, 0.42);
 }
 
 /* ===== Sage 青荷（疗愈绿）===== */
@@ -169,6 +196,33 @@
   --sidebar-active-bg: var(--gold-soft);
   --sidebar-divider: var(--glass-border);
   --glass-bg: rgba(255,255,255,0.75);
+
+  /* Companion pet room */
+  --pet-room-border: rgba(90, 173, 106, 0.32);
+  --pet-room-bg: linear-gradient(180deg, #cfe8d1 0%, #e7f4e6 56%, #c3dcc6 100%);
+  --pet-room-wall: #b6d6b5;
+  --pet-room-wall-side: #96c19a;
+  --pet-room-floor: #d5ead3;
+  --pet-room-window: #cfe6ff;
+  --pet-room-window-stroke: #6d9e74;
+  --pet-room-window-light: rgba(255, 248, 220, 0.55);
+  --pet-room-plant: #3d8f4e;
+  --pet-room-plant-pot: #c7924a;
+  --pet-room-shelf: #8b5a2b;
+  --pet-room-door: #c7924a;
+  --pet-room-door-stroke: #8b5a2b;
+  --pet-room-knob: #f3d27a;
+  --pet-room-rug: rgba(90, 173, 106, 0.14);
+  --pet-chair-wood: #c7924a;
+  --pet-chair-wood-stroke: #8b5a2b;
+  --pet-chair-velvet: #7a4e7a;
+  --pet-chair-velvet-stroke: #4a2d4a;
+  --pet-chair-leg: #8b5a2b;
+  --pet-status-bg: rgba(255, 255, 255, 0.78);
+  --pet-status-text: #3d8f4e;
+  --pet-sprite-shadow: 0 3px 2px rgba(90, 64, 40, 0.22);
+  --pet-widget-shadow: 0 12px 18px rgba(15, 23, 42, 0.16);
+  --pet-ground-shadow: rgba(15, 23, 42, 0.16);
 }
 
 /* Fallback before data-theme is set (matches sage default) */
@@ -245,6 +299,31 @@ html:not([data-theme]) {
   --sidebar-active-bg: var(--gold-soft);
   --sidebar-divider: var(--glass-border);
   --glass-bg: rgba(255,255,255,0.75);
+  --pet-room-border: rgba(90, 173, 106, 0.32);
+  --pet-room-bg: linear-gradient(180deg, #cfe8d1 0%, #e7f4e6 56%, #c3dcc6 100%);
+  --pet-room-wall: #b6d6b5;
+  --pet-room-wall-side: #96c19a;
+  --pet-room-floor: #d5ead3;
+  --pet-room-window: #cfe6ff;
+  --pet-room-window-stroke: #6d9e74;
+  --pet-room-window-light: rgba(255, 248, 220, 0.55);
+  --pet-room-plant: #3d8f4e;
+  --pet-room-plant-pot: #c7924a;
+  --pet-room-shelf: #8b5a2b;
+  --pet-room-door: #c7924a;
+  --pet-room-door-stroke: #8b5a2b;
+  --pet-room-knob: #f3d27a;
+  --pet-room-rug: rgba(90, 173, 106, 0.14);
+  --pet-chair-wood: #c7924a;
+  --pet-chair-wood-stroke: #8b5a2b;
+  --pet-chair-velvet: #7a4e7a;
+  --pet-chair-velvet-stroke: #4a2d4a;
+  --pet-chair-leg: #8b5a2b;
+  --pet-status-bg: rgba(255, 255, 255, 0.78);
+  --pet-status-text: #3d8f4e;
+  --pet-sprite-shadow: 0 3px 2px rgba(90, 64, 40, 0.22);
+  --pet-widget-shadow: 0 12px 18px rgba(15, 23, 42, 0.16);
+  --pet-ground-shadow: rgba(15, 23, 42, 0.16);
 }
 
 /* ===== Reset ===== */

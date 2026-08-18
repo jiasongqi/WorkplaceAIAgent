@@ -1,69 +1,79 @@
 package com.yupi.yuaiagent.agent.manifest;
 
 import com.yupi.yuaiagent.agent.AgentIntent;
+import com.yupi.yuaiagent.registry.AgentDescriptor;
+import com.yupi.yuaiagent.registry.AgentRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Static Agent capability manifests + keyword/overlap scoring for low-confidence routing.
  */
+@Slf4j
 @Component
 public class AgentManifestRegistry {
 
-    private final Map<AgentIntent, AgentManifest> manifests = new EnumMap<>(AgentIntent.class);
-    /** Simple NACK feedback weights (lower = less preferred). */
-    private final Map<AgentIntent, Double> feedbackBoost = new EnumMap<>(AgentIntent.class);
+    private final Map<AgentIntent, AgentManifest> legacyManifests;
+    private final AtomicReference<Map<AgentIntent, AgentManifest>> yamlManifests =
+            new AtomicReference<>(Map.of());
+    private final ConcurrentHashMap<AgentIntent, Double> feedbackBoost = new ConcurrentHashMap<>();
+    private final AgentMetadataProperties.Source metadataSource;
 
     public AgentManifestRegistry() {
-        register(new AgentManifest(AgentIntent.RESUME, "简历优化专家",
-                "擅长简历优化、求职、面试技巧、offer 选择。输入需要经历/目标岗位描述。",
-                List.of("简历", "求职", "面试", "offer", "投递", "岗位"),
-                List.of("text")));
-        register(new AgentManifest(AgentIntent.NEGOTIATION, "薪资谈判专家",
-                "擅长谈薪、涨薪、薪酬分析与话术。输入需要当前薪资/期望。",
-                List.of("谈薪", "涨薪", "薪资", "薪酬", "年终奖", "hc"),
-                List.of("text")));
-        register(new AgentManifest(AgentIntent.ESCAPE, "离职规划专家",
-                "擅长离职、辞职、劳动纠纷、工作交接。",
-                List.of("离职", "辞职", "交接", "劳动", "仲裁", "竞业"),
-                List.of("text")));
-        register(new AgentManifest(AgentIntent.CONSULTATION, "预约咨询专家",
-                "擅长预约咨询、查看日程、修改预约。输入需要姓名/联系方式/时间。",
-                List.of("预约", "咨询", "日程", "日历", "约专家"),
-                List.of("name_or_schedule")));
-        register(new AgentManifest(AgentIntent.DATA_QUERY, "数据查询顾问",
-                "擅长指标、报表、KPI、数据查询。",
-                List.of("数据", "指标", "报表", "kpi", "统计"),
-                List.of("query")));
-        register(new AgentManifest(AgentIntent.DIGITAL_EMPLOYEE, "数字员工",
-                "创建/调整专属数字员工人设。",
-                List.of("数字员工", "专属员工", "人设"),
-                List.of("persona")));
-        register(new AgentManifest(AgentIntent.GENERAL, "职场通用顾问",
-                "通用职场问题、人际关系、压力与职业规划兜底。",
-                List.of("职场", "同事", "压力", "规划", "怎么办"),
-                List.of("text")));
-        for (AgentIntent i : AgentIntent.values()) {
-            feedbackBoost.put(i, 1.0);
+        this(AgentMetadataProperties.Source.LEGACY, List.of());
+    }
+
+    @Autowired
+    public AgentManifestRegistry(AgentMetadataProperties properties, AgentRegistry agentRegistry) {
+        this(properties.getMetadataSource(), agentRegistry.list());
+    }
+
+    public AgentManifestRegistry(AgentMetadataProperties.Source metadataSource,
+                                 Collection<AgentDescriptor> descriptors) {
+        this.metadataSource = metadataSource == null ? AgentMetadataProperties.Source.LEGACY : metadataSource;
+        this.legacyManifests = Map.copyOf(AgentManifestFactory.legacyManifests());
+        replaceYamlManifests(descriptors);
+        for (AgentIntent intent : AgentIntent.values()) {
+            feedbackBoost.putIfAbsent(intent, 1.0);
+        }
+        if (this.metadataSource == AgentMetadataProperties.Source.SHADOW) {
+            logShadowDifferences();
+        }
+    }
+
+    public void reloadFrom(Collection<AgentDescriptor> descriptors) {
+        replaceYamlManifests(descriptors);
+        if (metadataSource == AgentMetadataProperties.Source.SHADOW) {
+            logShadowDifferences();
         }
     }
 
     public void register(AgentManifest manifest) {
-        manifests.put(manifest.intent(), manifest);
+        yamlManifests.updateAndGet(current -> {
+            Map<AgentIntent, AgentManifest> next = new EnumMap<>(AgentIntent.class);
+            next.putAll(current);
+            next.put(manifest.intent(), manifest);
+            return Map.copyOf(next);
+        });
     }
 
     public AgentManifest get(AgentIntent intent) {
-        return manifests.get(intent);
+        return routingManifests().get(intent);
     }
 
     public List<AgentManifest> all() {
-        return new ArrayList<>(manifests.values());
+        return new ArrayList<>(routingManifests().values());
     }
 
     /** Penalize an intent after NACK / quality failover (feedback loop). */
@@ -71,16 +81,14 @@ public class AgentManifestRegistry {
         if (intent == null) {
             return;
         }
-        double cur = feedbackBoost.getOrDefault(intent, 1.0);
-        feedbackBoost.put(intent, Math.max(0.3, cur * factor));
+        feedbackBoost.compute(intent, (key, current) -> Math.max(0.3, defaultBoost(current) * factor));
     }
 
     public void reward(AgentIntent intent, double factor) {
         if (intent == null) {
             return;
         }
-        double cur = feedbackBoost.getOrDefault(intent, 1.0);
-        feedbackBoost.put(intent, Math.min(1.5, cur * factor));
+        feedbackBoost.compute(intent, (key, current) -> Math.min(1.5, defaultBoost(current) * factor));
     }
 
     /**
@@ -89,9 +97,9 @@ public class AgentManifestRegistry {
     public List<ScoredManifest> rank(String userMessage) {
         String msg = userMessage == null ? "" : userMessage.toLowerCase(Locale.ROOT);
         List<ScoredManifest> scored = new ArrayList<>();
-        for (AgentManifest m : manifests.values()) {
+        for (AgentManifest m : routingManifests().values()) {
             if (m.intent() == AgentIntent.GENERAL) {
-                continue; // GENERAL is fallback, not primary semantic pick
+                continue;
             }
             double hits = 0;
             for (String kw : m.keywords()) {
@@ -102,7 +110,6 @@ public class AgentManifestRegistry {
             if (hits <= 0) {
                 continue;
             }
-            // Absolute hit count × feedback (not diluted by long keyword lists)
             double score = hits * feedbackBoost.getOrDefault(m.intent(), 1.0);
             scored.add(new ScoredManifest(m, score));
         }
@@ -122,4 +129,35 @@ public class AgentManifestRegistry {
     }
 
     public record ScoredManifest(AgentManifest manifest, double score) {}
+
+    private Map<AgentIntent, AgentManifest> routingManifests() {
+        return metadataSource == AgentMetadataProperties.Source.REGISTRY
+                ? yamlManifests.get()
+                : legacyManifests;
+    }
+
+    private void replaceYamlManifests(Collection<AgentDescriptor> descriptors) {
+        yamlManifests.set(Map.copyOf(AgentManifestFactory.fromDescriptors(descriptors)));
+    }
+
+    private void logShadowDifferences() {
+        Map<AgentIntent, AgentManifest> yaml = yamlManifests.get();
+        for (AgentIntent intent : AgentIntent.values()) {
+            AgentManifest legacy = legacyManifests.get(intent);
+            AgentManifest derived = yaml.get(intent);
+            if (legacy == null || derived == null) {
+                log.warn("Agent manifest shadow missing intent={}", intent);
+                continue;
+            }
+            var left = AgentManifestFactory.staticView(legacy);
+            var right = AgentManifestFactory.staticView(derived);
+            if (!left.equals(right)) {
+                log.warn("Agent manifest shadow mismatch intent={} legacy={} yaml={}", intent, left, right);
+            }
+        }
+    }
+
+    private static double defaultBoost(Double current) {
+        return current == null ? 1.0 : current;
+    }
 }

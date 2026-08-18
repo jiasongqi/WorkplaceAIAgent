@@ -2,8 +2,11 @@ package com.yupi.yuaiagent.skill;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.yupi.yuaiagent.manifest.ManifestDualReadVerifier;
+import com.yupi.yuaiagent.manifest.ManifestLoadPolicy;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
@@ -27,16 +30,36 @@ public class SkillRegistry {
     
     private final Map<String, SkillDefinition> skills = new ConcurrentHashMap<>();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+
+    @Autowired(required = false)
+    private ManifestDualReadVerifier manifestDualReadVerifier;
+
+    @Autowired(required = false)
+    private SkillOverlayResolver skillOverlayResolver;
+
+    @Autowired(required = false)
+    private SkillOverlayStore skillOverlayStore;
     
     @PostConstruct
     public void init() {
         loadBuiltinSkills();
+        if (manifestDualReadVerifier != null) {
+            manifestDualReadVerifier.verify(
+                    "skills",
+                    "classpath:skills/*.yaml",
+                    SkillDefinition.class,
+                    SkillDefinition::getName,
+                    skills,
+                    ManifestLoadPolicy.LENIENT
+            );
+        }
         log.info("技能注册中心初始化完成，共加载 {} 个技能", skills.size());
     }
     
     /**
      * 加载内置技能文件
      */
+    @Deprecated(since = "S1", forRemoval = false)
     private void loadBuiltinSkills() {
         try {
             PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
@@ -70,7 +93,13 @@ public class SkillRegistry {
      * 按名称获取技能
      */
     public SkillDefinition getByName(String name) {
-        return skills.get(name);
+        SkillDefinition builtin = skills.get(name);
+        if (skillOverlayResolver == null || skillOverlayStore == null) {
+            return builtin;
+        }
+        SkillDefinition resolved = skillOverlayResolver.resolve(name, SkillOverlayResolver.layers(
+                builtin, null, skillOverlayStore.user(name), skillOverlayStore.session(name)));
+        return resolved != null ? resolved : builtin;
     }
     
     /**

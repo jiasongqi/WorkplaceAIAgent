@@ -33,9 +33,16 @@ public class TaskExecutor {
 
     private final TokenUsageTracker tokenTracker;
     private Map<String, AgentRunner> agentRunners = Map.of();
+    private AgentRunnerRegistry runnerRegistry;
+    private boolean failIfMissingRunner;
 
     public TaskExecutor(TokenUsageTracker tokenTracker) {
         this.tokenTracker = tokenTracker;
+    }
+
+    public void setRunnerRegistry(AgentRunnerRegistry runnerRegistry, boolean failIfMissingRunner) {
+        this.runnerRegistry = runnerRegistry;
+        this.failIfMissingRunner = failIfMissingRunner;
     }
 
     /**
@@ -61,8 +68,11 @@ public class TaskExecutor {
             String taskId = UUID.randomUUID().toString().substring(0, 8);
 
             // 1. Token budget check
-            AgentRunner runner = agentRunners.get(step.agentId());
+            AgentRunner runner = resolveRunner(step.agentId());
             if (runner == null) {
+                if (failIfMissingRunner) {
+                    throw new IllegalStateException("No runner for agentId=" + step.agentId());
+                }
                 log.warn("[TaskExecutor] No runner for agentId={}, skipping", step.agentId());
                 runtimeContext.addResult(ExecutionResult.skipped(taskId, step.agentId(), TaskStatus.SKIPPED));
                 continue;
@@ -107,6 +117,14 @@ public class TaskExecutor {
         }
 
         return runtimeContext.getResults();
+    }
+
+    private AgentRunner resolveRunner(String agentId) {
+        AgentRunner mapped = agentRunners.get(agentId);
+        if (mapped != null) {
+            return mapped;
+        }
+        return runnerRegistry == null ? null : runnerRegistry.get(agentId).orElse(null);
     }
 
     private ExecutionResult handleFailure(FailurePolicy policy, String taskId, PlanStep step,

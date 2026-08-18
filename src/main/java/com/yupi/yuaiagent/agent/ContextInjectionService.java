@@ -44,6 +44,8 @@ public class ContextInjectionService {
     private final SessionSharedStateService sessionSharedStateService;
     private final ArtifactRecallService artifactRecallService;
     private final PerceptionHybridContextService perceptionHybridContextService;
+    private com.yupi.yuaiagent.agent.prompt.PromptSectionRenderer promptSectionRenderer;
+    private String promptContributorMode = "legacy";
 
     public ContextInjectionService(UserProfileService userProfileService,
                                    ArtifactShelf artifactShelf,
@@ -128,6 +130,11 @@ public class ContextInjectionService {
         this.artifactRecallService = artifactRecallService != null
                 ? artifactRecallService
                 : new ArtifactRecallService(artifactShelf, ArtifactTypeCatalog.defaults(), 3, 1200);
+    }
+
+    public void configurePromptContributors(com.yupi.yuaiagent.agent.prompt.PromptSectionRenderer renderer, String mode) {
+        this.promptSectionRenderer = renderer;
+        this.promptContributorMode = mode == null ? "legacy" : mode;
     }
 
     /**
@@ -221,35 +228,59 @@ public class ContextInjectionService {
         traceRecorder.endSpan(traceCtx, artifactQuerySpan);
 
         // Merge: Goal → persona → shared structured state → artifacts → cross-agent transcript
-        String combined = mergeInjection(goalBlock, profileInjection);
-        combined = mergeInjection(combined, companionInjection);
-        combined = mergeInjection(combined, digitalEmployeeInjection);
-        combined = mergeInjection(combined, sharedStateInjection);
-        combined = mergeInjection(combined, artifactContext);
-
+        String crossAgentContext = buildCrossAgentContext(chatId);
+        String reflexionContext = "";
+        if (reflexionService != null && StringUtils.hasText(userId)) {
+            try {
+                reflexionContext = reflexionService.getFailureContext(
+                        userId, StringUtils.hasText(taskType) ? taskType : "GENERAL");
+            } catch (Exception e) {
+                log.debug("Reflexion injection skipped: {}", e.getMessage());
+            }
+        }
+        String hybridContext = "";
         if (perceptionHybridContextService != null && StringUtils.hasText(queryText) && StringUtils.hasText(chatId)) {
             try {
-                String hybrid = perceptionHybridContextService.buildHybridContext(chatId, userId, queryText);
-                combined = mergeInjection(combined, hybrid);
+                hybridContext = perceptionHybridContextService.buildHybridContext(chatId, userId, queryText);
             } catch (Exception e) {
                 log.debug("Perception hybrid injection skipped: {}", e.getMessage());
             }
         }
 
-        String crossAgentContext = buildCrossAgentContext(chatId);
+        String combined = mergeInjection(goalBlock, profileInjection);
+        combined = mergeInjection(combined, companionInjection);
+        combined = mergeInjection(combined, digitalEmployeeInjection);
+        combined = mergeInjection(combined, sharedStateInjection);
+        combined = mergeInjection(combined, artifactContext);
+        combined = mergeInjection(combined, hybridContext);
         if (StringUtils.hasText(crossAgentContext)) {
             combined = mergeInjection(combined, crossAgentContext);
         }
+        if (StringUtils.hasText(reflexionContext)) {
+            combined = mergeInjection(combined, reflexionContext);
+        }
 
-        if (reflexionService != null && StringUtils.hasText(userId)) {
-            try {
-                String failureCtx = reflexionService.getFailureContext(
-                        userId, StringUtils.hasText(taskType) ? taskType : "GENERAL");
-                if (StringUtils.hasText(failureCtx)) {
-                    combined = mergeInjection(combined, failureCtx);
-                }
-            } catch (Exception e) {
-                log.debug("Reflexion injection skipped: {}", e.getMessage());
+        if (("offline-shadow".equalsIgnoreCase(promptContributorMode)
+                || "primary".equalsIgnoreCase(promptContributorMode))
+                && promptSectionRenderer != null) {
+            java.util.Map<String, String> sections = new java.util.LinkedHashMap<>();
+            sections.put("goal", goalBlock);
+            sections.put("profile", profileInjection);
+            sections.put("companion", companionInjection);
+            sections.put("digitalEmployee", digitalEmployeeInjection);
+            sections.put("sharedState", sharedStateInjection);
+            sections.put("artifact", artifactContext);
+            sections.put("hybrid", hybridContext);
+            sections.put("crossAgent", crossAgentContext);
+            sections.put("reflexion", reflexionContext);
+            String rendered = promptSectionRenderer.render(new com.yupi.yuaiagent.agent.prompt.PromptContext(
+                    userId, chatId, taskType, sections));
+            if ("offline-shadow".equalsIgnoreCase(promptContributorMode)
+                    && !normalizePrompt(combined).equals(normalizePrompt(rendered))) {
+                log.warn("[PromptContributor] offline-shadow mismatch userId={} chatId={}", userId, chatId);
+            }
+            if ("primary".equalsIgnoreCase(promptContributorMode)) {
+                combined = rendered;
             }
         }
 
@@ -370,6 +401,10 @@ public class ContextInjectionService {
             return artifactContext;
         }
         return "";
+    }
+
+    private static String normalizePrompt(String text) {
+        return text == null ? "" : text.replace("\r\n", "\n").trim();
     }
 
     public record InjectionResult(String text, List<String> offeredArtifactIds) {

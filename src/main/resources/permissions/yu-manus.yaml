@@ -1,0 +1,13 @@
+# Super-agent (YuManus) — same surface as the full tool registry.
+# Least-privilege profiles (escape/negotiation/...) must NOT copy admin: true.
+agentCode: yu-manus
+displayName: "超级智能体 Manus"
+description: "自主规划 + 全工具；权限闸门仍走 AccessDecisionService，admin 跳过画像限制"
+version: "1.0"
+allowedToolPatterns:
+  - "*"
+minMcpTrustScore: 0
+maxToolCallsPerRequest: 100
+filesystemAccess: true
+networkAccess: true
+admin: true

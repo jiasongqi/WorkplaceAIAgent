@@ -1,0 +1,30 @@
+agentCode: data-agent
+agentVersion: "1.0.0"
+displayName: "数据查询顾问"
+description: "擅长指标、报表、KPI、数据查询。"
+promptVersion: "data-v1"
+agentType: "TOOL_CALL"
+intent: "DATA_QUERY"
+permissionProfile: "data-agent"
+capabilities:
+  - "data"
+  - "kpi"
+skillBindings: []
+mcpBindings: []
+intentKeywords:
+  - "数据"
+  - "指标"
+  - "报表"
+routingKeywords:
+  - "数据"
+  - "指标"
+  - "报表"
+  - "kpi"
+  - "统计"
+inputRequirements:
+  - "query"
+metadata:
+  icon: "📊"
+  category: "career"
+  author: "WorkPilot"
+enabled: true

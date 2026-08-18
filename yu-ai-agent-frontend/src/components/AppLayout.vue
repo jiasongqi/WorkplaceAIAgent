@@ -110,6 +110,7 @@
           </transition>
         </router-view>
       </div>
+      <CompanionPet v-if="!isAuthPage" />
     </div>
   </div>
 </template>
@@ -117,6 +118,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import CompanionPet from './companion/CompanionPet.vue'
 import WpIcon from './WpIcon.vue'
 import { useTheme } from '../composables/useTheme'
 

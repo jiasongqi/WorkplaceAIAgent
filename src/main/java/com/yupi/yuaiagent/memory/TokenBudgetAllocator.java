@@ -90,17 +90,26 @@ public class TokenBudgetAllocator {
         // 尝试在换行符边界截断
         String truncated = truncateAtLineBoundary(content, maxChars);
         if (truncated != null && !truncated.isEmpty()) {
-            return truncated;
+            return enforceTokenLimit(truncated, maxTokens);
         }
 
         // 尝试在句子边界截断
         truncated = truncateAtSentenceBoundary(content, maxChars);
         if (truncated != null && !truncated.isEmpty()) {
-            return truncated;
+            return enforceTokenLimit(truncated, maxTokens);
         }
 
         // 回退：直接按字符数截断
-        return content.substring(0, maxChars);
+        truncated = content.substring(0, maxChars);
+        return enforceTokenLimit(truncated, maxTokens);
+    }
+
+    private String enforceTokenLimit(String content, int maxTokens) {
+        String result = content;
+        while (!result.isEmpty() && estimateTokens(result) > maxTokens) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
     }
 
     /**

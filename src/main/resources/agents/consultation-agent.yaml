@@ -1,0 +1,30 @@
+agentCode: consultation-agent
+agentVersion: "1.0.0"
+displayName: "预约咨询专家"
+description: "擅长预约咨询、查看日程、修改预约。输入需要姓名/联系方式/时间。"
+promptVersion: "consultation-v1"
+agentType: "CONSULTATION"
+intent: "CONSULTATION"
+permissionProfile: "consultation-agent"
+capabilities:
+  - "consultation"
+  - "calendar"
+skillBindings: []
+mcpBindings: []
+intentKeywords:
+  - "预约"
+  - "咨询"
+  - "日程"
+routingKeywords:
+  - "预约"
+  - "咨询"
+  - "日程"
+  - "日历"
+  - "约专家"
+inputRequirements:
+  - "name_or_schedule"
+metadata:
+  icon: "📅"
+  category: "career"
+  author: "WorkPilot"
+enabled: true

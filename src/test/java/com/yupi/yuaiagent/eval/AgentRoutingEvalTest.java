@@ -1,7 +1,9 @@
 package com.yupi.yuaiagent.eval;
 
 import com.yupi.yuaiagent.agent.AgentIntent;
-import com.yupi.yuaiagent.agent.OrchestratorAgent;
+import com.yupi.yuaiagent.nlu.NluPipeline;
+import com.yupi.yuaiagent.skill.SkillDefinition;
+import com.yupi.yuaiagent.skill.SkillRegistry;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;
@@ -26,7 +28,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 class AgentRoutingEvalTest {
 
     @Resource
-    private OrchestratorAgent orchestrator;
+    private NluPipeline nluPipeline;
+
+    @Resource
+    private SkillRegistry skillRegistry;
 
     // ========== 测试数据集 ==========
 
@@ -91,11 +96,8 @@ class AgentRoutingEvalTest {
             String chatId = UUID.randomUUID().toString();
 
             long start = System.currentTimeMillis();
-            String response = orchestrator.chat(evalCase.message(), chatId);
+            AgentIntent actualIntent = resolveRoutedIntent(evalCase.message(), chatId);
             long elapsed = System.currentTimeMillis() - start;
-
-            // 从响应中提取路由到了哪个 Agent（通过 routing 信息）
-            AgentIntent actualIntent = detectRoutedAgent(response);
 
             boolean pass = actualIntent == evalCase.expectedIntent();
             if (pass) {
@@ -137,23 +139,31 @@ class AgentRoutingEvalTest {
     }
 
     /**
-     * 从 chat 响应中推断实际路由到了哪个 Agent
+     * 与 {@link com.yupi.yuaiagent.agent.OrchestratorAgent#chat} 同步路径一致：先技能，再 NLU。
      */
-    private AgentIntent detectRoutedAgent(String response) {
-        if (response == null) return AgentIntent.GENERAL;
-        String lower = response.toLowerCase();
-        if (lower.contains("简历") && (lower.contains("优化") || lower.contains("修改") || lower.contains("投递"))) {
-            return AgentIntent.RESUME;
+    private AgentIntent resolveRoutedIntent(String message, String chatId) {
+        List<SkillDefinition> matchedSkills = skillRegistry.findByIntent(message);
+        if (!matchedSkills.isEmpty()) {
+            return intentFromSkill(matchedSkills.get(0).getName());
         }
-        if (lower.contains("薪") || lower.contains("谈判") || lower.contains("涨") || lower.contains("报价")) {
-            return AgentIntent.NEGOTIATION;
+
+        NluPipeline.NluResult nluResult = nluPipeline.process(message, chatId);
+        if (nluResult.isNeedsClarification()) {
+            return nluResult.toAgentIntent();
         }
-        if (lower.contains("离职") || lower.contains("辞职") || lower.contains("裁员") || lower.contains("竞业") || lower.contains("交接")) {
-            return AgentIntent.ESCAPE;
+        AgentIntent intent = nluResult.toAgentIntent();
+        if (intent == AgentIntent.DATA_QUERY) {
+            return AgentIntent.GENERAL;
         }
-        if (lower.contains("预约") || lower.contains("咨询时间")) {
-            return AgentIntent.CONSULTATION;
-        }
-        return AgentIntent.GENERAL;
+        return intent;
+    }
+
+    private AgentIntent intentFromSkill(String skillName) {
+        return switch (skillName) {
+            case "resume-review" -> AgentIntent.RESUME;
+            case "salary-research" -> AgentIntent.NEGOTIATION;
+            case "resignation-letter" -> AgentIntent.ESCAPE;
+            default -> AgentIntent.GENERAL;
+        };
     }
 }

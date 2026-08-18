@@ -4,8 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yupi.yuaiagent.exception.BusinessException;
 import com.yupi.yuaiagent.pack.ExpertPackDefinition;
+import com.yupi.yuaiagent.pack.ExpertPackPreferenceRepository;
 import com.yupi.yuaiagent.pack.ExpertPackRegistry;
 import com.yupi.yuaiagent.pack.ExpertPackView;
+import com.yupi.yuaiagent.pack.PackPreferenceMode;
+import com.yupi.yuaiagent.pack.UserPackPreference;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,12 @@ public class ExpertPackAppService {
     @Resource
     private ExpertPackRegistry expertPackRegistry;
 
+    @Resource
+    private ExpertPackPreferenceRepository preferenceRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.yupi.yuaiagent.permission.ActivationFingerprintCache activationFingerprintCache;
+
     @Value("${expert-pack.storage.dir:./tmp/expert-packs}")
     private String storageDir;
 
@@ -38,6 +47,9 @@ public class ExpertPackAppService {
 
     @PostConstruct
     public void init() {
+        if (preferenceRepository != null) {
+            return;
+        }
         try {
             File dir = new File(storageDir);
             if (!dir.exists()) {
@@ -68,8 +80,28 @@ public class ExpertPackAppService {
         }
         ExpertPackDefinition pack = expertPackRegistry.get(packId)
                 .orElseThrow(() -> BusinessException.notFound("专家包"));
-        prefs.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(pack.getPackId(), enabled);
-        persist();
+        UserPackPreference current = currentPreference(userId);
+        Map<String, Boolean> packs = new HashMap<>(current.packs());
+        packs.put(pack.getPackId(), enabled);
+        PackPreferenceMode mode = packs.values().stream().allMatch(v -> !Boolean.TRUE.equals(v))
+                ? PackPreferenceMode.EXPLICIT_ALL_DISABLED
+                : PackPreferenceMode.EXPLICIT_PARTIAL;
+        savePreference(new UserPackPreference(userId, mode, packs, current.version()));
+        if (activationFingerprintCache != null) {
+            activationFingerprintCache.evictAll();
+        }
+    }
+
+    public PackPreferenceMode preferenceMode(String userId) {
+        return currentPreference(userId).mode();
+    }
+
+    public Map<String, Boolean> preferencePacks(String userId) {
+        return currentPreference(userId).packs();
+    }
+
+    public long preferenceVersion(String userId) {
+        return currentPreference(userId).version();
     }
 
     public Set<String> getEnabledSkillNames(String userId) {
@@ -81,8 +113,9 @@ public class ExpertPackAppService {
                 }
             }
         }
-        // If user has no prefs and all packs disabled somehow, fall back to all pack skills
-        if (names.isEmpty()) {
+        // If the user has never saved prefs, fall back to default-enabled packs.
+        // An explicit empty/all-false map means ALL_DISABLED and must not resurrect defaults.
+        if (names.isEmpty() && preferenceMode(userId) == PackPreferenceMode.UNSET) {
             for (ExpertPackDefinition pack : expertPackRegistry.list()) {
                 if (pack.isEnabledByDefault() && pack.getSkillNames() != null) {
                     names.addAll(pack.getSkillNames());
@@ -100,7 +133,7 @@ public class ExpertPackAppService {
                 codes.addAll(pack.getAgentCodes());
             }
         }
-        if (codes.isEmpty()) {
+        if (codes.isEmpty() && preferenceMode(userId) == PackPreferenceMode.UNSET) {
             for (ExpertPackDefinition pack : expertPackRegistry.list()) {
                 if (pack.isEnabledByDefault() && pack.getAgentCodes() != null) {
                     codes.addAll(pack.getAgentCodes());
@@ -122,15 +155,51 @@ public class ExpertPackAppService {
                 .build();
     }
 
+    public boolean isPackEnabledForUser(String userId, ExpertPackDefinition pack) {
+        return isEnabled(userId, pack);
+    }
+
     private boolean isEnabled(String userId, ExpertPackDefinition pack) {
         if (!StringUtils.hasText(userId)) {
             return pack.isEnabledByDefault();
         }
-        Map<String, Boolean> userPrefs = prefs.get(userId);
-        if (userPrefs != null && userPrefs.containsKey(pack.getPackId())) {
-            return Boolean.TRUE.equals(userPrefs.get(pack.getPackId()));
+        UserPackPreference preference = currentPreference(userId);
+        if (preference.mode() == PackPreferenceMode.EXPLICIT_ALL_DISABLED) {
+            return false;
+        }
+        if (preference.packs().containsKey(pack.getPackId())) {
+            return Boolean.TRUE.equals(preference.packs().get(pack.getPackId()));
         }
         return pack.isEnabledByDefault();
+    }
+
+    private UserPackPreference currentPreference(String userId) {
+        if (!StringUtils.hasText(userId)) {
+            return new UserPackPreference("", PackPreferenceMode.UNSET, Map.of(), 0);
+        }
+        if (preferenceRepository != null) {
+            return preferenceRepository.find(userId)
+                    .orElse(new UserPackPreference(userId, PackPreferenceMode.UNSET, Map.of(), 0));
+        }
+        Map<String, Boolean> local = prefs.get(userId);
+        if (local == null) {
+            return new UserPackPreference(userId, PackPreferenceMode.UNSET, Map.of(), 0);
+        }
+        PackPreferenceMode mode = local.isEmpty()
+                ? PackPreferenceMode.UNSET
+                : local.values().stream().allMatch(v -> !Boolean.TRUE.equals(v))
+                ? PackPreferenceMode.EXPLICIT_ALL_DISABLED
+                : PackPreferenceMode.EXPLICIT_PARTIAL;
+        return new UserPackPreference(userId, mode, local, 1);
+    }
+
+    private void savePreference(UserPackPreference preference) {
+        if (preferenceRepository != null) {
+            preferenceRepository.save(preference);
+            return;
+        }
+        prefs.put(preference.userId(), new ConcurrentHashMap<>(preference.packs()));
+        persist();
     }
 
     private void persist() {

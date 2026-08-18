@@ -2,9 +2,12 @@ package com.yupi.yuaiagent.permission;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.yupi.yuaiagent.manifest.ManifestDualReadVerifier;
+import com.yupi.yuaiagent.manifest.ManifestLoadPolicy;
 import com.yupi.yuaiagent.permission.model.PermissionProfile;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
@@ -30,15 +33,29 @@ public class PermissionProfileRegistry {
     private final Map<String, PermissionProfile> profiles = new ConcurrentHashMap<>();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
+    @Autowired(required = false)
+    private ManifestDualReadVerifier manifestDualReadVerifier;
+
     @PostConstruct
     public void init() {
         loadBuiltinProfiles();
+        if (manifestDualReadVerifier != null) {
+            manifestDualReadVerifier.verify(
+                    "permissions",
+                    "classpath:permissions/*.yaml",
+                    PermissionProfile.class,
+                    PermissionProfile::getAgentCode,
+                    profiles,
+                    ManifestLoadPolicy.STRICT
+            );
+        }
         log.info("权限画像注册中心初始化完成，共加载 {} 个画像", profiles.size());
     }
 
     /**
      * 加载内置权限配置文件
      */
+    @Deprecated(since = "S1", forRemoval = false)
     private void loadBuiltinProfiles() {
         try {
             PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();

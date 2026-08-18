@@ -69,9 +69,24 @@ public class AgentDescriptor {
     private String permissionProfile;
 
     /**
-     * 意图关键词（用于 NLU 路由匹配）
+     * 路由意图（对应 {@code AgentIntent} 名称，如 RESUME）
+     */
+    private String intent;
+
+    /**
+     * 意图关键词（用于 NLU / Marketplace 搜索）
      */
     private List<String> intentKeywords;
+
+    /**
+     * 低置信度关键词路由使用的词表；不写入 feedbackBoost
+     */
+    private List<String> routingKeywords;
+
+    /**
+     * 该 Agent 声明的输入槽，如 text / query / persona
+     */
+    private List<String> inputRequirements;
 
     /**
      * 元数据（图标、分类、作者等）

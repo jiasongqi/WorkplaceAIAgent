@@ -8,7 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -261,8 +263,10 @@ public class SessionSharedStateService {
             sb.append('\n');
         }
         if (state.getAppointments() != null && !state.getAppointments().isEmpty()) {
-            sb.append("- 预约日程（引用 ID，勿编造）：\n");
+            LocalDateTime now = LocalDateTime.now();
+            sb.append("- 预约日程（引用 ID，勿编造；已过期不等于今天有预约）：\n");
             for (SessionSharedState.AppointmentFact a : state.getAppointments()) {
+                String freshness = describeAppointmentFreshness(a.getAppointmentTime(), now);
                 sb.append("  · ")
                         .append(a.getTopic() != null ? a.getTopic() : "咨询")
                         .append(" | ")
@@ -273,6 +277,8 @@ public class SessionSharedStateService {
                         .append(a.getAppointmentId())
                         .append(" | ")
                         .append(a.getStatus() != null ? a.getStatus() : "")
+                        .append(" | ")
+                        .append(freshness)
                         .append('\n');
             }
             // Evidence penetration — raw fields so downstream agents don't rely on paraphrases only
@@ -285,6 +291,7 @@ public class SessionSharedStateService {
                         .append("; topic=").append(nullSafe(a.getTopic()))
                         .append("; time=").append(nullSafe(a.getAppointmentTime()))
                         .append("; status=").append(nullSafe(a.getStatus()))
+                        .append("; freshness=").append(describeAppointmentFreshness(a.getAppointmentTime(), now))
                         .append("}\n");
             }
         } else {
@@ -409,5 +416,43 @@ public class SessionSharedStateService {
 
     private static String nullSafe(String s) {
         return s != null ? s : "";
+    }
+
+    /**
+     * Label appointment relative to "now" so agents do not treat historical bookings as today's schedule.
+     */
+    static String describeAppointmentFreshness(String appointmentTimeText, LocalDateTime now) {
+        if (!StringUtils.hasText(appointmentTimeText) || now == null) {
+            return "时间未知";
+        }
+        LocalDateTime parsed = tryParseAppointmentTime(appointmentTimeText.trim());
+        if (parsed == null) {
+            return "时间未知";
+        }
+        LocalDate day = parsed.toLocalDate();
+        LocalDate today = now.toLocalDate();
+        if (day.equals(today)) {
+            return parsed.isBefore(now) ? "今天已过时段" : "今天待进行";
+        }
+        if (day.isBefore(today)) {
+            return "已过期（不是今天）";
+        }
+        return "未开始";
+    }
+
+    private static LocalDateTime tryParseAppointmentTime(String text) {
+        String[] patterns = {"yyyy-MM-dd HH:mm", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss"};
+        for (String pattern : patterns) {
+            try {
+                return LocalDateTime.parse(text, DateTimeFormatter.ofPattern(pattern));
+            } catch (Exception ignored) {
+                // try next pattern
+            }
+        }
+        try {
+            return LocalDateTime.parse(text);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

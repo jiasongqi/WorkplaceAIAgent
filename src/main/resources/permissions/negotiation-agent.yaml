@@ -3,10 +3,10 @@ displayName: "薪资谈判专家"
 description: "负责薪资谈判、涨薪分析、薪酬对标"
 version: "1.0"
 allowedToolPatterns:
-  - "negotiation.*"
   - "web.search"
-  - "data.query"
+  - "searchWeb"
   - "rag.query"
+  - "searchKnowledgeBase"
 minMcpTrustScore: 30
 maxToolCallsPerRequest: 15
 filesystemAccess: false

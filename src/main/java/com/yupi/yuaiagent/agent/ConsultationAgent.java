@@ -19,6 +19,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import reactor.core.publisher.Flux;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -249,7 +250,7 @@ public class ConsultationAgent {
 
         // 查已有日程/预约：读持久化记录，不重新开填表（预约完成后 COMPLETED 也会走到这里）
         if (isScheduleInquiry(message)) {
-            return renderExistingAppointments(chatId);
+            return renderExistingAppointments(chatId, message);
         }
 
         // 「有什么可以预约」：先介绍目录，并进入预约会话锁定，避免下一句「选3」被路由到通用顾问
@@ -426,14 +427,19 @@ public class ConsultationAgent {
             return false;
         }
         String m = message.trim();
+        // 查已有预约/课程（含「已预约课程」）不是问目录
+        if (isScheduleInquiry(m)) {
+            return false;
+        }
         return m.matches("(?s).*(有什么|有哪些|哪些服务|能约什么|可以预约什么|先告诉我|介绍一下).*(预约|咨询|课程).*")
-                || m.matches("(?s).*(预约|咨询).*(什么|哪些|哪些服务|能约什么|课程).*")
+                || m.matches("(?s).*(预约|咨询).*(什么|哪些|哪些服务|能约什么).*")
+                || m.matches("(?s).*(有什么|有哪些|能约什么|可以预约什么).*(课程|咨询|服务).*")
                 || m.contains("可以预约什么")
                 || m.contains("有什么可以预约")
                 || m.contains("能预约什么")
                 || m.contains("预约什么服务")
                 || m.contains("可预约的课程")
-                || m.contains("预约的课程");
+                || m.matches("(?s).*有什么.*预约.*课程.*");
     }
 
     static boolean isCancelBooking(String message) {
@@ -821,7 +827,7 @@ public class ConsultationAgent {
      */
     private String handleCompleted(String message, String chatId) {
         if (isScheduleInquiry(message)) {
-            return renderExistingAppointments(chatId);
+            return renderExistingAppointments(chatId, message);
         }
         // 清理进行中会话状态（预约记录仍在 AppointmentRepository）
         sessionStates.remove(chatId);
@@ -838,40 +844,112 @@ public class ConsultationAgent {
             return false;
         }
         String m = message.trim();
-        if (isServiceCatalogInquiry(m)) {
-            return false;
-        }
         // 明确新开预约意图时，不当作查日程
         if (m.matches("(?s).*(?:我想预约|帮我预约|预约一次|约个顾问|重新预约).*")) {
             return false;
         }
+        // 目录型问法（有什么可以预约）优先排除，避免与下方「有…预约」混淆
+        if (m.contains("有什么可以预约") || m.contains("能预约什么") || m.contains("可以预约什么")
+                || m.contains("预约什么服务") || m.contains("可预约的课程")
+                || m.matches("(?s).*有什么.*预约.*(课程|服务|咨询).*")) {
+            return false;
+        }
         return m.matches("(?s).*(?:日程|行程|日历).*(?:安排|查看|看看)?.*")
-                || m.matches("(?s).*(?:看|查|查看|看看).*(?:日程|行程|日历|预约).*")
+                || m.matches("(?s).*(?:看|查|查看|看看).*(?:日程|行程|日历|预约|课程).*")
                 || m.contains("我的预约")
+                || m.contains("有预约")
                 || m.contains("预约进度")
                 || m.contains("预约编号")
                 || m.contains("已预约")
                 || m.contains("约好了吗")
-                || m.contains("约到几点");
+                || m.contains("约到几点")
+                || m.matches("(?s).*今天.*(?:预约|课程).*")
+                || m.matches("(?s).*(?:还有|有没有|是否有).*(?:预约|课程).*");
     }
 
-    private String renderExistingAppointments(String chatId) {
+    /** 「今天有没有预约」类问法：只返回当天记录，不把历史预约当成今天的。 */
+    static boolean isTodayScheduleInquiry(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String m = message.trim();
+        return m.contains("今天")
+                && (m.contains("预约") || m.contains("日程") || m.contains("行程") || m.contains("日历"));
+    }
+
+    static List<Appointment> filterAppointmentsForInquiry(
+            List<Appointment> list,
+            boolean todayOnly,
+            LocalDate today
+    ) {
+        if (list == null || list.isEmpty()) {
+            return List.of();
+        }
+        if (!todayOnly) {
+            return list;
+        }
+        return list.stream()
+                .filter(a -> a.getAppointmentTime() != null
+                        && a.getAppointmentTime().toLocalDate().equals(today))
+                .toList();
+    }
+
+    static String resolveDisplayStatus(Appointment appointment, LocalDateTime now) {
+        if (appointment == null) {
+            return "未知";
+        }
+        if (appointment.getStatus() == Appointment.AppointmentStatus.CANCELLED) {
+            return appointment.getStatus().getDescription();
+        }
+        if (appointment.getAppointmentTime() != null
+                && appointment.getAppointmentTime().isBefore(now)
+                && appointment.getStatus() != Appointment.AppointmentStatus.COMPLETED) {
+            return "已过期";
+        }
+        return appointment.getStatus() != null ? appointment.getStatus().getDescription() : "未知";
+    }
+
+    private String renderExistingAppointments(String chatId, String message) {
         List<Appointment> list = appointmentRepository != null
                 ? appointmentRepository.findByChatId(chatId)
                 : List.of();
-        if (list == null || list.isEmpty()) {
+        if (list == null) {
+            list = List.of();
+        }
+
+        boolean todayOnly = isTodayScheduleInquiry(message);
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        List<Appointment> visible = filterAppointmentsForInquiry(list, todayOnly, today);
+
+        if (visible.isEmpty()) {
+            if (todayOnly) {
+                long pastCount = list.stream()
+                        .filter(a -> a.getAppointmentTime() != null
+                                && a.getAppointmentTime().toLocalDate().isBefore(today))
+                        .count();
+                if (pastCount > 0) {
+                    return "今天（" + today + "）没有预约。\n\n"
+                            + "你有 " + pastCount + " 条历史预约（例如较早的 2026-07-29），但不算今天的日程。"
+                            + "若要查看全部，可以说「看下我的日程」；也可以说「我想再预约一次」。";
+                }
+                return "今天（" + today + "）没有预约记录。\n\n"
+                        + "若要新建，直接说例如：「预约职业方向梳理，明天下午 3 点」。";
+            }
             return "当前会话还没有已确认的预约记录。\n\n"
                     + "若要新建，直接说例如：「预约职业方向梳理，明天下午 3 点」。";
         }
 
-        StringBuilder sb = new StringBuilder("### 您的预约日程\n\n");
+        StringBuilder sb = new StringBuilder(todayOnly
+                ? "### 今天的预约（" + today + "）\n\n"
+                : "### 您的预约日程\n\n");
         int i = 1;
-        for (Appointment a : list) {
+        for (Appointment a : visible) {
             String time = a.getAppointmentTime() != null
                     ? infoValidator.formatDateTime(a.getAppointmentTime())
                     : "时间待定";
             String topic = (a.getTopic() != null && !a.getTopic().isBlank()) ? a.getTopic() : "一对一咨询";
-            String statusLabel = a.getStatus() != null ? a.getStatus().getDescription() : "未知";
+            String statusLabel = resolveDisplayStatus(a, now);
             sb.append(i++).append(". **").append(topic).append("**\n")
                     .append("   - 预约编号：`").append(a.getAppointmentId()).append("`\n")
                     .append("   - 预约人：").append(a.getName() != null ? a.getName() : "—").append("\n")
@@ -885,7 +963,12 @@ public class ConsultationAgent {
             }
             sb.append("\n");
         }
-        sb.append("如需修改或取消，请直接说明预约编号或时间；也可以说「我想再预约一次」。");
+        if (!todayOnly) {
+            sb.append("说明：已过期的预约不会再当作「今天的日程」。");
+            sb.append("如需修改或取消，请直接说明预约编号或时间；也可以说「我想再预约一次」。");
+        } else {
+            sb.append("如需修改或取消，请直接说明预约编号或时间；也可以说「我想再预约一次」。");
+        }
         return sb.toString().trim();
     }
 

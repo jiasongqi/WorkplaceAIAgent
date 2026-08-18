@@ -2,12 +2,15 @@ package com.yupi.yuaiagent.pack;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.yupi.yuaiagent.manifest.ManifestDualReadVerifier;
+import com.yupi.yuaiagent.manifest.ManifestLoadPolicy;
 import com.yupi.yuaiagent.permission.PermissionProfileRegistry;
 import com.yupi.yuaiagent.registry.AgentRegistry;
 import com.yupi.yuaiagent.skill.SkillRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 
@@ -30,9 +33,27 @@ public class ExpertPackRegistry {
     private SkillRegistry skillRegistry;
     @Resource
     private PermissionProfileRegistry permissionProfileRegistry;
+    @Autowired(required = false)
+    private ManifestDualReadVerifier manifestDualReadVerifier;
 
     @PostConstruct
     public void init() {
+        loadBuiltinPacks();
+        if (manifestDualReadVerifier != null) {
+            manifestDualReadVerifier.verify(
+                    "packs",
+                    "classpath:packs/*.yaml",
+                    ExpertPackDefinition.class,
+                    ExpertPackDefinition::getPackId,
+                    packs,
+                    ManifestLoadPolicy.LENIENT
+            );
+        }
+        log.info("专家包注册中心初始化完成，共 {} 个", packs.size());
+    }
+
+    @Deprecated(since = "S1", forRemoval = false)
+    private void loadBuiltinPacks() {
         try {
             var resolver = new PathMatchingResourcePatternResolver();
             var resources = resolver.getResources("classpath:packs/*.yaml");
@@ -51,7 +72,6 @@ public class ExpertPackRegistry {
         } catch (Exception e) {
             log.warn("扫描专家包目录失败", e);
         }
-        log.info("专家包注册中心初始化完成，共 {} 个", packs.size());
     }
 
     private void validate(ExpertPackDefinition pack) {

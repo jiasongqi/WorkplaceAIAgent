@@ -1,9 +1,10 @@
 agentCode: escape-agent
 agentVersion: "1.0.0"
-displayName: "离职规划专员"
-description: "离职时机、交接清单、竞业与离职信等专精数字员工模板"
+displayName: "离职规划专家"
+description: "擅长离职、辞职、劳动纠纷、工作交接。"
 promptVersion: "escape-v1"
 agentType: "ESCAPE"
+intent: "ESCAPE"
 permissionProfile: "escape-agent"
 capabilities:
   - "escape"
@@ -14,6 +15,15 @@ intentKeywords:
   - "离职"
   - "辞职"
   - "交接"
+routingKeywords:
+  - "离职"
+  - "辞职"
+  - "交接"
+  - "劳动"
+  - "仲裁"
+  - "竞业"
+inputRequirements:
+  - "text"
 metadata:
   icon: "door"
   category: "career"

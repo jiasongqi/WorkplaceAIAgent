@@ -14,6 +14,11 @@ public class NegotiationAgentRunner implements AgentRunner {
     private final NegotiationAgent negotiationAgent;
 
     @Override
+    public String agentCode() {
+        return "NEGOTIATION";
+    }
+
+    @Override
     public AgentOutput run(ConversationContext context, String userMessage) {
         String chatId = StringUtils.hasText(context.chatId()) ? context.chatId() : "default";
         String injection = context.injection() != null ? context.injection() : "";

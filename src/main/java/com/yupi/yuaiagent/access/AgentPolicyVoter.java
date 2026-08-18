@@ -24,7 +24,7 @@ public class AgentPolicyVoter implements AccessVoter {
         }
 
         boolean allowed = agentPermissionService.checkPermission(
-                context.getAgentCode(), context.getToolName());
+                context.getUserId(), context.getAgentCode(), context.getToolName());
 
         if (allowed) {
             log.debug("[AgentPolicyVoter] agent={} tool={} -> ALLOW",

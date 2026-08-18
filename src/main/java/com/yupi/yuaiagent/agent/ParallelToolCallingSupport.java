@@ -17,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 
 /**
  * Parallel Fan-out for independent tool calls in one assistant turn (Ch3 Parallel Tool Use).
@@ -33,16 +34,27 @@ public final class ParallelToolCallingSupport {
             ToolCallback[] availableTools,
             Executor executor,
             long timeoutSeconds) {
+        return execute(prompt, chatResponse, availableTools, executor, timeoutSeconds, name -> true);
+    }
+
+    public static ToolExecutionResult execute(
+            Prompt prompt,
+            ChatResponse chatResponse,
+            ToolCallback[] availableTools,
+            Executor executor,
+            long timeoutSeconds,
+            Predicate<String> allowTool) {
 
         AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
         List<AssistantMessage.ToolCall> toolCalls = assistantMessage.getToolCalls();
         Map<String, ToolCallback> byName = indexByName(availableTools);
+        Predicate<String> allow = allowTool == null ? name -> true : allowTool;
 
         List<ToolResponseMessage.ToolResponse> responses = new ArrayList<>(toolCalls.size());
 
         if (toolCalls.size() <= 1) {
             for (AssistantMessage.ToolCall tc : toolCalls) {
-                responses.add(invokeOne(tc, byName, timeoutSeconds));
+                responses.add(invokeOne(tc, byName, timeoutSeconds, allow));
             }
         } else {
             log.info("[ParallelTools] fan-out {} tool calls", toolCalls.size());
@@ -52,7 +64,7 @@ public final class ParallelToolCallingSupport {
             for (int i = 0; i < toolCalls.size(); i++) {
                 AssistantMessage.ToolCall tc = toolCalls.get(i);
                 futures[i] = CompletableFuture.supplyAsync(
-                        () -> invokeOne(tc, byName, timeoutSeconds), executor);
+                        () -> invokeOne(tc, byName, timeoutSeconds, allow), executor);
             }
             for (int i = 0; i < futures.length; i++) {
                 AssistantMessage.ToolCall tc = toolCalls.get(i);
@@ -86,9 +98,16 @@ public final class ParallelToolCallingSupport {
     private static ToolResponseMessage.ToolResponse invokeOne(
             AssistantMessage.ToolCall tc,
             Map<String, ToolCallback> byName,
-            long timeoutSeconds) {
+            long timeoutSeconds,
+            Predicate<String> allowTool) {
         String name = tc.name();
         String args = tc.arguments() == null ? "{}" : tc.arguments();
+        if (allowTool != null && !allowTool.test(name)) {
+            log.warn("[ParallelTools] permission denied for tool={}", name);
+            return new ToolResponseMessage.ToolResponse(tc.id(), name,
+                    "Error: permission denied for tool " + name
+                            + ". This agent is not allowed to call it. Choose an allowed tool or continue without it.");
+        }
         ToolCallback callback = byName.get(name);
         if (callback == null) {
             return new ToolResponseMessage.ToolResponse(tc.id(), name,

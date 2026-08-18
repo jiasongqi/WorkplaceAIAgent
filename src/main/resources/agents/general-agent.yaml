@@ -1,9 +1,10 @@
 agentCode: general-agent
 agentVersion: "1.0.0"
 displayName: "职场通用顾问"
-description: "通用职场问题咨询"
+description: "通用职场问题、人际关系、压力与职业规划兜底。"
 promptVersion: "general-v1"
 agentType: "GENERAL"
+intent: "GENERAL"
 permissionProfile: "general-agent"
 capabilities:
   - "career"
@@ -15,6 +16,14 @@ intentKeywords:
   - "人际"
   - "压力"
   - "职业规划"
+routingKeywords:
+  - "职场"
+  - "同事"
+  - "压力"
+  - "规划"
+  - "怎么办"
+inputRequirements:
+  - "text"
 metadata:
   icon: "🧑‍💼"
   category: "career"

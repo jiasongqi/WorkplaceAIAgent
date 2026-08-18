@@ -4,6 +4,7 @@ import com.yupi.yuaiagent.agent.YuManus;
 import com.yupi.yuaiagent.agent.goal.GoalAnchor;
 import com.yupi.yuaiagent.agent.loop.LoopRunBudget;
 import com.yupi.yuaiagent.app.AiChatAgent;
+import com.yupi.yuaiagent.access.AccessDecisionService;
 import com.yupi.yuaiagent.auth.AuthService;
 import com.yupi.yuaiagent.auth.UserQuotaService;
 import com.yupi.yuaiagent.auth.UserRole;
@@ -64,6 +65,9 @@ public class AiController {
 
     @Resource
     private TokenBudgetManager tokenBudgetManager;
+
+    @Resource
+    private AccessDecisionService accessDecisionService;
 
     @Value("${app.hitl.max-consecutive-tool-errors:3}")
     private int maxConsecutiveToolErrors;
@@ -175,6 +179,7 @@ public class AiController {
     public SseEmitter doChatWithManus(
             @RequestParam @NotBlank(message = "消息不能为空") @Size(max = 10000, message = "消息长度不能超过10000字符") String message) {
         YuManus yuManus = new YuManus(allTools, dashscopeChatModel);
+        yuManus.setAccessDecisionService(accessDecisionService);
         // Set up trace context for tool call recording (Req 8.5)
         String requestId = UUID.randomUUID().toString().replace("-", "");
         TraceContext traceCtx = traceRecorder.startTrace(null, null, requestId);

@@ -2,11 +2,15 @@ agentCode: escape-agent
 displayName: "离职规划专家"
 description: "负责离职规划、辞职指导、劳动纠纷咨询"
 version: "1.0"
+# Patterns match Spring AI @Tool method names; dotted aliases (web.search) still work.
 allowedToolPatterns:
-  - "escape.*"
   - "web.search"
+  - "searchWeb"
   - "file.read"
   - "rag.query"
+  - "pdf.generate"
+  - "generatePDF"
+  - "startGeneratePDF"
 minMcpTrustScore: 30
 maxToolCallsPerRequest: 15
 filesystemAccess: true

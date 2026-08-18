@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class DocumentPerceptionServiceTest {
 
@@ -14,9 +16,14 @@ class DocumentPerceptionServiceTest {
 
     @BeforeEach
     void setUp() {
+        LongDocumentSummarizer summarizer = mock(LongDocumentSummarizer.class);
+        when(summarizer.summarizeIfNeeded(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> inv.getArgument(0));
         service = new DocumentPerceptionService(
                 new VisualPromptSanitizer(new PromptInjectionDetector()),
-                new ResumeOfferStructurer());
+                new ResumeOfferStructurer(),
+                summarizer,
+                mock(ImageCaptionService.class));
     }
 
     @Test

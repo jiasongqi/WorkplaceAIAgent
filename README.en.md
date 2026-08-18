@@ -23,7 +23,7 @@ Calling an LLM API is easy. Shipping a real Agent product is harder: how do you 
 
 WorkPilot is an **all-scenario AI career coach**. The frontend is a Vue 3 workbench; the backend is Java 21 + Spring Boot + Spring AI. User messages enter `OrchestratorAgent`, go through a keyword fast path / NLU pipeline, and land on specialist agents for resume, salary negotiation, resignation, consultation booking, and general career advice — with 4-layer memory, tool calling, HITL approval, execution traces, and dual storage (`file` / PostgreSQL).
 
-Recent product capabilities also include a **personal career companion**, **digital employees**, **suggested-action chips**, a 👍/👎 feedback loop (Reflexion / Facts — not model fine-tuning), plus engineering upgrades: **document Perception**, **Goal Anchor**, **tool Schema / parallel fan-out / idempotency / Submit-Poll**, **Agent Loop Wrap-up / Replanner / Depth Limit**, a **unified RAG pipeline** (`RetrievalPipeline` + `RagTool`), and a **Knowledge Base admin page** (MD/PDF upload · dual sage/dark themes).
+Recent capabilities also include a **desktop pet companion** (global floating widget · sage/dark theme-adaptive room · multi-pose · collapsible), **personal career companion**, **digital employees**, **suggested-action chips**, a 👍/👎 feedback loop (Reflexion / Facts — not model fine-tuning), plus engineering upgrades: **document Perception**, **Goal Anchor**, **tool Schema / parallel fan-out / idempotency / Submit-Poll**, **Agent Loop Wrap-up / Replanner / Depth Limit**, a **unified RAG pipeline** (`RetrievalPipeline` + `RagTool`), a **Knowledge Base admin page** (MD/PDF upload · sage/dark themes), **consultation schedule lookup** (distinct from “what can I book?”), and **platform plugin migration flags** (`platform.*` defaults to legacy paths). See [docs/workpilot-plugin-platform-refactor-plan.md](docs/workpilot-plugin-platform-refactor-plan.md).
 
 Mapping notes from [mm_agent_tutorial](https://zsc.github.io/mm_agent_tutorial/) to WorkPilot: [docs/mm-agent-tutorial-场景对照总结.md](docs/mm-agent-tutorial-场景对照总结.md) (Chinese; tables & code paths are language-agnostic).
 
@@ -48,16 +48,31 @@ It is a good fit if you want to:
 ```bash
 git clone https://github.com/jiasongqi/WorkplaceAIAgent.git
 cd WorkplaceAIAgent
-git checkout java-v3-db   # or feat/consultation-chat-ux / your target branch
 ```
 
 ### 2. Environment
 
+The repo activates the **`local` dev profile** by default (`spring.profiles.active: local`): H2 file DB (`./tmp/h2/workpilot`) for companion / digital-employee / appointment JPA tables, plus guest login enabled. Messages and traces still use **`file` storage** (`./tmp`) by default.
+
 ```powershell
 $env:DASHSCOPE_API_KEY = "your-dashscope-key"
 $env:JWT_SECRET = "change-me-to-a-long-random-string"
-# Optional: $env:STORAGE_TYPE = "file"   # file=./tmp ; jdbc=PostgreSQL
+# Optional: $env:STORAGE_TYPE = "file"   # file=./tmp ; jdbc=PostgreSQL (messages/traces)
+# Optional: $env:WORKFLOW_DAG_ENABLED = "true"   # already true in local profile
+# Optional: $env:SEARCH_API_KEY = "..."          # web search tool
 ```
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `DASHSCOPE_API_KEY` | DashScope API key | required |
+| `JWT_SECRET` | JWT signing secret (≥32 chars) | placeholder in local |
+| `STORAGE_TYPE` | Message/trace store: `file` / `jdbc` | `file` |
+| `GUEST_ENABLED` | Allow guest login | `true` in local |
+| `GUEST_PASSWORD` | Guest password | `workpilot-local` |
+| `WORKFLOW_DAG_ENABLED` | JOB_CHANGE/INTERVIEW DAG workflow | `true` in local |
+| `SEARCH_API_KEY` | SearchAPI web search | optional |
+| `CALENDAR_PROVIDER` | Booking calendar: `mock` / `feishu` / `dingtalk` | `mock` |
+| `PLATFORM_*` | Plugin platform gray-release flags | all legacy/off |
 
 > Inject secrets via env vars — **never** commit API keys or DB passwords.
 
@@ -66,14 +81,16 @@ $env:JWT_SECRET = "change-me-to-a-long-random-string"
 ```powershell
 # Windows: use JDK 21; quote Maven flags in PowerShell
 $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.10.7-hotspot"   # adjust to your install
-mvn spring-boot:run "-Dmaven.test.skip=true"
+.\mvnw.cmd spring-boot:run "-Dmaven.test.skip=true"
 # → http://localhost:8123/api
 # Health: curl http://localhost:8123/api/health
 ```
 
+> **First boot is slow** (~5–10 min): built-in knowledge docs are embedded on startup. Later restarts are much faster.
+
 ```bash
 # macOS / Linux
-mvn spring-boot:run -Dmaven.test.skip=true
+./mvnw spring-boot:run -Dmaven.test.skip=true
 ```
 
 ### 4. Frontend
@@ -88,18 +105,22 @@ npm run dev
 ### 5. First run
 
 1. Open http://localhost:3000/login  
-2. **Register**, or local guest: username `游客` / password `workpilot-local` (or “Guest login”)  
-3. Open **Career Advisor** and try: `Help me rewrite a Java backend resume highlight`
+2. **Register**, or local guest: username `游客` / password `workpilot-local` (requires `local` profile; or “Guest login”)  
+3. Open **Career Advisor** and try: `Help me rewrite a Java backend resume highlight`  
+4. A **desktop pet** (default cat) appears bottom-right: draggable, right-click menu, room colors adapt when toggling sage/dark theme  
+5. Booking: ask “有什么可以预约” for the service catalog; ask “今天有我的预约吗” to query existing appointments (won’t start a new form)
 
 ### Optional: PostgreSQL via Docker
+
+For production-style persistence:
 
 ```bash
 docker compose up -d postgres
 $env:STORAGE_TYPE = "jdbc"
-$env:DB_URL = "jdbc:postgresql://localhost:5432/workpilot"
-$env:DB_USERNAME = "workpilot"
-$env:DB_PASSWORD = "workpilot123"
-mvn spring-boot:run -DskipTests
+$env:PG_DATASOURCE_URL = "jdbc:postgresql://localhost:5432/workpilot"
+$env:PG_USERNAME = "workpilot"
+$env:PG_PASSWORD = "workpilot123"
+.\mvnw.cmd spring-boot:run "-Dmaven.test.skip=true"
 ```
 
 Full stack:
@@ -112,6 +133,7 @@ docker compose up -d
 
 ## ✨ What You Will Get
 
+- 🐱 **Desktop pet** — Global floating cat / pilot skins; `PetRoom` scene follows **sage / dark** theme; SSE-driven idle/thinking/celebrate poses
 - 🧭 **Multi-agent routing** — keyword fast path + NLU; 5 specialists (resume / negotiation / escape / consultation / general)
 - 🧍 **Personal companion** — name / tone / focus / persona; takes effect on the next turn
 - 👥 **Digital employees** — create from templates, customize persona, version rollback, activate for delegation
@@ -122,9 +144,12 @@ docker compose up -d
 - 📎 **Document Perception** — resume/offer preprocess bound to SharedState (avoids SSE URL limits) then expert routing; long PDF Map-Reduce summarization
 - 📚 **RAG & Knowledge Base** — `RetrievalPipeline` (rewrite → multi-query → rerank with time decay); `/knowledge` page for MD/PDF upload (PDF table MVP); `RagTool` for Super Agent retrieval
 - 🙋 **HITL approval** — confirm before high-risk terminal / calendar / file-write actions
+- 📅 **Consultation booking** — service catalog · schedule lookup · slot filling → confirm → create (Feishu/DingTalk ready)
+- 🧩 **Platform plugins (optional)** — `platform.*` flags for Manifest/Runner/Permission paths; legacy by default
 - 📊 **Trace & eval** — execution timelines for debugging, demos, and regression
-- 🗄️ **Dual storage** — `file` for local demo / `jdbc` PostgreSQL + Flyway
-- 🖥️ **Runnable product UI** — login, home, career advisor, super agent, knowledge base
+- 🗄️ **Dual storage** — `file` for local demo / `jdbc` PostgreSQL + Flyway; local H2 for JPA business tables
+- 🖥️ **Runnable product UI** — login, home, career advisor, super agent, knowledge base, favorites, usage, trace detail
+- 🎨 **Dual-theme UI** — top bar toggles **sage** ↔ **dark**; pet room and all pages follow the active theme
 
 ---
 
@@ -134,7 +159,7 @@ docker compose up -d
 |---------|-------|--------|
 | **I. Get started & product** | | |
 | [Quick Start](#-quick-start) | Env, launch, first chat | ✅ |
-| [Screenshots](#-screenshots) | Login / Advisor / Companion / Themes / Manus | ✅ |
+| [Screenshots](#-screenshots) | Login / Advisor / Companion / sage·dark themes | ✅ |
 | **II. Architecture & capabilities** | | |
 | [Architecture](#-architecture) | Layered system + routing diagrams | ✅ |
 | [Feature Map](#-feature-map) | Capability overview | ✅ |
@@ -147,6 +172,7 @@ docker compose up -d
 | [docs/nlu-layer-design-v4.2.md](docs/nlu-layer-design-v4.2.md) | NLU pipeline design | ✅ |
 | [docs/multi-agent-runtime-architecture.md](docs/multi-agent-runtime-architecture.md) | Multi-agent runtime | ✅ |
 | [docs/plan-auth-sse-storage.md](docs/plan-auth-sse-storage.md) | Auth · SSE · storage plan | ✅ |
+| [docs/workpilot-plugin-platform-refactor-plan.md](docs/workpilot-plugin-platform-refactor-plan.md) | Platform plugin migration (`platform.*`) | ✅ |
 | **IV. Interview** | | |
 | [docs/INTERVIEW-DEFENSE.md](docs/INTERVIEW-DEFENSE.md) | Interview defense notes | ✅ |
 | [docs/INTERVIEW_QA_SKILL.md](docs/INTERVIEW_QA_SKILL.md) | Interview Q&A skill notes | ✅ |
@@ -173,7 +199,7 @@ docker compose up -d
 <p align="center">
   <img src="docs/assets/screenshot-career.png" width="720" alt="Career Advisor" />
 </p>
-<p align="center"><sub>Career Advisor: companion + digital employees · suggested-action chips · SSE streaming</sub></p>
+<p align="center"><sub>Career Advisor: companion + digital employees · suggested-action chips · SSE streaming · desktop pet</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-companion.png" width="48%" alt="Personal companion" />
@@ -192,14 +218,13 @@ docker compose up -d
 </p>
 <p align="center"><sub>Knowledge base: MD/PDF upload · categories · filters · sage/dark themes (login required)</sub></p>
 
-### Theme previews (prototype trio)
+### Theme previews (sage · dark)
 
 <p align="center">
-  <img src="docs/assets/screenshot-theme-dark.png" width="32%" alt="Original dark" />
-  <img src="docs/assets/screenshot-theme-capsule.png" width="32%" alt="Capsule enhanced" />
-  <img src="docs/assets/screenshot-theme-sage.png" width="32%" alt="Sage green" />
+  <img src="docs/assets/screenshot-theme-sage.png" width="48%" alt="Sage green" />
+  <img src="docs/assets/screenshot-theme-dark.png" width="48%" alt="Dark" />
 </p>
-<p align="center"><sub>Left: Original dark · Center: Capsule (default) · Right: Sage healing light</sub></p>
+<p align="center"><sub>Toggle 🌿/🌙 in the top bar; pet room, knowledge base, and workbench follow the theme. Capsule theme lives under <code>prototypes/</code> only (not shipped).</sub></p>
 
 ---
 
@@ -224,23 +249,45 @@ docker compose up -d
 | Backend | Java 21 · Spring Boot 3.4 · Spring AI 1.0 |
 | Models | DashScope (default `qwen3.7-max`) · optional Ollama |
 | Frontend | Vue 3 · Vite · Axios · marked |
-| Storage | `file` (`./tmp`) or `jdbc` (PostgreSQL + Flyway) |
+| Storage | `file` (`./tmp` messages/traces) · local H2 (JPA tables) · optional `jdbc` PostgreSQL |
+| Theme | **sage** (default) · **dark**; persisted in `localStorage` |
 | Transport | SSE (token in URL) · REST + JWT refresh |
 
 ---
 
 ## 🗺 Feature Map
 
+### Frontend routes
+
+| Path | Page | Notes |
+|------|------|-------|
+| `/login` | Sign in / Register | Guest login in local profile |
+| `/` | Workbench | Feature hub |
+| `/chat/career` | Career Advisor | Main chat · companion/employee drawers · trace panel · pet |
+| `/chat/super` | Super Agent | ReAct + tools + RAG |
+| `/knowledge` | Knowledge Base | MD/PDF upload · filters |
+| `/favorites` | Favorites | Message snapshots |
+| `/usage` | Usage | Token / feedback stats |
+| `/trace/:traceId` | Trace detail | Single execution timeline |
+| `/admin` | Admin dashboard | ADMIN role |
+| `/artifacts` · `/compare` | Artifacts / Agent compare | ADMIN role |
+
+> **Companion persona** and **digital employees** are configured in Career Advisor drawers; REST APIs are `/api/companion/me`, `/api/digital-employee/*` (not separate Vue routes).
+
+### Capability matrix
+
 | Goal | Where | Who handles it |
 |------|--------|----------------|
 | Career chat: resume, salary, resignation | **Career Advisor** `/chat/career` | Orchestrator → 5 sub-agents |
 | Upload resume / offer then ask | Advisor 📎 upload | Perception bind (**not** the KB document list) |
-| Tune “my companion” persona | Advisor top pills / sidebar **My AI Team** | `/companion/me` + ContextInjection |
+| Tune companion persona / pet skin | Advisor “My companion” drawer | `/companion/me` + `CompanionPet` |
 | Hire specialist digital employees | Advisor “Create” → pick a template | `/digital-employee/*` |
 | Rate answers so the system evolves | Message 👍/👎 | Feedback → Reflexion / Facts |
 | Persist docs for RAG retrieval | **Knowledge Base** `/knowledge` | `RetrievalPipeline` + `DocumentAppService` |
 | Autonomous tool-using agent | **Super Agent** `/chat/super` | YuManus (ReAct + `searchKnowledgeBase`) |
 | Inspect routing / execution | Trace / Usage panels | TraceRecorder · Usage |
+| Ask “what can I book?” | Career Advisor | `ConsultationAgent` service catalog |
+| Ask “do I have appointments today?” | Career Advisor | `ConsultationAgent` → `AppointmentRepository` |
 
 | Capability | What it does |
 |------------|--------------|
@@ -256,9 +303,11 @@ docker compose up -d
 | Tool calling | Schema boundaries · parallel fan-out · sanitizer · idempotency · file_id · Submit-Poll + MCP |
 | Agent Loop | maxSteps Wrap-up · P&E Replanner · anti completion hallucination · Depth Limit |
 | HITL | Approval for high-risk terminal, calendar & file-write actions |
-| Consultation booking | Slot filling → confirm → create (Feishu/DingTalk ready) |
+| Consultation booking | Catalog · schedule lookup · slot fill → confirm → create |
+| Desktop pet | `CompanionPet` + `CatPet`/`PilotPet` · theme-adaptive `PetRoom` |
+| Platform plugins | `platform.manifest` / `platform.agent.runner` gray flags (legacy default) |
 | Trace | Execution timeline for debugging & demos |
-| Dual storage | `file` demo / `jdbc` PostgreSQL |
+| Dual storage | `file` demo / `jdbc` PostgreSQL; local H2 for JPA |
 | Quality & ops | QualityGuard · Actuator · Prometheus |
 
 Full layer map: [docs/FEATURES.md](docs/FEATURES.md).
@@ -292,9 +341,12 @@ agent_product/
 │   ├── controller/ service/
 ├── src/main/resources/
 │   ├── application.yml · skills/ · permissions/ · db/migration/
-├── yu-ai-agent-frontend/   # KnowledgeBase.vue · dual themes
+├── yu-ai-agent-frontend/
+│   ├── src/components/companion/   # CompanionPet · PetRoom · CatPet · theme CSS vars
+│   ├── src/composables/useTheme.js # sage ↔ dark
+│   └── src/views/KnowledgeBase.vue
 ├── docker-compose.yml
-└── docs/               # WIKI · FEATURES · mm-agent scenario map · ch1/3/4/5 · assets
+└── docs/               # WIKI · FEATURES · plugin platform plan · mm-agent map · assets
 ```
 
 ---
@@ -304,14 +356,23 @@ agent_product/
 **No chat reply?**  
 Check logs for `AllocationQuota.FreeTierOnly` — DashScope free quota exhausted.
 
+**Backend startup very slow?**  
+First boot embeds knowledge docs (~5–10 min). Wait for `Started AiAgentApplication`.
+
+**Guest login fails?**  
+Ensure the `local` profile is active (`guest-enabled: true` in `application-local.yml`). Production profiles disable guest by default.
+
 **Build fails with “release version 21 not supported”?**  
 Point `JAVA_HOME` to JDK 21 and restart (see Quick Start PowerShell example).
 
 **Maven flag errors on PowerShell?**  
-Use `mvn spring-boot:run "-Dmaven.test.skip=true"` (quote the flag).
+Use `.\mvnw.cmd spring-boot:run "-Dmaven.test.skip=true"` (quote the flag; Maven Wrapper recommended).
 
 **SSE auth fails?**  
 EventSource cannot send headers; the frontend passes `token` as a query param. Make sure you are logged in.
+
+**“Do I have appointments today?” shows the booking catalog?**  
+Fixed in `ConsultationAgent` (schedule vs catalog intent split). Pull latest code and restart the backend.
 
 ---
 

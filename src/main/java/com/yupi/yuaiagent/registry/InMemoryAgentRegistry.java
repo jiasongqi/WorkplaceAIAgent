@@ -2,8 +2,11 @@ package com.yupi.yuaiagent.registry;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.yupi.yuaiagent.manifest.ManifestDualReadVerifier;
+import com.yupi.yuaiagent.manifest.ManifestLoadPolicy;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
@@ -27,12 +30,26 @@ public class InMemoryAgentRegistry implements AgentRegistry {
     private final Map<String, AgentDescriptor> agents = new ConcurrentHashMap<>();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
+    @Autowired(required = false)
+    private ManifestDualReadVerifier manifestDualReadVerifier;
+
     @PostConstruct
     public void init() {
         loadBuiltinAgents();
+        if (manifestDualReadVerifier != null) {
+            manifestDualReadVerifier.verify(
+                    "agents",
+                    "classpath:agents/*.yaml",
+                    AgentDescriptor.class,
+                    AgentDescriptor::getAgentCode,
+                    agents,
+                    ManifestLoadPolicy.LENIENT
+            );
+        }
         log.info("Agent 注册中心初始化完成，共加载 {} 个 Agent", agents.size());
     }
 
+    @Deprecated(since = "S1", forRemoval = false)
     private void loadBuiltinAgents() {
         try {
             PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();

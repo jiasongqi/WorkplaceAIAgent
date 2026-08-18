@@ -16,16 +16,22 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ToolRegistration {
 
+    public static final String ALL_TOOLS_BEAN_NAME = "allTools";
+
     @Value("${search-api.api-key}")
     private String searchApiKey;
 
-    @Bean
+    @Bean(name = ALL_TOOLS_BEAN_NAME)
     public ToolCallback[] allTools(SandboxFactory sandboxFactory,
                                    HumanApprovalService humanApprovalService,
                                    ToolIdempotencyStore idempotencyStore,
                                    FileHandleStore fileHandleStore,
                                    AsyncToolTaskService asyncToolTaskService,
-                                   RagTool ragTool) {
+                                   RagTool ragTool,
+                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                   com.yupi.yuaiagent.config.PlatformProperties platformProperties,
+                                   @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                   com.yupi.yuaiagent.tools.transform.ToolTransformerChain transformerChain) {
         FileOperationTool fileOperationTool = new FileOperationTool(
                 humanApprovalService, idempotencyStore, fileHandleStore);
         WebSearchTool webSearchTool = new WebSearchTool(searchApiKey);
@@ -38,7 +44,7 @@ public class ToolRegistration {
                 idempotencyStore, asyncToolTaskService);
         AsyncToolStatusTool asyncToolStatusTool = new AsyncToolStatusTool(asyncToolTaskService);
         TerminateTool terminateTool = new TerminateTool();
-        return ToolCallbacks.from(
+        ToolCallback[] callbacks = ToolCallbacks.from(
                 fileOperationTool,
                 webSearchTool,
                 webScrapingTool,
@@ -49,5 +55,18 @@ public class ToolRegistration {
                 terminateTool,
                 ragTool
         );
+        boolean wrap = platformProperties != null
+                && platformProperties.getToolTransformer() != null
+                && platformProperties.getToolTransformer().isEnabled()
+                && transformerChain != null;
+        if (!wrap) {
+            return callbacks;
+        }
+        ToolCallback[] wrapped = new ToolCallback[callbacks.length];
+        for (int i = 0; i < callbacks.length; i++) {
+            wrapped[i] = new com.yupi.yuaiagent.tools.transform.TransformingToolCallback(
+                    callbacks[i], transformerChain);
+        }
+        return wrapped;
     }
 }

@@ -1,10 +1,15 @@
 package com.yupi.yuaiagent.agent;
 
+import com.yupi.yuaiagent.access.AccessDecisionContext;
+import com.yupi.yuaiagent.access.AccessDecisionService;
+import com.yupi.yuaiagent.access.PermittedToolFilter;
 import com.yupi.yuaiagent.guard.EmbeddingLoopDetector;
 import com.yupi.yuaiagent.guard.ObservationSanitizer;
 import com.yupi.yuaiagent.guard.ToolResultClassifier;
 import com.yupi.yuaiagent.agent.goal.GoalAnchor;
 import com.yupi.yuaiagent.agent.loop.ChatUsageExtractor;
+import com.yupi.yuaiagent.permission.AgentCodeResolver;
+import com.yupi.yuaiagent.permission.ToolNameMatcher;
 import com.yupi.yuaiagent.tools.ToolSideEffectPolicy;
 import com.yupi.yuaiagent.trace.model.TraceSpan;
 import com.yupi.yuaiagent.trace.model.TraceStepType;
@@ -29,6 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -70,6 +76,12 @@ public class ToolCallAgent extends ReActAgent {
     @Autowired(required = false)
     private ObservationSanitizer observationSanitizer;
 
+    @Autowired(required = false)
+    private AccessDecisionService accessDecisionService;
+
+    /** Tool calls allowed in this run — feeds {@link com.yupi.yuaiagent.access.QuotaPolicyVoter}. */
+    private final AtomicInteger toolCallCount = new AtomicInteger(0);
+
     public ToolCallAgent(ToolCallback[] availableTools) {
         this(availableTools, java.util.concurrent.ForkJoinPool.commonPool());
     }
@@ -90,6 +102,7 @@ public class ToolCallAgent extends ReActAgent {
     @Override
     protected void cleanup() {
         nextStepPromptAdded = false;
+        toolCallCount.set(0);
         if (embeddingLoopDetector != null) {
             try {
                 String sessionId = Thread.currentThread().getName();
@@ -128,7 +141,7 @@ public class ToolCallAgent extends ReActAgent {
             }
             ChatResponse chatResponse = getChatClient().prompt(prompt)
                     .system(systemPrompt)
-                    .toolCallbacks(availableTools)
+                    .toolCallbacks(toolsForLlm())
                     .call()
                     .chatResponse();
             recordThinkTokenUsage(chatResponse, assistantMessageText(chatResponse));
@@ -246,7 +259,8 @@ public class ToolCallAgent extends ReActAgent {
 
         while (retryCount < maxAttempts) {
             toolExecutionResult = ParallelToolCallingSupport.execute(
-                    prompt, toolCallChatResponse, availableTools, toolExecutor, TOOL_TIMEOUT_SECONDS);
+                    prompt, toolCallChatResponse, availableTools, toolExecutor, TOOL_TIMEOUT_SECONDS,
+                    this::isToolAllowed);
             boolean anyTimeout = lastResponsesTimedOut(toolExecutionResult);
             if (!anyTimeout) {
                 break;
@@ -423,5 +437,41 @@ public class ToolCallAgent extends ReActAgent {
             return "模型调用失败：API Key 无效或未配置，请检查 spring.ai.dashscope.api-key。";
         }
         return "处理时遇到了错误：" + raw;
+    }
+
+    private ToolCallback[] toolsForLlm() {
+        return PermittedToolFilter.filter(
+                accessDecisionService,
+                AgentCodeResolver.resolve(getName()),
+                availableTools);
+    }
+
+    /**
+     * Defense in depth: even if the model invents a hidden tool name, refuse execution.
+     */
+    private boolean isToolAllowed(String toolName) {
+        if (ToolNameMatcher.isAlwaysAllowed(toolName)) {
+            return true;
+        }
+        if (accessDecisionService == null) {
+            return false;
+        }
+        String agentCode = AgentCodeResolver.resolve(getName());
+        while (true) {
+            int current = toolCallCount.get();
+            boolean allowed = accessDecisionService.check(AccessDecisionContext.builder()
+                    .agentCode(agentCode)
+                    .toolName(toolName)
+                    .userId(getUserId())
+                    .requestId(getChatId())
+                    .currentToolCallCount(current)
+                    .build());
+            if (!allowed) {
+                return false;
+            }
+            if (toolCallCount.compareAndSet(current, current + 1)) {
+                return true;
+            }
+        }
     }
 }

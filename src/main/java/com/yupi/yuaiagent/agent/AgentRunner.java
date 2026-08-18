@@ -20,4 +20,24 @@ public interface AgentRunner {
      * Returns token usage from the last run() call.
      */
     TokenUsage getLastTokenUsage();
+
+    default String agentCode() {
+        return getClass().getSimpleName();
+    }
+
+    default boolean supportsStreaming() {
+        return false;
+    }
+
+    default boolean holdsSession(String chatId) {
+        return false;
+    }
+
+    default void runStream(ConversationContext context, String userMessage,
+                           java.util.function.Consumer<String> sink) {
+        AgentOutput output = run(context, userMessage);
+        if (sink != null) {
+            sink.accept(output == null ? "" : output.summary());
+        }
+    }
 }

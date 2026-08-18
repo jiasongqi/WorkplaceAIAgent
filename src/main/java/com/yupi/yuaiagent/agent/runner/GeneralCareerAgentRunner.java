@@ -14,6 +14,11 @@ public class GeneralCareerAgentRunner implements AgentRunner {
     private final GeneralCareerAgent agent;
 
     @Override
+    public String agentCode() {
+        return "GENERAL";
+    }
+
+    @Override
     public AgentOutput run(ConversationContext context, String userMessage) {
         String chatId = StringUtils.hasText(context.chatId()) ? context.chatId() : "default";
         String injection = context.injection() != null ? context.injection() : "";

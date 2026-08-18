@@ -87,7 +87,7 @@ class MemoryCoordinatorTest {
                 TIMEOUT_MS,
                 TOTAL_BUDGET
         );
-        when(experienceQueryBuilder.build(anyString(), any())).thenReturn("职场咨询 面试");
+        lenient().when(experienceQueryBuilder.build(anyString(), any())).thenReturn("职场咨询 面试");
     }
 
     @Nested

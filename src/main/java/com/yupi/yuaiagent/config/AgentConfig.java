@@ -170,7 +170,12 @@ public class AgentConfig {
             LearningResourceRecommenderAgent learningResourceRecommenderAgent,
             UserQuotaService userQuotaService,
             PerceptionHybridContextService perceptionHybridContextService,
-            @org.springframework.beans.factory.annotation.Value("${workflow.dag.enabled:false}") boolean workflowDagEnabled) {
+            @org.springframework.beans.factory.annotation.Value("${workflow.dag.enabled:false}") boolean workflowDagEnabled,
+            com.yupi.yuaiagent.config.PlatformProperties platformProperties,
+            com.yupi.yuaiagent.agent.prompt.PromptSectionRenderer promptSectionRenderer,
+            com.yupi.yuaiagent.observability.ObservabilityExporterBus observabilityExporterBus,
+            com.yupi.yuaiagent.history.ActionHistoryDualWriter actionHistoryDualWriter,
+            com.yupi.yuaiagent.permission.AgentPermissionService agentPermissionService) {
         var deps = new OrchestratorDependencies(
                 dashscopeChatModel, aiChatVectorStore, allTools, queryRewriter, pipelineRagAdvisorFactory, chatMemoryManager,
                 followUpTemplateConfig, infoValidator, calendarServiceFactory, appointmentRepository,
@@ -187,7 +192,10 @@ public class AgentConfig {
                 artifactPublisher, artifactRecallService, artifactAdoptionService,
                 dataAnalystAgent, careerCoachAgent, profileCuratorAgent, promotionPlannerAgent,
                 learningResourceRecommenderAgent, userQuotaService, perceptionHybridContextService);
-        return new OrchestratorAgent(deps);
+        OrchestratorAgent agent = new OrchestratorAgent(deps);
+        agent.attachPlatform(platformProperties, promptSectionRenderer, observabilityExporterBus,
+                actionHistoryDualWriter, agentPermissionService);
+        return agent;
     }
 
     @Bean

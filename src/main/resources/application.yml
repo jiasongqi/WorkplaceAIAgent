@@ -374,3 +374,26 @@ workflow:
     dir: ${WORKFLOW_STORAGE_DIR:./tmp/workflows}
   dag:
     enabled: ${WORKFLOW_DAG_ENABLED:false}
+
+# ─── 平台插件化迁移开关（默认保留旧运行路径）───
+platform:
+  manifest:
+    loader: ${PLATFORM_MANIFEST_LOADER:legacy} # legacy | dual; unified is reserved and rejected explicitly
+  agent:
+    metadata-source: ${PLATFORM_AGENT_METADATA_SOURCE:legacy} # legacy | shadow | registry
+    runner:
+      enabled: ${PLATFORM_AGENT_RUNNER_ENABLED:false}
+      route: ${PLATFORM_AGENT_RUNNER_ROUTE:off} # off | shadow | primary
+  permission:
+    namespace-mode: ${PLATFORM_PERMISSION_NAMESPACE_MODE:off} # off | observe | enforce
+    pack-narrowing: ${PLATFORM_PERMISSION_PACK_NARROWING:false}
+  runtime-tools:
+    request-filter: ${PLATFORM_RUNTIME_TOOLS_REQUEST_FILTER:false}
+  tool-transformer:
+    enabled: ${PLATFORM_TOOL_TRANSFORMER_ENABLED:false}
+  prompt-contributors:
+    mode: ${PLATFORM_PROMPT_CONTRIBUTORS_MODE:legacy} # legacy | offline-shadow | primary
+  activation-cache:
+    enabled: ${PLATFORM_ACTIVATION_CACHE_ENABLED:false}
+  pack:
+    storage: ${PLATFORM_PACK_STORAGE:file} # file | jdbc

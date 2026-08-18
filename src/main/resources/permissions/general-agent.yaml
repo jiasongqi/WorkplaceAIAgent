@@ -3,8 +3,8 @@ displayName: "职场通用顾问"
 description: "通用职场问题咨询（人际关系、压力、职业规划）"
 version: "1.0"
 allowedToolPatterns:
-  - "general.*"
   - "rag.query"
+  - "searchKnowledgeBase"
 minMcpTrustScore: 30
 maxToolCallsPerRequest: 10
 filesystemAccess: false

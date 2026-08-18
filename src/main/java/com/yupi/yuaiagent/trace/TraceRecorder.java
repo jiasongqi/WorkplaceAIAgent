@@ -27,6 +27,12 @@ public class TraceRecorder {
     @Resource
     private TraceStreamPublisher streamPublisher;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.yupi.yuaiagent.observability.ObservabilityExporterBus observabilityExporterBus;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.yupi.yuaiagent.history.ActionHistoryDualWriter actionHistoryDualWriter;
+
     /**
      * Creates and starts a new trace context.
      *
@@ -236,6 +242,7 @@ public class TraceRecorder {
      * Publishes a SPAN_STARTED event to the bound SSE emitter (fail-safe).
      */
     private void publishSpanStarted(TraceContext ctx, TraceSpan span) {
+        dualWrite(ctx, span, "SPAN_STARTED");
         if (streamPublisher == null || ctx == null || ctx.isSseClosed()) {
             return;
         }
@@ -250,6 +257,7 @@ public class TraceRecorder {
      * Publishes a SPAN_ENDED event to the bound SSE emitter (fail-safe).
      */
     private void publishSpanEnded(TraceContext ctx, TraceSpan span) {
+        dualWrite(ctx, span, "SPAN_ENDED");
         if (streamPublisher == null || ctx == null || ctx.isSseClosed()) {
             return;
         }
@@ -257,6 +265,29 @@ public class TraceRecorder {
             streamPublisher.publishSpanEnded(ctx.getSseEmitter(), span);
         } catch (Exception e) {
             log.debug("[trace] failed to publish span-ended event: {}", e.getMessage());
+        }
+    }
+
+    private void dualWrite(TraceContext ctx, TraceSpan span, String type) {
+        try {
+            String chatId = ctx != null && ctx.getTrace() != null ? ctx.getTrace().getChatId() : "";
+            String label = span == null ? type : String.valueOf(span.getLabel());
+            if (observabilityExporterBus != null) {
+                observabilityExporterBus.record(type, label);
+            }
+            if (actionHistoryDualWriter != null) {
+                actionHistoryDualWriter.write(
+                        new com.yupi.yuaiagent.history.ActionHistoryEvent(
+                                java.util.UUID.randomUUID().toString(),
+                                java.time.Instant.now(),
+                                "trace",
+                                type,
+                                chatId,
+                                java.util.Map.of("label", label)),
+                        type + ":" + label);
+            }
+        } catch (RuntimeException ex) {
+            log.debug("[trace] dual-write skipped: {}", ex.getMessage());
         }
     }
 }

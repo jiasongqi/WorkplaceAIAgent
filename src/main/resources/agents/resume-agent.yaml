@@ -1,9 +1,10 @@
 agentCode: resume-agent
 agentVersion: "1.0.0"
 displayName: "简历优化专家"
-description: "负责简历优化、面试技巧、求职指导"
+description: "擅长简历优化、求职、面试技巧、offer 选择。输入需要经历/目标岗位描述。"
 promptVersion: "resume-v1"
 agentType: "CONSULTATION"
+intent: "RESUME"
 permissionProfile: "resume-agent"
 capabilities:
   - "resume"
@@ -19,6 +20,15 @@ intentKeywords:
   - "求职"
   - "offer"
   - "跳槽"
+routingKeywords:
+  - "简历"
+  - "求职"
+  - "面试"
+  - "offer"
+  - "投递"
+  - "岗位"
+inputRequirements:
+  - "text"
 metadata:
   icon: "📄"
   category: "career"

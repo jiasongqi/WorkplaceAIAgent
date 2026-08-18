@@ -21,6 +21,7 @@ import com.yupi.yuaiagent.trace.TraceRepository;
 import com.yupi.yuaiagent.trace.model.TraceSpan;
 import com.yupi.yuaiagent.trace.model.TraceStepType;
 import com.yupi.yuaiagent.access.AccessDecisionService;
+import com.yupi.yuaiagent.access.PermittedToolFilter;
 import com.yupi.yuaiagent.suggestion.SuggestedActions;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -64,13 +65,13 @@ public class OrchestratorAgent {
     private final boolean workflowDagEnabled;
 
     /** DATA_QUERY 未接真实数据源时注入 GENERAL 的说明 */
-    static final String DATA_QUERY_FALLBACK_NOTE = """
+    public static final String DATA_QUERY_FALLBACK_NOTE = """
             【数据查询说明】用户想查数据/报表。当前未接入业务数据源，请勿编造数字。
             请以职场顾问方式给出替代建议：手工统计、问数口径、仪表盘建设步骤。
             """;
 
     /** DIGITAL_EMPLOYEE 创建/管理引导 */
-    static final String DIGITAL_EMPLOYEE_NOTE = """
+    public static final String DIGITAL_EMPLOYEE_NOTE = """
             【数字员工助手】用户在创建、管理或委托数字员工。请：
             1) 说明可从模板一键创建（简历专员、谈薪顾问、离职规划专员、通用顾问）
             2) 引导用户打开「我的数字员工」完成创建、设为当前、改人设、回滚
@@ -114,6 +115,12 @@ public class OrchestratorAgent {
     private final java.util.concurrent.ConcurrentHashMap<String, String> lastAgentMemoryByChat =
             new java.util.concurrent.ConcurrentHashMap<>();
     private final RouteHintHolder routeHintHolder = new RouteHintHolder();
+    private com.yupi.yuaiagent.config.PlatformProperties platformProperties;
+    private AgentRunnerRegistry runnerRegistry;
+    private com.yupi.yuaiagent.observability.ObservabilityExporterBus observabilityExporterBus;
+    private com.yupi.yuaiagent.history.ActionHistoryDualWriter actionHistoryDualWriter;
+    private com.yupi.yuaiagent.permission.AgentPermissionService agentPermissionService;
+    private final org.springframework.ai.tool.ToolCallback[] rawTools;
 
     /** Mutable holder so ExpertInvoker can see the latest RouteHint for DATA_QUERY. */
     private static final class RouteHintHolder {
@@ -127,8 +134,16 @@ public class OrchestratorAgent {
 
         // 创建各专业 Agent
         this.resumeAgent = new ResumeAgent(deps.chatModel(), deps.pipelineRagAdvisorFactory(), deps.queryRewriter(), deps.chatMemoryManager());
-        this.negotiationAgent = new NegotiationAgent(deps.chatModel(), deps.tools(), deps.queryRewriter(), deps.chatMemoryManager());
-        this.escapeAgent = new EscapeAgent(deps.chatModel(), deps.tools(), deps.queryRewriter(), deps.chatMemoryManager());
+        this.negotiationAgent = new NegotiationAgent(
+                deps.chatModel(),
+                PermittedToolFilter.filter(deps.accessDecisionService(), "negotiation-agent", deps.tools()),
+                deps.queryRewriter(),
+                deps.chatMemoryManager());
+        this.escapeAgent = new EscapeAgent(
+                deps.chatModel(),
+                PermittedToolFilter.filter(deps.accessDecisionService(), "escape-agent", deps.tools()),
+                deps.queryRewriter(),
+                deps.chatMemoryManager());
         this.generalCareerAgent = new GeneralCareerAgent(deps.chatModel(), deps.chatMemoryManager());
         this.consultationAgent = new ConsultationAgent(deps.chatModel(), deps.chatMemoryManager(), deps.templateConfig(), deps.infoValidator(), deps.calendarServiceFactory(), deps.appointmentRepository(), deps.humanApprovalService(), deps.sessionSharedStateService());
         this.skillExecutor = deps.skillExecutor();
@@ -173,6 +188,7 @@ public class OrchestratorAgent {
         this.humanHandoffService = deps.humanHandoffService();
         this.agentManifestRegistry = deps.agentManifestRegistry();
         this.userQuotaService = deps.userQuotaService();
+        this.rawTools = deps.tools();
 
         // Register AgentRunner map on TaskExecutor + DAG executor
         var runners = java.util.Map.<String, AgentRunner>of(
@@ -186,6 +202,41 @@ public class OrchestratorAgent {
 
         log.info("OrchestratorAgent 初始化完成，已创建 5 个专业 Agent，已加载 {} 个技能，workflow.dag.enabled={}",
                 skillRegistry.size(), workflowDagEnabled);
+    }
+
+    /**
+     * Platform hooks. Default flags keep the existing switch and construction-time tool filter.
+     */
+    public void attachPlatform(com.yupi.yuaiagent.config.PlatformProperties platformProperties,
+                               com.yupi.yuaiagent.agent.prompt.PromptSectionRenderer promptSectionRenderer,
+                               com.yupi.yuaiagent.observability.ObservabilityExporterBus observabilityExporterBus,
+                               com.yupi.yuaiagent.history.ActionHistoryDualWriter actionHistoryDualWriter,
+                               com.yupi.yuaiagent.permission.AgentPermissionService agentPermissionService) {
+        this.platformProperties = platformProperties;
+        this.observabilityExporterBus = observabilityExporterBus;
+        this.actionHistoryDualWriter = actionHistoryDualWriter;
+        this.agentPermissionService = agentPermissionService;
+        contextInjectionService.configurePromptContributors(
+                promptSectionRenderer,
+                platformProperties == null ? "legacy" : platformProperties.getPromptContributors().getMode());
+        this.runnerRegistry = new AgentRunnerRegistry(java.util.List.of(
+                new ResumeAgentRunner(this.resumeAgent),
+                new NegotiationAgentRunner(this.negotiationAgent),
+                new EscapeAgentRunner(this.escapeAgent),
+                new GeneralCareerAgentRunner(this.generalCareerAgent),
+                new com.yupi.yuaiagent.agent.runner.UnsupportedConsultationRunner(),
+                new com.yupi.yuaiagent.agent.runner.NoteInjectingCareerRunner(
+                        "DATA_QUERY", DATA_QUERY_FALLBACK_NOTE, this.generalCareerAgent),
+                new com.yupi.yuaiagent.agent.runner.NoteInjectingCareerRunner(
+                        "DIGITAL_EMPLOYEE", DIGITAL_EMPLOYEE_NOTE, this.generalCareerAgent)
+        ));
+        boolean failIfMissing = platformProperties != null && platformProperties.agentRunnerEnabled();
+        taskExecutor.setRunnerRegistry(this.runnerRegistry, failIfMissing);
+        dagWorkflowExecutor.setRunnerRegistry(this.runnerRegistry, failIfMissing);
+        if (platformProperties != null && platformProperties.getRuntimeTools().isRequestFilter()) {
+            this.negotiationAgent.replaceTools(rawTools);
+            this.escapeAgent.replaceTools(rawTools);
+        }
     }
 
     /**
@@ -685,7 +736,7 @@ public class OrchestratorAgent {
             TraceSpan subSpan = traceRecorder.startSpan(traceCtx, TraceStepType.SUB_AGENT_EXECUTION,
                     primaryIntent.getAgentName() + "执行");
             fullAnswer = streamSingleExpert(
-                    primaryIntent, message, chatId, baseInjection,
+                    primaryIntent, message, chatId, userId, baseInjection,
                     injectionResult.offeredArtifactIds(), emitter, traceCtx, subSpan);
             long dur = System.currentTimeMillis() - turnStart;
             sendProgressEvent(emitter, new Object(), primaryIntent, "finished", dur);
@@ -813,7 +864,7 @@ public class OrchestratorAgent {
      * Generates a specialist answer, strips machine citations, then streams safe chunks.
      */
     private String streamSingleExpert(AgentIntent intent, String message, String chatId,
-                                      String injection, List<String> offeredArtifactIds,
+                                      String userId, String injection, List<String> offeredArtifactIds,
                                       SseEmitter emitter, TraceContext traceCtx,
                                       TraceSpan subSpan) {
         String memoryType = memoryTypeOf(intent);
@@ -821,53 +872,59 @@ public class OrchestratorAgent {
         contextInjectionService.syncCrossAgentMemory(chatId, memoryType, previousMemory);
         lastAgentMemoryByChat.put(chatId, memoryType);
 
-        Flux<String> tokenFlux = switch (intent) {
-            case RESUME -> resumeAgent.chatStream(message, chatId, injection);
-            case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, injection);
-            case ESCAPE -> escapeAgent.chatStream(message, chatId, injection);
-            case CONSULTATION -> consultationAgent.chatStream(message, chatId, injection);
-            case DIGITAL_EMPLOYEE -> generalCareerAgent.chatStream(message, chatId,
-                    mergeInjection(injection, DIGITAL_EMPLOYEE_NOTE));
-            default -> generalCareerAgent.chatStream(message, chatId, injection);
-        };
-
-        var streamingMsg = chatMemoryAdapter.startAssistantStream(
-                chatId, MessageSource.AGENT, intent.name(), intent.getAgentName());
+        observeDispatch(intent, chatId);
+        installRuntimeTools(userId, intent);
         try {
-            emitter.send(SseEmitter.event().name("message-start")
-                    .data("{\"assistantMessageId\":\"" + streamingMsg.getMessageId()
-                            + "\",\"agentType\":\"" + intent.name() + "\"}"));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+            Flux<String> tokenFlux = switch (intent) {
+                case RESUME -> resumeAgent.chatStream(message, chatId, injection);
+                case NEGOTIATION -> negotiationAgent.chatStream(message, chatId, injection);
+                case ESCAPE -> escapeAgent.chatStream(message, chatId, injection);
+                case CONSULTATION -> consultationAgent.chatStream(message, chatId, injection);
+                case DIGITAL_EMPLOYEE -> generalCareerAgent.chatStream(message, chatId,
+                        mergeInjection(injection, DIGITAL_EMPLOYEE_NOTE));
+                default -> generalCareerAgent.chatStream(message, chatId, injection);
+            };
 
-        StringBuilder rawAnswer = new StringBuilder();
-        try {
-            tokenFlux.doOnNext(rawAnswer::append).blockLast();
-            String cleanAnswer = artifactCitationExtractor
-                    .extract(rawAnswer.toString(), offeredArtifactIds).cleanText();
-            for (int i = 0; i < cleanAnswer.length(); i += 40) {
-                emitter.send(SseEmitter.event().name("message")
-                        .data(cleanAnswer.substring(i, Math.min(i + 40, cleanAnswer.length()))));
+            var streamingMsg = chatMemoryAdapter.startAssistantStream(
+                    chatId, MessageSource.AGENT, intent.name(), intent.getAgentName());
+            try {
+                emitter.send(SseEmitter.event().name("message-start")
+                        .data("{\"assistantMessageId\":\"" + streamingMsg.getMessageId()
+                                + "\",\"agentType\":\"" + intent.name() + "\"}"));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-            chatMemoryAdapter.completeAssistant(streamingMsg.getMessageId(), cleanAnswer);
-            if (subSpan != null) {
-                traceRecorder.putMetadata(subSpan, "agentType", memoryType);
+
+            StringBuilder rawAnswer = new StringBuilder();
+            try {
+                tokenFlux.doOnNext(rawAnswer::append).blockLast();
+                String cleanAnswer = artifactCitationExtractor
+                        .extract(rawAnswer.toString(), offeredArtifactIds).cleanText();
+                for (int i = 0; i < cleanAnswer.length(); i += 40) {
+                    emitter.send(SseEmitter.event().name("message")
+                            .data(cleanAnswer.substring(i, Math.min(i + 40, cleanAnswer.length()))));
+                }
+                chatMemoryAdapter.completeAssistant(streamingMsg.getMessageId(), cleanAnswer);
+                if (subSpan != null) {
+                    traceRecorder.putMetadata(subSpan, "agentType", memoryType);
+                }
+                return rawAnswer.toString();
+            } catch (Exception e) {
+                log.error("Agent {} stream failed", intent.name(), e);
+                if (subSpan != null && traceCtx != null) {
+                    traceRecorder.failSpan(traceCtx, subSpan, e.getMessage());
+                }
+                if (rawAnswer.isEmpty()) {
+                    rawAnswer.append("（该专家暂时无法回答）");
+                }
+                String partial = artifactCitationExtractor
+                        .extract(rawAnswer.toString(), offeredArtifactIds).cleanText();
+                chatMemoryAdapter.updateAssistantPartial(streamingMsg.getMessageId(), partial);
+                chatMemoryAdapter.markAssistantPartial(streamingMsg.getMessageId());
+                return rawAnswer.toString();
             }
-            return rawAnswer.toString();
-        } catch (Exception e) {
-            log.error("Agent {} stream failed", intent.name(), e);
-            if (subSpan != null && traceCtx != null) {
-                traceRecorder.failSpan(traceCtx, subSpan, e.getMessage());
-            }
-            if (rawAnswer.isEmpty()) {
-                rawAnswer.append("（该专家暂时无法回答）");
-            }
-            String partial = artifactCitationExtractor
-                    .extract(rawAnswer.toString(), offeredArtifactIds).cleanText();
-            chatMemoryAdapter.updateAssistantPartial(streamingMsg.getMessageId(), partial);
-            chatMemoryAdapter.markAssistantPartial(streamingMsg.getMessageId());
-            return rawAnswer.toString();
+        } finally {
+            com.yupi.yuaiagent.access.RuntimeToolRequestContext.clear();
         }
     }
 
@@ -1130,6 +1187,71 @@ public class OrchestratorAgent {
         StringBuilder sb = new StringBuilder();
         tokenFlux.doOnNext(sb::append).blockLast();
         return sb.toString();
+    }
+
+    private void observeDispatch(AgentIntent intent, String chatId) {
+        try {
+            if (platformProperties == null || runnerRegistry == null) {
+                return;
+            }
+            OrchestratorDispatch.RouteMode fallback;
+            try {
+                fallback = OrchestratorDispatch.RouteMode.valueOf(
+                        platformProperties.agentRunnerRoute().trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (RuntimeException ex) {
+                fallback = OrchestratorDispatch.RouteMode.OFF;
+            }
+            OrchestratorDispatch.RouteMode mode = OrchestratorDispatch.modeFor(
+                    intent, platformProperties.agentRunnerIntents(), fallback);
+            if (mode == OrchestratorDispatch.RouteMode.OFF) {
+                return;
+            }
+            var snapshot = OrchestratorDispatch.shadow(intent, runnerRegistry);
+            if (snapshot.drift()) {
+                log.warn("DispatchDrift expected={} actual={} intent={} chatId={}",
+                        snapshot.expectedRunner(), snapshot.actualRunner(), intent, chatId);
+            }
+            if (intent == AgentIntent.CONSULTATION && mode == OrchestratorDispatch.RouteMode.PRIMARY) {
+                log.info("CONSULTATION stays on streamSingleExpert switch even when route=primary");
+            }
+            if (observabilityExporterBus != null) {
+                observabilityExporterBus.record("dispatch.shadow", intent.name() + ":" + snapshot.expectedRunner());
+            }
+            if (actionHistoryDualWriter != null) {
+                actionHistoryDualWriter.write(
+                        new com.yupi.yuaiagent.history.ActionHistoryEvent(
+                                java.util.UUID.randomUUID().toString(),
+                                java.time.Instant.now(),
+                                "orchestrator",
+                                "dispatch.shadow",
+                                chatId,
+                                java.util.Map.of("intent", intent.name(), "runner", snapshot.expectedRunner())),
+                        "dispatch:" + intent.name());
+            }
+        } catch (RuntimeException ex) {
+            log.debug("dispatch shadow skipped: {}", ex.getMessage());
+        }
+    }
+
+    private void installRuntimeTools(String userId, AgentIntent intent) {
+        if (platformProperties == null || !platformProperties.getRuntimeTools().isRequestFilter()) {
+            return;
+        }
+        String agentCode = switch (intent) {
+            case NEGOTIATION -> "negotiation-agent";
+            case ESCAPE -> "escape-agent";
+            default -> "general-agent";
+        };
+        java.util.Set<String> patterns = agentPermissionService == null
+                ? java.util.Set.of()
+                : agentPermissionService.staticEffectivePatternsFor(userId, agentCode);
+        com.yupi.yuaiagent.access.RuntimeToolRequestContext.install(
+                new com.yupi.yuaiagent.access.RuntimeToolRequestContext.View(
+                        patterns,
+                        expertPackAppService == null
+                                ? com.yupi.yuaiagent.pack.PackPreferenceMode.UNSET
+                                : expertPackAppService.preferenceMode(userId),
+                        true));
     }
 
     /**

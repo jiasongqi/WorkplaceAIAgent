@@ -21,6 +21,7 @@ public class InfoValidator {
 
     // 手机号正则（从文本中搜索）
     private static final Pattern PHONE_SEARCH = Pattern.compile("1[3-9]\\d{9}");
+    private static final Pattern PHONE_FULL = Pattern.compile("^1[3-9]\\d{9}$");
     
     // 邮箱正则（从文本中搜索）
     private static final Pattern EMAIL_SEARCH = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
@@ -83,6 +84,13 @@ public class InfoValidator {
         }
         
         String trimmed = contact.trim();
+
+        if (trimmed.matches("\\d+")) {
+            if (PHONE_FULL.matcher(trimmed).matches()) {
+                return ValidationResult.success();
+            }
+            return ValidationResult.failure("请输入有效的联系方式，手机号格式应为11位数字，邮箱格式为xxx@xxx.com");
+        }
         
         // 检查是否包含手机号
         if (PHONE_SEARCH.matcher(trimmed).find()) {
@@ -200,6 +208,25 @@ public class InfoValidator {
         if (text == null || text.trim().isEmpty()) return null;
         String trimmed = text.trim();
 
+        // 优先解析完整日期时间，避免 "yyyy-MM-dd HH:mm" 被误判为当天 HH:mm
+        String[] patterns = {
+            "yyyy-MM-dd HH:mm",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy年MM月dd日 HH:mm",
+            "yyyy年MM月dd日 HH:mm:ss",
+            "MM月dd日 HH:mm",
+            "MM月dd日 HH:mm:ss",
+            "yyyy/MM/dd HH:mm",
+            "yyyy/MM/dd HH:mm:ss"
+        };
+
+        for (String pattern : patterns) {
+            try {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
+                return LocalDateTime.parse(trimmed, formatter);
+            } catch (DateTimeParseException ignored) {}
+        }
+
         // 处理相对时间
         if (trimmed.contains("明天")) {
             return parseRelativeTime(trimmed, "明天", 1);
@@ -226,25 +253,6 @@ public class InfoValidator {
             }
         }
 
-        // 尝试标准格式
-        String[] patterns = {
-            "yyyy-MM-dd HH:mm",
-            "yyyy-MM-dd HH:mm:ss",
-            "yyyy年MM月dd日 HH:mm",
-            "yyyy年MM月dd日 HH:mm:ss",
-            "MM月dd日 HH:mm",
-            "MM月dd日 HH:mm:ss",
-            "yyyy/MM/dd HH:mm",
-            "yyyy/MM/dd HH:mm:ss"
-        };
-        
-        for (String pattern : patterns) {
-            try {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
-                return LocalDateTime.parse(trimmed, formatter);
-            } catch (DateTimeParseException ignored) {}
-        }
-        
         return null;
     }
 

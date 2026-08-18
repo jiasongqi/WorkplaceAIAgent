@@ -129,7 +129,7 @@ class TraceControllerTest {
     @DisplayName("GET /trace/{traceId} — 无 token 返回 401")
     void getTrace_noToken_returns401() throws Exception {
         mockMvc.perform(get("/trace/{traceId}", VALID_TRACE_ID))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
     }
 
@@ -138,7 +138,7 @@ class TraceControllerTest {
     void getTrace_invalidToken_returns401() throws Exception {
         mockMvc.perform(get("/trace/{traceId}", VALID_TRACE_ID)
                         .param("token", "invalid"))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
     }
 
@@ -158,7 +158,7 @@ class TraceControllerTest {
     void getTrace_notFound_returns404() throws Exception {
         mockMvc.perform(get("/trace/{traceId}", "nonexistent")
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(404));
     }
 
@@ -168,7 +168,7 @@ class TraceControllerTest {
         ExecutionTrace traceB = traceRepository.findByUserId(USER_B).get(0);
         mockMvc.perform(get("/trace/{traceId}", traceB.getTraceId())
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 
@@ -215,7 +215,7 @@ class TraceControllerTest {
     @DisplayName("GET /trace/chat/{chatId} — 无 token 返回 401")
     void getTracesByChat_noToken_returns401() throws Exception {
         mockMvc.perform(get("/trace/chat/{chatId}", CHAT_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
     }
 
@@ -234,7 +234,7 @@ class TraceControllerTest {
     void getTracesByChat_othersChat_returns403() throws Exception {
         mockMvc.perform(get("/trace/chat/{chatId}", CHAT_B)
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 
@@ -258,7 +258,7 @@ class TraceControllerTest {
     @DisplayName("GET /trace/user/{userId} — 无 token 返回 401")
     void getTracesByUser_noToken_returns401() throws Exception {
         mockMvc.perform(get("/trace/user/{userId}", USER_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
     }
 
@@ -277,7 +277,7 @@ class TraceControllerTest {
     void getTracesByUser_othersUser_returns403() throws Exception {
         mockMvc.perform(get("/trace/user/{userId}", USER_B)
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 
@@ -305,19 +305,19 @@ class TraceControllerTest {
         // GET /trace/{traceId} — should be 403
         mockMvc.perform(get("/trace/{traceId}", traceB.getTraceId())
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
 
         // GET /trace/chat/{chatId} — should be 403
         mockMvc.perform(get("/trace/chat/{chatId}", CHAT_B)
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
 
         // GET /trace/user/{userId} — should be 403
         mockMvc.perform(get("/trace/user/{userId}", USER_B)
                         .param("token", TOKEN_A))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 }

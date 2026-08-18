@@ -335,64 +335,44 @@ public class MemoryCoordinator {
      * 查询 L1 滑动窗口层。
      */
     private String querySlidingWindow(String conversationId, String agentType, int tokenBudget) {
-        try {
-            return slidingWindow.formatForContext(conversationId, agentType, tokenBudget);
-        } catch (Exception e) {
-            log.error("L1 滑动窗口查询失败: conversationId={}, error={}", conversationId, e.getMessage(), e);
-            return "";
-        }
+        return slidingWindow.formatForContext(conversationId, agentType, tokenBudget);
     }
 
     /**
      * 查询 L2 事实存储层。
      */
     private String queryFactStore(String userId, int tokenBudget) {
-        try {
-            return factStore.formatForContext(userId, tokenBudget);
-        } catch (Exception e) {
-            log.error("L2 事实存储查询失败: userId={}, error={}", userId, e.getMessage(), e);
-            return "";
-        }
+        return factStore.formatForContext(userId, tokenBudget);
     }
 
     /**
      * 查询 L3 摘要层。
      */
     private String querySummaryLayer(String userId, int tokenBudget) {
-        try {
-            return summaryLayer.getRecentSummaries(userId, tokenBudget);
-        } catch (Exception e) {
-            log.error("L3 摘要层查询失败: userId={}, error={}", userId, e.getMessage(), e);
-            return "";
-        }
+        return summaryLayer.getRecentSummaries(userId, tokenBudget);
     }
 
     /**
      * 查询 L4 经验存储层 — query 由 {@link ExperienceQueryBuilder} 从当前消息 + L3 摘要构造。
      */
     private String queryExperienceStore(String userId, String experienceQuery, int tokenBudget) {
-        try {
-            List<ExperienceDocument> experiences = experienceStore.searchSimilar(userId, experienceQuery);
-            if (experiences == null || experiences.isEmpty()) {
-                return "";
-            }
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("【历史经验】\n");
-            for (ExperienceDocument doc : experiences) {
-                sb.append("- ");
-                if (doc.outcome() != null && !doc.outcome().isEmpty()) {
-                    sb.append("[").append(doc.outcome()).append("] ");
-                }
-                sb.append(doc.content()).append("\n");
-            }
-
-            String formatted = sb.toString();
-            return budgetAllocator.truncateToTokens(formatted, tokenBudget);
-        } catch (Exception e) {
-            log.error("L4 经验存储查询失败: userId={}, error={}", userId, e.getMessage(), e);
+        List<ExperienceDocument> experiences = experienceStore.searchSimilar(userId, experienceQuery);
+        if (experiences == null || experiences.isEmpty()) {
             return "";
         }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("【历史经验】\n");
+        for (ExperienceDocument doc : experiences) {
+            sb.append("- ");
+            if (doc.outcome() != null && !doc.outcome().isEmpty()) {
+                sb.append("[").append(doc.outcome()).append("] ");
+            }
+            sb.append(doc.content()).append("\n");
+        }
+
+        String formatted = sb.toString();
+        return budgetAllocator.truncateToTokens(formatted, tokenBudget);
     }
 
     // ========== 上下文格式化 ==========

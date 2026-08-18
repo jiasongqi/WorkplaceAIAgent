@@ -18,6 +18,11 @@ public class ResumeAgentRunner implements AgentRunner {
     private final ResumeAgent resumeAgent;
 
     @Override
+    public String agentCode() {
+        return "RESUME";
+    }
+
+    @Override
     public AgentOutput run(ConversationContext context, String userMessage) {
         String chatId = StringUtils.hasText(context.chatId()) ? context.chatId() : "default";
         String injection = context.injection() != null ? context.injection() : "";

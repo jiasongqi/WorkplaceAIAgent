@@ -38,7 +38,7 @@ public class EscapeAgent {
             """;
 
     private final ChatClient chatClient;
-    private final ToolCallback[] tools;
+    private volatile ToolCallback[] tools;
     private final QueryRewriter queryRewriter;
 
     /**
@@ -63,6 +63,10 @@ public class EscapeAgent {
         log.info("EscapeAgent 初始化完成");
     }
 
+    public void replaceTools(ToolCallback[] tools) {
+        this.tools = tools;
+    }
+
     public String chat(String message, String chatId) {
         return chat(message, chatId, null);
     }
@@ -80,7 +84,7 @@ public class EscapeAgent {
                 .system(buildSystemPrompt(profileInjection))
                 .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .toolCallbacks(tools)
+                .toolCallbacks(toolsForRequest())
                 .call()
                 .chatResponse();
         return response.getResult().getOutput().getText();
@@ -103,7 +107,7 @@ public class EscapeAgent {
                 .system(buildSystemPrompt(profileInjection))
                 .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .toolCallbacks(tools)
+                .toolCallbacks(toolsForRequest())
                 .stream()
                 .content();
     }
@@ -115,5 +119,9 @@ public class EscapeAgent {
     private static String buildSystemPrompt(String profileInjection) {
         return SYSTEM_PROMPT
                 + (profileInjection != null && !profileInjection.isBlank() ? "\n\n" + profileInjection : "");
+    }
+
+    ToolCallback[] toolsForRequest() {
+        return com.yupi.yuaiagent.access.RuntimeToolViews.resolve(tools);
     }
 }

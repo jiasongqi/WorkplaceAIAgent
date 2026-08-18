@@ -3,6 +3,7 @@ package com.yupi.yuaiagent.rag;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -15,6 +16,7 @@ import java.util.Map;
 class PgVectorVectorStoreConfigTest {
 
     @Resource
+    @Qualifier("aiChatVectorStore")
     private VectorStore pgVectorVectorStore;
 
     @Test

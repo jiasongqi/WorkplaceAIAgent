@@ -1,6 +1,11 @@
 ### CUSTOM ###
 application-local.yml
 tmp
+tmp-*.log
+tmp-edge-*/
+compile-output.txt
+*.bak
+cat-previews/
 
 HELP.md
 target/

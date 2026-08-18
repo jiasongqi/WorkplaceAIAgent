@@ -1,0 +1,27 @@
+agentCode: digital-employee
+agentVersion: "1.0.0"
+displayName: "数字员工"
+description: "创建/调整专属数字员工人设。"
+promptVersion: "digital-employee-v1"
+agentType: "GENERAL"
+intent: "DIGITAL_EMPLOYEE"
+permissionProfile: "digital-employee"
+capabilities:
+  - "persona"
+  - "digital-employee"
+skillBindings: []
+mcpBindings: []
+intentKeywords:
+  - "数字员工"
+  - "专属员工"
+routingKeywords:
+  - "数字员工"
+  - "专属员工"
+  - "人设"
+inputRequirements:
+  - "persona"
+metadata:
+  icon: "🤖"
+  category: "career"
+  author: "WorkPilot"
+enabled: true
