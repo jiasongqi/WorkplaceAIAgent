@@ -596,6 +596,8 @@ YAML 声明式 Agent 描述符，支持 Agent Marketplace 场景。
 
 设置入口：职场顾问 →「我的伙伴」抽屉（`/api/companion/me`），非独立 Vue 路由。
 
+文档截图：`docs/assets/screenshot-desktop-pet-sage.png` · `screenshot-desktop-pet-dark.png` · `screenshot-career-with-pet-sage.png` · `screenshot-desktop-pet-settings.png`（`node yu-ai-agent-frontend/scripts/capture-desktop-pet.mjs` 重新生成）
+
 ---
 
 ## L22 · 评测中心（Eval Center）[部分]

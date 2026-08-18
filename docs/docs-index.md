@@ -52,6 +52,13 @@
 重新生成：
 
 ```bash
-BASE=http://localhost:3000 node yu-ai-agent-frontend/scripts/capture-docs-screenshots.mjs
+# 业务页 + 抽屉
+BASE=http://localhost:3000 node yu-ai-agent-frontend/scripts/capture-overlays-pw.mjs
+
+# 桌面萌宠（青荷/暗色/皮肤设置）
+node yu-ai-agent-frontend/scripts/capture-desktop-pet.mjs
+
 node yu-ai-agent-frontend/scripts/capture-theme-prototypes.mjs
 ```
+
+萌宠截图：`screenshot-desktop-pet-sage.png` · `screenshot-desktop-pet-dark.png` · `screenshot-career-with-pet-*.png` · `screenshot-desktop-pet-settings.png`

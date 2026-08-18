@@ -199,7 +199,19 @@ docker compose up -d
 <p align="center">
   <img src="docs/assets/screenshot-career.png" width="720" alt="Career Advisor" />
 </p>
-<p align="center"><sub>Career Advisor: companion + digital employees · suggested-action chips · SSE streaming · desktop pet</sub></p>
+<p align="center"><sub>Career Advisor: companion + digital employees · suggested-action chips · SSE streaming · desktop pet bottom-right</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-career-with-pet-sage.png" width="720" alt="Career advisor with desktop pet (sage)" />
+</p>
+<p align="center"><sub>Desktop pet: draggable, right-click menu, room colors follow sage / dark theme</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-desktop-pet-sage.png" width="32%" alt="Pet close-up sage" />
+  <img src="docs/assets/screenshot-desktop-pet-dark.png" width="32%" alt="Pet close-up dark" />
+  <img src="docs/assets/screenshot-desktop-pet-settings.png" width="32%" alt="Pet skin settings" />
+</p>
+<p align="center"><sub>Left: sage room · Center: dark room · Right: cat/pilot skin picker in companion settings</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-companion.png" width="48%" alt="Personal companion" />

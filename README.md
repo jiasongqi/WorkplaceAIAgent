@@ -199,7 +199,19 @@ docker compose up -d
 <p align="center">
   <img src="docs/assets/screenshot-career.png" width="720" alt="职场顾问" />
 </p>
-<p align="center"><sub>职场顾问：个人伙伴 + 数字员工入口 · 建议动作 chips · SSE 流式对话</sub></p>
+<p align="center"><sub>职场顾问：个人伙伴 + 数字员工入口 · 建议动作 chips · SSE 流式对话 · 右下角桌面萌宠</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-career-with-pet-sage.png" width="720" alt="职场顾问与桌面萌宠（青荷绿）" />
+</p>
+<p align="center"><sub>桌面萌宠：可拖拽、右键菜单、随 sage / dark 主题切换房间配色</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-desktop-pet-sage.png" width="32%" alt="萌宠特写 sage" />
+  <img src="docs/assets/screenshot-desktop-pet-dark.png" width="32%" alt="萌宠特写 dark" />
+  <img src="docs/assets/screenshot-desktop-pet-settings.png" width="32%" alt="萌宠皮肤设置" />
+</p>
+<p align="center"><sub>左：青荷绿房间 · 中：暗色房间 · 右：伙伴设置里切换小猫/领航员皮肤</sub></p>
 
 <p align="center">
   <img src="docs/assets/screenshot-companion.png" width="48%" alt="个人职场伙伴" />
